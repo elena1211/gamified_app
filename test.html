@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Test</title>
+</head>
+<body>
+    <h1>Testing API Connection</h1>
+    <div id="result"></div>
+    
+    <script>
+        async function testAPI() {
+            try {
+                console.log('Testing API...');
+                const response = await fetch('http://127.0.0.1:8001/api/tasks/');
+                console.log('Response status:', response.status);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Data received:', data);
+                    document.getElementById('result').innerHTML = 
+                        '<h2>Success!</h2><pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                } else {
+                    console.log('Response not ok:', response.status);
+                    document.getElementById('result').innerHTML = 
+                        '<h2>Error: ' + response.status + '</h2>';
+                }
+            } catch (error) {
+                console.log('Fetch error:', error);
+                document.getElementById('result').innerHTML = 
+                    '<h2>Connection Error: ' + error.message + '</h2>';
+            }
+        }
+        
+        testAPI();
+    </script>
+</body>
+</html>

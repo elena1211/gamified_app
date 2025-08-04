@@ -1,26 +1,54 @@
-export default function StatsPanel() {
-  const stats = {
-    knowledge: 60,
-    discipline: 40,
-    energy: 75,
-    charisma: 50,
-    stress: 20,
-  };
+export default function StatsPanel({ stats }) {
+  console.log('StatsPanel received stats:', stats); // Debug log
+  
+  const statNames = [
+    { key: "intelligence", label: "Intelligence", emoji: "🧠" },
+    { key: "discipline", label: "Discipline", emoji: "💪" },
+    { key: "energy", label: "Energy", emoji: "⚡" },
+    { key: "charisma", label: "Charisma", emoji: "✨" },
+    { key: "stress", label: "Stress", emoji: "😰" }
+  ];
 
   return (
-    <div className="p-4 rounded-2xl shadow-md bg-white max-w-md mx-auto space-y-4">
-      <h2 className="text-xl font-bold">🎮 Your Character Stats</h2>
-      {Object.entries(stats).map(([key, value]) => (
-        <div key={key}>
-          <div className="flex justify-between">
-            <span className="capitalize">{key}</span>
-            <span>{value}%</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
-            <div className="bg-blue-500 h-2.5 rounded-full" style={{ width: `${value}%` }}></div>
-          </div>
-        </div>
-      ))}
+    <div className="bg-white rounded-2xl p-4 shadow-sm">
+      <h3 className="font-bold text-lg mb-4 text-gray-800">📊 Your Stats</h3>
+      <div className="space-y-4">
+        {statNames.map(({ key, label, emoji }) => {
+          const value = stats?.[key] || 0;
+          console.log(`${label}: ${value}%`); // Debug each stat
+          return (
+            <div key={key} className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-700 font-medium flex items-center gap-2">
+                  <span>{emoji}</span>
+                  {label}
+                </span>
+                <span className="text-sm text-gray-700 font-bold">{value}%</span>
+              </div>
+              <div 
+                style={{
+                  backgroundColor: '#f3f4f6', // Light gray background
+                  height: '8px',
+                  borderRadius: '4px',
+                  overflow: 'hidden'
+                }}
+              >
+                <div
+                  style={{ 
+                    width: `${value}%`,
+                    height: '100%',
+                    backgroundColor: '#ec4899', // Pink color
+                    borderRadius: '4px',
+                    transition: 'width 1s ease-out',
+                    minWidth: value > 0 ? '2px' : '0px'
+                  }}
+                ></div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
+
