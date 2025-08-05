@@ -49,18 +49,15 @@ export default function TimeLimitedTaskPopup({ task, onAccept, onReject, onTimeU
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
         }}
       >
-        {/* Header */}
         <div className="text-center mb-4">
           <div className="text-3xl mb-2">⚡</div>
           <h2 className="text-xl font-bold text-gray-800">Time-Limited Quest!</h2>
         </div>
 
-        {/* Task Details */}
         <div className="bg-yellow-50 rounded-xl p-4 mb-4">
           <h3 className="font-semibold text-gray-800 mb-2 text-center">{task.title}</h3>
           <p className="text-sm text-gray-600 mb-3">{task.description}</p>
           
-          {/* Countdown Timer */}
           <div className="text-center">
             <div className="text-2xl font-bold text-red-600 mb-1">
               {formatTime(timeLeft)}
@@ -69,7 +66,6 @@ export default function TimeLimitedTaskPopup({ task, onAccept, onReject, onTimeU
           </div>
         </div>
 
-        {/* Rewards & Penalties */}
         <div className="mb-6">
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm text-green-600">✅ Reward:</span>
@@ -81,7 +77,6 @@ export default function TimeLimitedTaskPopup({ task, onAccept, onReject, onTimeU
           </div>
         </div>
 
-        {/* Action Buttons */}
         <div className="flex gap-3">
           <button
             onClick={onAccept}

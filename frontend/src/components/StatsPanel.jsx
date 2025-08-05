@@ -1,8 +1,6 @@
 export default function StatsPanel({ stats }) {
-  console.log('StatsPanel received stats:', stats); // Debug log
-  
   const statNames = [
-    { key: "intelligence", label: "Intelligence", emoji: "🧠" },
+    { key: "knowledge", label: "Knowledge", emoji: "📚" },
     { key: "discipline", label: "Discipline", emoji: "💪" },
     { key: "energy", label: "Energy", emoji: "⚡" },
     { key: "charisma", label: "Charisma", emoji: "✨" },
@@ -15,7 +13,6 @@ export default function StatsPanel({ stats }) {
       <div className="space-y-4">
         {statNames.map(({ key, label, emoji }) => {
           const value = stats?.[key] || 0;
-          console.log(`${label}: ${value}%`); // Debug each stat
           return (
             <div key={key} className="space-y-2">
               <div className="flex justify-between items-center">
@@ -27,7 +24,7 @@ export default function StatsPanel({ stats }) {
               </div>
               <div 
                 style={{
-                  backgroundColor: '#f3f4f6', // Light gray background
+                  backgroundColor: '#f3f4f6',
                   height: '8px',
                   borderRadius: '4px',
                   overflow: 'hidden'
@@ -37,7 +34,7 @@ export default function StatsPanel({ stats }) {
                   style={{ 
                     width: `${value}%`,
                     height: '100%',
-                    backgroundColor: '#ec4899', // Pink color
+                    backgroundColor: '#ec4899',
                     borderRadius: '4px',
                     transition: 'width 1s ease-out',
                     minWidth: value > 0 ? '2px' : '0px'

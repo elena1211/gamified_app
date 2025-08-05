@@ -1,4 +1,4 @@
-import { Home } from "lucide-react"; // You can use other icon libraries as well
+import { Home } from "lucide-react";
 
 export default function BottomNav() {
   return (

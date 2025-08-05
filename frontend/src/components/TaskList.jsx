@@ -1,13 +1,26 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
-export default function TaskList({ tasks: initialTasks }) {
+export default function TaskList({ tasks: initialTasks, onTaskComplete, onTaskUncomplete }) {
   const [tasks, setTasks] = useState(initialTasks);
 
+  // Synchronise internal state when external tasks update
+  useEffect(() => {
+    setTasks(initialTasks);
+  }, [initialTasks]);
+
   const toggleTask = (id) => {
+    const task = tasks.find(t => t.id === id);
     const updated = tasks.map((task) =>
       task.id === id ? { ...task, completed: !task.completed } : task
     );
     setTasks(updated);
+    
+    // Trigger appropriate callback based on task state change
+    if (!task.completed && onTaskComplete) {
+      onTaskComplete(task);
+    } else if (task.completed && onTaskUncomplete) {
+      onTaskUncomplete(task);
+    }
   };
 
   return (

@@ -14,7 +14,7 @@ class User(AbstractUser):
         return self.username
 
 
-# Model to store various attributes for a user.
+# Model to store various attributes for a user
 class UserAttribute(models.Model):
     ATTRIBUTE_CHOICES = [
         ('knowledge', 'Knowledge'),
@@ -29,7 +29,7 @@ class UserAttribute(models.Model):
     value = models.IntegerField(default=0)
 
     class Meta:
-        # Ensures each user has only one entry per attribute.
+        # Ensures each user has only one entry per attribute
         unique_together = ('user', 'name')
         verbose_name = "User Attribute"
         verbose_name_plural = "User Attributes"
@@ -142,7 +142,7 @@ class UserTaskLog(models.Model):
         verbose_name = "User Task Log"
         verbose_name_plural = "User Task Logs"
         unique_together = ('user', 'task', 'assigned_at')
-        # a task can only be assigned once to a user at a specific time.
+        # A task can only be assigned once to a user at a specific time
 
     def __str__(self):
         return f"{self.user.username} - {self.task.title} - {self.get_status_display()}"
