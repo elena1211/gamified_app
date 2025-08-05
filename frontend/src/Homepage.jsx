@@ -15,35 +15,34 @@ export default function Homepage() {
   const [showWarning, setShowWarning] = useState(false);
   const [warningType, setWarningType] = useState('');
 
-  // Mock stats data - now as state so it can be updated
   const [stats, setStats] = useState({
-    intelligence: 75,
+    knowledge: 75,
     discipline: 60,
     energy: 85,
     charisma: 70,
     stress: 30
   });
 
-  // 限時任務數據
+  // Time-limited task data
   const timeLimitedTasks = [
     {
       title: "Start Reading Now",
       description: "Pick up a book or open an e-book and start reading for 5 minutes",
-      duration: 300, // 5分鐘
-      reward: "+3 Intelligence, +2 Discipline",
-      penalty: "-1 Energy, -1 Intelligence"
+      duration: 300,
+      reward: "+3 Knowledge, +2 Discipline",
+      penalty: "-1 Energy, -1 Knowledge"
     },
     {
       title: "Get Ready for Library",
       description: "Pack your bag, get dressed, and prepare to go to the library in 1 minute",
-      duration: 60, // 1分鐘
+      duration: 60,
       reward: "+2 Energy, +1 Discipline",
       penalty: "-2 Energy, -1 Discipline"
     },
     {
       title: "Clean Your Desk Now",
       description: "Clear your desk and organise all the clutter",
-      duration: 180, // 3分鐘
+      duration: 180,
       reward: "+2 Discipline, +1 Charisma",
       penalty: "-1 Discipline, +1 Stress"
     }
@@ -51,7 +50,6 @@ export default function Homepage() {
 
   const [currentTimeLimitedTask, setCurrentTimeLimitedTask] = useState(null);
 
-  // Mock user data
   const user = {
     name: "Elena",
     level: 5,
@@ -59,26 +57,24 @@ export default function Homepage() {
     avatar: "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiByeD0iMTAwIiBmaWxsPSIjZmM5MWJmIi8+CjxjaXJjbGUgY3g9IjEwMCIgY3k9IjgwIiByPSIzMCIgZmlsbD0iI2ZmZmZmZiIvPgo8ZWxsaXBzZSBjeD0iMTAwIiBjeT0iMTUwIiByeD0iNDAiIHJ5PSIzMCIgZmlsbD0iI2ZmZmZmZiIvPgo8L3N2Zz4K"
   };
 
-  // Load tasks from API
   useEffect(() => {
     fetchTasks();
   }, []);
 
-  // 隨機顯示限時任務（3秒後進行測試）
+  // Show random time-limited task after 3 seconds for testing
   useEffect(() => {
     const timer = setTimeout(() => {
       const randomTask = timeLimitedTasks[Math.floor(Math.random() * timeLimitedTasks.length)];
       setCurrentTimeLimitedTask(randomTask);
       setShowTimeLimitedTask(true);
-    }, 3000); // 3s
+    }, 3000);
 
     return () => {
       clearTimeout(timer);
     };
-  }, []); // Empty dependency array to run only once
+  }, []);
 
   const handleAcceptTask = () => {
-    // 應用獎勵統計數值變化
     if (currentTimeLimitedTask) {
       applyStatChanges(currentTimeLimitedTask.reward, true);
     }
@@ -88,7 +84,6 @@ export default function Homepage() {
   };
 
   const handleRejectTask = () => {
-    // 直接應用懲罰統計數值變化
     if (currentTimeLimitedTask) {
       applyStatChanges(currentTimeLimitedTask.penalty, false);
     }
@@ -100,7 +95,6 @@ export default function Homepage() {
   };
 
   const handleTimeUp = () => {
-    // 直接應用懲罰統計數值變化
     if (currentTimeLimitedTask) {
       applyStatChanges(currentTimeLimitedTask.penalty, false);
     }
@@ -112,13 +106,31 @@ export default function Homepage() {
   };
 
   const handleWarningClose = () => {
-    // 懲罰已經在reject/timeout時應用了，這裡只需要關閉警告
     setShowWarning(false);
   };
 
-  // 應用統計數值變化的函數
+  const handleTaskComplete = (task) => {
+    if (task.reward) {
+      applyStatChanges(task.reward, true);
+    }
+  };
+
+  const handleTaskUncomplete = (task) => {
+    if (task.reward) {
+      // Reverse the previously awarded points
+      const reverseReward = task.reward.replace(/\+/g, '-');
+      applyStatChanges(reverseReward, false);
+    }
+  };
+
+  const handleTaskFail = (task) => {
+    // Minor negative effect for task failure
+    const penalty = "-1 Energy, +1 Stress";
+    applyStatChanges(penalty, false);
+  };
+
   const applyStatChanges = (changeString, isReward) => {
-    // 解析變化字符串，例如 "+3 Intelligence, +2 Discipline" 或 "-1 Energy, -1 Intelligence"
+    // Parse change strings like "+3 Knowledge, +2 Discipline" or "-1 Energy, -1 Knowledge"
     const changes = changeString.split(',').map(change => change.trim());
     
     setStats(prevStats => {
@@ -187,29 +199,26 @@ export default function Homepage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-100 to-purple-100 pb-20">
-      {/* Main Content */}
       <div className="container mx-auto px-4 py-6 space-y-6">
         
-        {/* User Profile Section */}
         <div className="bg-white rounded-xl p-6 shadow-sm">
           <UserProfileCard user={user} />
         </div>
 
-        {/* Stats Panel */}
         <div className="bg-white rounded-xl p-6 shadow-sm">
-          <h3 className="text-lg font-semibold mb-4 text-gray-800">Your Stats</h3>
           <StatsPanel stats={stats} />
         </div>
 
-        {/* Tasks Section */}
         <div className="bg-white rounded-xl p-6 shadow-sm">
           <h3 className="text-lg font-semibold mb-4 text-gray-800">Today's Quests</h3>
           
-          {/* Show all tasks in list format */}
-          <TaskList tasks={tasks} />
+          <TaskList 
+            tasks={tasks} 
+            onTaskComplete={handleTaskComplete}
+            onTaskUncomplete={handleTaskUncomplete}
+          />
         </div>
 
-        {/* Refresh Button */}
         <div className="text-center">
           <div className="flex justify-center gap-3 mb-4">
             <button 
@@ -219,7 +228,6 @@ export default function Homepage() {
               🔄 Refresh Quests
             </button>
             
-            {/* Test Button for Time-Limited Task */}
             <button 
               onClick={() => {
                 const randomTask = timeLimitedTasks[Math.floor(Math.random() * timeLimitedTasks.length)];
@@ -234,10 +242,8 @@ export default function Homepage() {
         </div>
       </div>
 
-      {/* Bottom Navigation */}
       <BottomNav />
 
-      {/* Time-Limited Task Popup */}
       {showTimeLimitedTask && currentTimeLimitedTask && (
         <div style={{ position: 'relative', zIndex: 9999 }}>
           <TimeLimitedTaskPopup
@@ -249,7 +255,6 @@ export default function Homepage() {
         </div>
       )}
 
-      {/* Warning Popup */}
       {showWarning && currentTimeLimitedTask && (
         <div style={{ position: 'relative', zIndex: 9999 }}>
           <WarningPopup

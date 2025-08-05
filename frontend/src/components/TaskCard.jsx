@@ -1,10 +1,14 @@
-export default function TaskCard({ task }) {
+export default function TaskCard({ task, onComplete, onFail }) {
   const handleComplete = () => {
-    console.log("✅ Task Completed!");
+    if (onComplete) {
+      onComplete(task);
+    }
   };
 
   const handleFail = () => {
-    console.log("❌ Task Failed!");
+    if (onFail) {
+      onFail(task);
+    }
   };
 
   return (

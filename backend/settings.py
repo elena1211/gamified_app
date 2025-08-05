@@ -143,6 +143,6 @@ CORS_ALLOW_CREDENTIALS = True
 # Django REST Framework settings
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny'  # 暫時允許所有訪問，方便測試
+        'rest_framework.permissions.AllowAny'  # Temporarily allow all access for testing
     ]
 }
