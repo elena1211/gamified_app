@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Homepage from './Homepage';
-import RegisterPage from './components/RegisterPage';
-import WelcomePage from './components/WelcomePage';
+import RegisterPage from './pages/RegisterPage';
+import WelcomePage from './pages/WelcomePage';
 import SystemSettingsPage from './pages/SystemSettingsPage';
 
 function AppRoutes() {

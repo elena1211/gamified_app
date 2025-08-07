@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { ArrowLeft, User, Shield, Bell, Palette, HelpCircle, LogOut, Eye, EyeOff, Trash2, Key, Moon, Sun, Globe } from 'lucide-react';
 import { API_ENDPOINTS, apiRequest } from '../config/api.js';
 import { COLORS } from '../config/constants.js';
-import ConfirmDialog from '../components/ConfirmDialog.jsx';
+import Modal from '../components/Modal.jsx';
 
 export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
   const [activeSection, setActiveSection] = useState('account');
@@ -493,15 +493,16 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
       </div>
 
       {/* Logout Confirmation Dialog */}
-      <ConfirmDialog
+      <Modal
         isOpen={showLogoutConfirm}
         onClose={handleLogoutCancel}
         onConfirm={handleLogoutConfirm}
-        title="Confirm logout"
-        message="Are you sure you want to log out? All unsaved changes will be lost."
-        confirmText="Confirm logout"
+        title="Confirm Logout"
+        message="Are you sure you want to log out? You'll need to sign in again to continue using the application."
+        confirmText="Confirm Logout"
         cancelText="Cancel"
         type="warning"
+        variant="confirmation"
       />
     </div>
   );

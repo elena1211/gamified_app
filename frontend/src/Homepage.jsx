@@ -7,7 +7,7 @@ import UserProfileCard from './components/UserProfileCard';
 import TaskList from './components/TaskList';
 import MainGoal from './components/MainGoal';
 import TimeLimitedTaskPopup from './components/TimeLimitedTaskPopup';
-import WarningPopup from './components/WarningPopup';
+import Modal from './components/Modal';
 
 // Time-limited task data
 const TIME_LIMITED_TASKS = [
@@ -326,13 +326,16 @@ export default function Homepage({ currentUser, onLogout, onNavigateToSettings }
           </div>
         )}
         {showWarning && currentTimeLimitedTask && (
-          <div style={{ position: 'relative', zIndex: 9999 }}>
-            <WarningPopup
-              type={warningType}
-              penalty={currentTimeLimitedTask.penalty}
-              onClose={handleWarningClose}
-            />
-          </div>
+          <Modal
+            isOpen={showWarning}
+            onClose={handleWarningClose}
+            title={warningType === 'rejection' ? 'Quest Dismissed!' : 'Time\'s Up!'}
+            message={warningType === 'rejection' ? 'You chose to avoid the challenge...' : 'The quest time has ended...'}
+            type="game-penalty"
+            variant="notification"
+            penalty={currentTimeLimitedTask.penalty}
+            showCloseButton={false}
+          />
         )}
       </div>
     </div>

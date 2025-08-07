@@ -1,4 +1,4 @@
-// Common constants used across the application
+// Design system constants for consistent styling across the application
 
 export const COLORS = {
   gradient: {
@@ -50,11 +50,4 @@ export const LAYOUT_CLASSES = {
   card: 'bg-white rounded-2xl shadow-lg',
   cardLarge: 'bg-white rounded-3xl shadow-xl',
   input: 'w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent',
-};
-
-export default {
-  COLORS,
-  EMOJIS,
-  ANIMATION_CLASSES,
-  LAYOUT_CLASSES,
 };
