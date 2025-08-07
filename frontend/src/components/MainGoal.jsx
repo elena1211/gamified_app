@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
-
-const API_ENDPOINTS = {
-  goal: 'http://127.0.0.1:8002/api/goal/'
-};
+import { API_ENDPOINTS, apiRequest } from '../config/api.js';
+import { EMOJIS } from '../config/constants.js';
 
 export default function MainGoal({ currentUser }) {
   const [goal, setGoal] = useState(null);
@@ -16,17 +14,11 @@ export default function MainGoal({ currentUser }) {
   const fetchGoal = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_ENDPOINTS.goal}?user=${currentUser || 'elena'}`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        setGoal(data);
-        setError(null);
-      } else {
-        setError('Unable to fetch goal data');
-      }
+      const { data } = await apiRequest(`${API_ENDPOINTS.goal}?user=${currentUser || 'elena'}`);
+      setGoal(data);
+      setError(null);
     } catch (err) {
-      setError('Connection error: ' + err.message);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -59,7 +51,7 @@ export default function MainGoal({ currentUser }) {
   return (
     <div className="bg-gradient-to-r from-blue-500 to-cyan-500 rounded-2xl p-6 text-white shadow-lg">
       <div className="flex items-start gap-4">
-        <div className="text-4xl">🎯</div>
+        <div className="text-4xl">{EMOJIS.goal}</div>
         <div className="flex-1">
           <h2 className="text-2xl font-bold mb-2">Main Goal</h2>
           <h3 className="text-xl font-semibold mb-3">{goal.title}</h3>

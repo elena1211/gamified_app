@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { API_ENDPOINTS, apiRequest } from './config/api.js';
+import { COLORS, EMOJIS } from './config/constants.js';
 import BottomNav from './components/BottomNav';
 import StatsPanel from './components/StatsPanel';
 import UserProfileCard from './components/UserProfileCard';
@@ -6,15 +8,6 @@ import TaskList from './components/TaskList';
 import MainGoal from './components/MainGoal';
 import TimeLimitedTaskPopup from './components/TimeLimitedTaskPopup';
 import WarningPopup from './components/WarningPopup';
-
-// API endpoints
-const API_BASE_URL = 'http://127.0.0.1:8002/api';
-const API_ENDPOINTS = {
-  tasks: `${API_BASE_URL}/tasks/`,
-  taskComplete: `${API_BASE_URL}/tasks/complete/`,
-  userStats: `${API_BASE_URL}/user/stats/`,
-  goal: `${API_BASE_URL}/goal/`
-};
 
 // Time-limited task data
 const TIME_LIMITED_TASKS = [
@@ -41,7 +34,7 @@ const TIME_LIMITED_TASKS = [
   }
 ];
 
-export default function Homepage({ currentUser }) {
+export default function Homepage({ currentUser, onLogout, onNavigateToSettings }) {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -120,6 +113,12 @@ export default function Homepage({ currentUser }) {
 
   const handleWarningClose = () => {
     setShowWarning(false);
+  };
+
+  const handleSettingsClick = () => {
+    if (onNavigateToSettings) {
+      onNavigateToSettings();
+    }
   };
 
   const handleTaskComplete = async (task) => {
@@ -221,17 +220,12 @@ export default function Homepage({ currentUser }) {
       if (!preventScroll) {
         setLoading(true);
       }
-      const response = await fetch(`${API_ENDPOINTS.tasks}?user=${currentUser || 'elena'}`);
       
-      if (response.ok) {
-        const data = await response.json();
-        setTasks(data);
-        setError(null);
-      } else {
-        setError('Unable to fetch task data');
-      }
+      const { data } = await apiRequest(`${API_ENDPOINTS.tasks}?user=${currentUser || 'elena'}`);
+      setTasks(data);
+      setError(null);
     } catch (err) {
-      setError('Connection error: ' + err.message);
+      setError(err.message);
     } finally {
       if (!preventScroll) {
         setLoading(false);
@@ -242,23 +236,19 @@ export default function Homepage({ currentUser }) {
   const fetchUserStats = async () => {
     try {
       console.log(`📊 Fetching user stats...`);
-      const response = await fetch(`${API_ENDPOINTS.userStats}?user=${currentUser || 'elena'}`);
+      const { data } = await apiRequest(`${API_ENDPOINTS.userStats}?user=${currentUser || 'elena'}`);
       
-      if (response.ok) {
-        const data = await response.json();
-        console.log(`📊 User stats received:`, data);
-        
-        setUserStats(data);
-        setUser(prevUser => {
-          const newUser = {
-            ...prevUser,
-            level: data.level,
-            streak: data.current_streak
-          };
-          console.log(`👤 Updating user streak from ${prevUser.streak} to ${data.current_streak} via fetchUserStats`);
-          return newUser;
-        });
-      }
+      console.log(`📊 User stats received:`, data);
+      setUserStats(data);
+      setUser(prevUser => {
+        const newUser = {
+          ...prevUser,
+          level: data.level,
+          streak: data.current_streak
+        };
+        console.log(`👤 Updating user streak from ${prevUser.streak} to ${data.current_streak} via fetchUserStats`);
+        return newUser;
+      });
     } catch (err) {
       console.error('Failed to fetch user stats:', err);
     }
@@ -333,7 +323,8 @@ export default function Homepage({ currentUser }) {
             </button>
           </div>
         </div>
-        <BottomNav />
+        <BottomNav onSettingsClick={handleSettingsClick} />
+        
         {/* Popups */}
         {showTimeLimitedTask && currentTimeLimitedTask && (
           <div style={{ position: 'relative', zIndex: 9999 }}>
