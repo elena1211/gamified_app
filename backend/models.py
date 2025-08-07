@@ -1,10 +1,17 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
+from django.utils import timezone
+from datetime import date, timedelta
 
 
 class User(AbstractUser):
     level = models.PositiveIntegerField(default=1)
     exp = models.PositiveIntegerField(default=0)
+    current_streak = models.PositiveIntegerField(default=0)
+    max_streak = models.PositiveIntegerField(default=0)
+    last_activity_date = models.DateField(null=True, blank=True)
+    all_tasks_completed_today = models.BooleanField(default=False)
+    last_all_tasks_completed_date = models.DateField(null=True, blank=True)
 
     class Meta:
         verbose_name = "User"
@@ -12,6 +19,54 @@ class User(AbstractUser):
 
     def __str__(self):
         return self.username
+    
+    def update_streak(self):
+        """Update user's streak based on completing all tasks"""
+        today = date.today()
+        
+        # Check if all tasks are completed today
+        total_tasks = Task.objects.filter(user=self).count()
+        completed_today = UserTaskLog.objects.filter(
+            user=self,
+            status='completed',
+            completed_at__date=today
+        ).count()
+        
+        all_completed = completed_today >= total_tasks and total_tasks > 0
+        
+        # Update streak logic
+        if all_completed and not self.all_tasks_completed_today:
+            # First time completing all tasks today
+            if self.last_all_tasks_completed_date == today - timedelta(days=1):
+                # Consecutive day
+                self.current_streak += 1
+            else:
+                # Streak starts fresh
+                self.current_streak = 1
+            
+            # Update max streak if current streak is higher
+            if self.current_streak > self.max_streak:
+                self.max_streak = self.current_streak
+            
+            self.all_tasks_completed_today = True
+            self.last_all_tasks_completed_date = today
+            self.last_activity_date = today
+            self.save()
+            
+        elif not all_completed and self.all_tasks_completed_today:
+            # Tasks were uncompleted, decrease streak
+            if self.current_streak > 0:
+                self.current_streak -= 1
+            self.all_tasks_completed_today = False
+            self.save()
+    
+    def check_and_reset_streak(self):
+        """Check if streak should be reset due to inactivity"""
+        today = date.today()
+        if self.last_activity_date and self.last_activity_date < today - timedelta(days=1):
+            self.current_streak = 0
+            self.all_tasks_completed_today = False
+            self.save()
 
 
 # Model to store various attributes for a user
