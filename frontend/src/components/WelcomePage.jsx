@@ -1,8 +1,6 @@
 import { useState } from 'react';
-
-const API_ENDPOINTS = {
-  login: 'http://127.0.0.1:8002/api/login/'
-};
+import { API_ENDPOINTS, apiRequest } from '../config/api.js';
+import { COLORS, EMOJIS, ANIMATION_CLASSES, LAYOUT_CLASSES } from '../config/constants.js';
 
 export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
   const [isLoginMode, setIsLoginMode] = useState(false);
@@ -33,26 +31,17 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
     setError('');
     
     try {
-      const response = await fetch(API_ENDPOINTS.login, {
+      const { data } = await apiRequest(API_ENDPOINTS.login, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           username: formData.username,
           password: formData.password
         })
       });
       
-      const data = await response.json();
-      
-      if (response.ok) {
-        onLoginSuccess(data.username);
-      } else {
-        setError(data.error || 'Login failed');
-      }
+      onLoginSuccess(data.username);
     } catch (err) {
-      setError('Connection error: ' + err.message);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -60,13 +49,13 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
 
   if (!isLoginMode) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl p-12 shadow-xl max-w-lg w-full text-center">
+      <div className={LAYOUT_CLASSES.container}>
+        <div className={`${LAYOUT_CLASSES.cardLarge} p-12 max-w-lg w-full text-center`}>
           {/* Logo and Title */}
           <div className="mb-8">
-            <div className="text-7xl mb-4">🎮</div>
-            <h1 className="text-4xl font-bold text-gray-800 mb-2">Level Up</h1>
-            <p className="text-xl text-gray-600">Transform your life into an epic adventure!</p>
+            <div className="text-7xl mb-4">{EMOJIS.logo}</div>
+            <h1 className={`text-4xl font-bold ${COLORS.text.primary} mb-2`}>Level Up</h1>
+            <p className={`text-xl ${COLORS.text.secondary}`}>Transform your life into an epic adventure!</p>
           </div>
 
           {/* Features */}
@@ -105,16 +94,16 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
           <div className="space-y-4">
             <button
               onClick={onNavigateToRegister}
-              className="w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white py-4 rounded-xl text-lg font-semibold shadow-lg transition-all duration-300 hover:scale-105 hover:shadow-xl"
+              className={`w-full ${COLORS.button.primary} text-white py-4 rounded-xl text-lg font-semibold shadow-lg ${ANIMATION_CLASSES.button} hover:shadow-xl`}
             >
-              🚀 Start Your Journey
+              {EMOJIS.rocket} Start Your Journey
             </button>
             
             <button
               onClick={() => setIsLoginMode(true)}
-              className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-4 rounded-xl text-lg font-medium transition-all duration-300 hover:scale-105"
+              className={`w-full ${COLORS.button.secondary} ${COLORS.text.primary} py-4 rounded-xl text-lg font-medium ${ANIMATION_CLASSES.button}`}
             >
-              🔐 I Already Have an Account
+              {EMOJIS.login} I Already Have an Account
             </button>
           </div>
 
@@ -129,12 +118,12 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
 
   // Login Form
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl p-8 shadow-lg max-w-md w-full">
+    <div className={LAYOUT_CLASSES.container}>
+      <div className={`${LAYOUT_CLASSES.card} p-8 max-w-md w-full`}>
         <div className="text-center mb-6">
-          <div className="text-5xl mb-3">🔐</div>
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Welcome Back!</h1>
-          <p className="text-gray-600">Continue your epic journey</p>
+          <div className="text-5xl mb-3">{EMOJIS.login}</div>
+          <h1 className={`text-3xl font-bold ${COLORS.text.primary} mb-2`}>Welcome Back!</h1>
+          <p className={COLORS.text.secondary}>Continue your epic journey</p>
         </div>
 
         {error && (
@@ -153,7 +142,7 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
               name="username"
               value={formData.username}
               onChange={handleInputChange}
-              className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+              className={LAYOUT_CLASSES.input}
               placeholder="Enter your username"
               required
             />
@@ -168,7 +157,7 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
               name="password"
               value={formData.password}
               onChange={handleInputChange}
-              className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+              className={LAYOUT_CLASSES.input}
               placeholder="Enter your password"
               required
             />
@@ -177,15 +166,15 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white py-3 rounded-lg font-semibold transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
+            className={`w-full ${COLORS.button.primary} text-white py-3 rounded-lg font-semibold ${ANIMATION_CLASSES.button} ${ANIMATION_CLASSES.buttonDisabled}`}
           >
             {loading ? (
               <div className="flex items-center justify-center gap-2">
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <div className={`w-4 h-4 border-2 border-white border-t-transparent rounded-full ${ANIMATION_CLASSES.spinner}`}></div>
                 Signing In...
               </div>
             ) : (
-              '🎮 Enter Game'
+              `${EMOJIS.logo} Enter Game`
             )}
           </button>
         </form>

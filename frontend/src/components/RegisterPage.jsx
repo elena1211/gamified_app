@@ -1,8 +1,6 @@
 import { useState } from 'react';
-
-const API_ENDPOINTS = {
-  register: 'http://127.0.0.1:8002/api/register/'
-};
+import { API_ENDPOINTS, apiRequest } from '../config/api.js';
+import { COLORS, EMOJIS, ANIMATION_CLASSES, LAYOUT_CLASSES } from '../config/constants.js';
 
 const GOAL_SUGGESTIONS = [
   {
@@ -106,11 +104,8 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
     setError('');
     
     try {
-      const response = await fetch(API_ENDPOINTS.register, {
+      const { data } = await apiRequest(API_ENDPOINTS.register, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           username: formData.username,
           password: formData.password,
@@ -120,16 +115,10 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
         })
       });
       
-      const data = await response.json();
-      
-      if (response.ok) {
-        // Registration successful
-        onRegisterSuccess(data.username);
-      } else {
-        setError(data.error || 'Registration failed');
-      }
+      // Registration successful
+      onRegisterSuccess(data.username);
     } catch (err) {
-      setError('Connection error: ' + err.message);
+      setError(err.message);
     } finally {
       setLoading(false);
     }

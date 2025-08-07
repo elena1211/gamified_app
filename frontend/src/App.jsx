@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'r
 import Homepage from './Homepage';
 import RegisterPage from './components/RegisterPage';
 import WelcomePage from './components/WelcomePage';
+import SystemSettingsPage from './pages/SystemSettingsPage';
 
 function AppRoutes() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -21,6 +22,19 @@ function AppRoutes() {
   };
 
   const handleNavigateBack = () => {
+    navigate('/welcome');
+  };
+
+  const handleNavigateToSettings = () => {
+    navigate('/settings');
+  };
+
+  const handleNavigateToHome = () => {
+    navigate('/home');
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
     navigate('/welcome');
   };
 
@@ -52,7 +66,23 @@ function AppRoutes() {
         path="/home" 
         element={
           currentUser ? 
-            <Homepage currentUser={currentUser} /> : 
+            <Homepage 
+              currentUser={currentUser} 
+              onLogout={handleLogout}
+              onNavigateToSettings={handleNavigateToSettings}
+            /> : 
+            <Navigate to="/welcome" replace />
+        } 
+      />
+      <Route 
+        path="/settings" 
+        element={
+          currentUser ? 
+            <SystemSettingsPage 
+              currentUser={currentUser}
+              onBack={handleNavigateToHome}
+              onLogout={handleLogout}
+            /> : 
             <Navigate to="/welcome" replace />
         } 
       />

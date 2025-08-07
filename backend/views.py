@@ -2,7 +2,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
 from django.contrib.auth import authenticate, login
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import make_password, check_password
 from .models import Task, User, Goal, UserTaskLog
 from django.utils import timezone
 from datetime import date, timedelta
@@ -410,6 +410,99 @@ class LoginView(APIView):
                     "error": "Invalid username or password"
                 }, status=status.HTTP_401_UNAUTHORIZED)
                 
+        except Exception as e:
+            return Response({
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ChangePasswordView(APIView):
+    """API view for changing user password"""
+    def post(self, request):
+        try:
+            username = request.data.get('username')
+            current_password = request.data.get('current_password')
+            new_password = request.data.get('new_password')
+            
+            if not username or not current_password or not new_password:
+                return Response({
+                    "error": "Username, current password, and new password are required"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get user
+            try:
+                user = User.objects.get(username=username)
+            except User.DoesNotExist:
+                return Response({
+                    "error": "User not found"
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Check current password
+            if not check_password(current_password, user.password):
+                return Response({
+                    "error": "Current password is incorrect"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Validate new password (basic validation)
+            if len(new_password) < 6:
+                return Response({
+                    "error": "New password must be at least 6 characters long"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Update password
+            user.password = make_password(new_password)
+            user.save()
+            
+            return Response({
+                "success": True,
+                "message": "Password changed successfully"
+            })
+            
+        except Exception as e:
+            return Response({
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class DeleteAccountView(APIView):
+    """API view for deleting user account"""
+    def post(self, request):
+        try:
+            username = request.data.get('username')
+            password = request.data.get('password')
+            
+            if not username or not password:
+                return Response({
+                    "error": "Username and password are required"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get user
+            try:
+                user = User.objects.get(username=username)
+            except User.DoesNotExist:
+                return Response({
+                    "error": "User not found"
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Verify password
+            if not check_password(password, user.password):
+                return Response({
+                    "error": "Password is incorrect"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Delete all related data (CASCADE will handle this, but we can be explicit)
+            UserTaskLog.objects.filter(user=user).delete()
+            Task.objects.filter(user=user).delete()
+            Goal.objects.filter(user=user).delete()
+            
+            # Delete the user
+            user.delete()
+            
+            return Response({
+                "success": True,
+                "message": "Account deleted successfully"
+            })
+            
         except Exception as e:
             return Response({
                 "error": str(e)
