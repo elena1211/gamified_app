@@ -30,17 +30,19 @@ export default function TaskList({ tasks: initialTasks, onTaskComplete, onTaskUn
         {tasks.map((task) => (
           <div
             key={task.id}
-            className={`p-3 rounded-xl border-2 transition-all ${
+            className={`p-3 rounded-xl border-2 transition-all cursor-pointer hover:shadow-md ${
               task.completed 
-                ? 'bg-green-50 border-green-200' 
-                : 'bg-gray-50 border-gray-200'
+                ? 'bg-green-50 border-green-200 hover:bg-green-100' 
+                : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
             }`}
+            onClick={() => toggleTask(task.id)}
           >
             <div className="flex items-start space-x-3">
               <input
                 type="checkbox"
                 checked={task.completed}
                 onChange={() => toggleTask(task.id)}
+                onClick={(e) => e.stopPropagation()}
                 className="mt-1 w-5 h-5 accent-pink-500 rounded"
               />
               <div className="flex-1 min-w-0">
