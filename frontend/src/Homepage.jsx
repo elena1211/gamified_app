@@ -121,9 +121,7 @@ export default function Homepage({ currentUser, onLogout, onNavigateToSettings }
     }
   };
 
-  const handleTaskComplete = async (task) => {
-    console.log(`🎯 Attempting to toggle task ${task.id}: ${task.title}`);
-    
+  const handleTaskComplete = async (task) => {    
     try {
       // Call backend API to toggle task completion status
       const response = await fetch(API_ENDPOINTS.taskComplete, {
@@ -139,15 +137,9 @@ export default function Homepage({ currentUser, onLogout, onNavigateToSettings }
 
       if (response.ok) {
         const data = await response.json();
-        console.log(`📨 API Response:`, data);
         
         if (data.success) {
-          // Show progress message
-          if (data.task_completed) {
-            console.log(`✅ Task completed! Progress: ${data.completed_tasks}/${data.total_tasks} tasks today`);
-          } else {
-            console.log(`⬜ Task marked as incomplete! Progress: ${data.completed_tasks}/${data.total_tasks} tasks today`);
-          }
+          // Show progress message - removed console.log for production
 
           // Update local task state to reflect the change
           setTasks(prevTasks => prevTasks.map(t => 
@@ -176,7 +168,7 @@ export default function Homepage({ currentUser, onLogout, onNavigateToSettings }
           // Update user stats to reflect the total completed tasks change
           fetchUserStats();
         } else {
-          console.log(`ℹ️ ${data.message}`);
+          // Task completion failed - removed console.log for production
         }
       } else {
         console.error('Failed to complete task');
@@ -235,10 +227,8 @@ export default function Homepage({ currentUser, onLogout, onNavigateToSettings }
 
   const fetchUserStats = async () => {
     try {
-      console.log(`📊 Fetching user stats...`);
       const { data } = await apiRequest(`${API_ENDPOINTS.userStats}?user=${currentUser || 'elena'}`);
       
-      console.log(`📊 User stats received:`, data);
       setUserStats(data);
       setUser(prevUser => {
         const newUser = {
@@ -246,7 +236,6 @@ export default function Homepage({ currentUser, onLogout, onNavigateToSettings }
           level: data.level,
           streak: data.current_streak
         };
-        console.log(`👤 Updating user streak from ${prevUser.streak} to ${data.current_streak} via fetchUserStats`);
         return newUser;
       });
     } catch (err) {

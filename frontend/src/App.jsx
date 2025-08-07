@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Homepage from './Homepage';
 import RegisterPage from './components/RegisterPage';
@@ -7,14 +7,26 @@ import SystemSettingsPage from './pages/SystemSettingsPage';
 
 function AppRoutes() {
   const [currentUser, setCurrentUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
+
+  // Initialize user state from localStorage on app start
+  useEffect(() => {
+    const savedUser = localStorage.getItem('currentUser');
+    if (savedUser) {
+      setCurrentUser(savedUser);
+    }
+    setIsLoading(false);
+  }, []);
 
   const handleLoginSuccess = (username) => {
     setCurrentUser(username);
+    localStorage.setItem('currentUser', username);
   };
 
   const handleRegisterSuccess = (username) => {
     setCurrentUser(username);
+    localStorage.setItem('currentUser', username);
   };
 
   const handleNavigateToRegister = () => {
@@ -35,8 +47,18 @@ function AppRoutes() {
 
   const handleLogout = () => {
     setCurrentUser(null);
+    localStorage.removeItem('currentUser');
     navigate('/welcome');
   };
+
+  // Show loading spinner while checking auth state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-pink-100 to-purple-100 flex items-center justify-center">
+        <div className="text-purple-800 text-xl">🎮 Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <Routes>
