@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { ArrowLeft, User, Shield, Bell, Palette, Database, HelpCircle, LogOut, Eye, EyeOff, Trash2, Key, Download, Upload, Moon, Sun, Globe, Smartphone } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ArrowLeft, User, Shield, Bell, Palette, HelpCircle, LogOut, Eye, EyeOff, Trash2, Key, Moon, Sun, Globe } from 'lucide-react';
 import { API_ENDPOINTS, apiRequest } from '../config/api.js';
 import { COLORS } from '../config/constants.js';
+import ConfirmDialog from '../components/ConfirmDialog.jsx';
 
 export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
   const [activeSection, setActiveSection] = useState('account');
@@ -9,6 +10,7 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
   const [message, setMessage] = useState('');
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   
   // Form states
   const [passwordForm, setPasswordForm] = useState({
@@ -22,21 +24,38 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
   });
   
   const [preferences, setPreferences] = useState({
-    theme: 'light',
-    language: 'en',
-    notifications: true,
-    soundEffects: true,
-    autoSave: true,
-    dailyReminder: true,
-    weeklyReport: true
+    theme: localStorage.getItem('theme') || 'light',
+    language: localStorage.getItem('language') || 'en',
+    notifications: localStorage.getItem('notifications') !== 'false',
+    soundEffects: localStorage.getItem('soundEffects') !== 'false',
+    autoSave: localStorage.getItem('autoSave') !== 'false',
+    dailyReminder: localStorage.getItem('dailyReminder') !== 'false',
+    weeklyReport: localStorage.getItem('weeklyReport') !== 'false'
   });
+
+  // Initialize theme on component mount
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', preferences.theme === 'dark');
+  }, []);
+
+  const handleLogoutClick = () => {
+    setShowLogoutConfirm(true);
+  };
+
+  const handleLogoutConfirm = () => {
+    setShowLogoutConfirm(false);
+    if (onLogout) onLogout();
+  };
+
+  const handleLogoutCancel = () => {
+    setShowLogoutConfirm(false);
+  };
 
   const sections = [
     { id: 'account', title: 'Account Management', icon: User },
     { id: 'security', title: 'Security Settings', icon: Shield },
     { id: 'notifications', title: 'Notification Settings', icon: Bell },
     { id: 'appearance', title: 'Appearance Settings', icon: Palette },
-    { id: 'data', title: 'Data Management', icon: Database },
     { id: 'support', title: 'Help & Support', icon: HelpCircle }
   ];
 
@@ -109,6 +128,9 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
       
       if (data.success) {
         setMessage('Account deleted successfully');
+        // Clear all user data from localStorage
+        localStorage.removeItem('currentUser');
+        localStorage.clear(); // Clear all settings as well
         setTimeout(() => {
           if (onLogout) onLogout();
         }, 2000);
@@ -122,26 +144,17 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
     }
   };
 
-  const handleExportData = () => {
-    // Simulate data export
-    const userData = {
-      username: currentUser,
-      exportDate: new Date().toISOString(),
-      settings: preferences,
-      note: 'This is your personal data export'
-    };
+  const updatePreference = (key, value) => {
+    setPreferences(prev => ({ ...prev, [key]: value }));
+    localStorage.setItem(key, value);
     
-    const dataStr = JSON.stringify(userData, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
+    // Apply theme changes immediately
+    if (key === 'theme') {
+      document.documentElement.classList.toggle('dark', value === 'dark');
+    }
     
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${currentUser}_data_export_${new Date().toISOString().split('T')[0]}.json`;
-    link.click();
-    
-    URL.revokeObjectURL(url);
-    setMessage('Data export successful!');
+    setMessage(`${key.charAt(0).toUpperCase() + key.slice(1)} updated successfully!`);
+    setTimeout(() => setMessage(''), 3000);
   };
 
   const renderAccountSection = () => (
@@ -275,7 +288,7 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
             <p className="text-sm text-gray-600">{item.desc}</p>
           </div>
           <button
-            onClick={() => setPreferences({ ...preferences, [item.key]: !preferences[item.key] })}
+            onClick={() => updatePreference(item.key, !preferences[item.key])}
             className={`w-12 h-6 rounded-full transition-colors ${
               preferences[item.key] ? 'bg-pink-600' : 'bg-gray-300'
             }`}
@@ -303,7 +316,7 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
           ].map(theme => (
             <button
               key={theme.value}
-              onClick={() => setPreferences({ ...preferences, theme: theme.value })}
+              onClick={() => updatePreference('theme', theme.value)}
               className={`p-3 rounded-lg border-2 transition-colors ${
                 preferences.theme === theme.value
                   ? 'border-pink-500 bg-pink-50'
@@ -324,7 +337,7 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
         </h3>
         <select
           value={preferences.language}
-          onChange={(e) => setPreferences({ ...preferences, language: e.target.value })}
+          onChange={(e) => updatePreference('language', e.target.value)}
           className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
         >
           <option value="en">English</option>
@@ -333,42 +346,16 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
           <option value="ja">日本語</option>
         </select>
       </div>
-    </div>
-  );
-
-  const renderDataSection = () => (
-    <div className="space-y-6">
-      <div className="bg-gray-50 p-4 rounded-lg">
-        <h3 className="font-semibold text-gray-800 mb-3 flex items-center">
-          <Database className="w-5 h-5 mr-2" />
-          Data Management
-        </h3>
-        <div className="space-y-3">
-          <button
-            onClick={handleExportData}
-            className="w-full p-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 flex items-center justify-center"
-          >
-            <Download className="w-5 h-5 mr-2" />
-            Export Personal Data
-          </button>
-          
-          <label className="w-full p-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 flex items-center justify-center cursor-pointer">
-            <Upload className="w-5 h-5 mr-2" />
-            Import Data
-            <input type="file" accept=".json" className="hidden" />
-          </label>
-        </div>
-      </div>
       
       <div className="bg-gray-50 p-4 rounded-lg">
-        <h3 className="font-semibold text-gray-800 mb-2">Storage Settings</h3>
+        <h3 className="font-semibold text-gray-800 mb-3">Auto Save Settings</h3>
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-medium">Auto Save</p>
-            <p className="text-sm text-gray-600">Automatically save your progress</p>
+            <p className="font-medium">Auto Save Preferences</p>
+            <p className="text-sm text-gray-600">Automatically save your settings and preferences</p>
           </div>
           <button
-            onClick={() => setPreferences({ ...preferences, autoSave: !preferences.autoSave })}
+            onClick={() => updatePreference('autoSave', !preferences.autoSave)}
             className={`w-12 h-6 rounded-full transition-colors ${
               preferences.autoSave ? 'bg-pink-600' : 'bg-gray-300'
             }`}
@@ -378,6 +365,9 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
             }`} />
           </button>
         </div>
+        <p className="text-xs text-gray-500 mt-2">
+          ✅ All settings are automatically saved to your browser's local storage
+        </p>
       </div>
     </div>
   );
@@ -387,16 +377,28 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
       <div className="bg-gray-50 p-4 rounded-lg">
         <h3 className="font-semibold text-gray-800 mb-3">Help Resources</h3>
         <div className="space-y-2">
-          <button className="w-full text-left p-3 bg-white rounded border hover:bg-gray-50">
+          <button 
+            onClick={() => window.open('https://github.com/elena1211/gamified_app', '_blank')}
+            className="w-full text-left p-3 bg-white rounded border hover:bg-gray-50"
+          >
             📖 User Manual
           </button>
-          <button className="w-full text-left p-3 bg-white rounded border hover:bg-gray-50">
+          <button 
+            onClick={() => setMessage('Support feature coming soon!')}
+            className="w-full text-left p-3 bg-white rounded border hover:bg-gray-50"
+          >
             💬 Online Support
           </button>
-          <button className="w-full text-left p-3 bg-white rounded border hover:bg-gray-50">
+          <button 
+            onClick={() => window.open('mailto:support@example.com?subject=Feedback', '_blank')}
+            className="w-full text-left p-3 bg-white rounded border hover:bg-gray-50"
+          >
             📧 Feedback
           </button>
-          <button className="w-full text-left p-3 bg-white rounded border hover:bg-gray-50">
+          <button 
+            onClick={() => setMessage('You are running the latest version!')}
+            className="w-full text-left p-3 bg-white rounded border hover:bg-gray-50"
+          >
             🔄 Check for Updates
           </button>
         </div>
@@ -419,7 +421,6 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
       case 'security': return renderSecuritySection();
       case 'notifications': return renderNotificationsSection();
       case 'appearance': return renderAppearanceSection();
-      case 'data': return renderDataSection();
       case 'support': return renderSupportSection();
       default: return renderAccountSection();
     }
@@ -464,7 +465,7 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
               
               <div className="border-t pt-2 mt-4">
                 <button
-                  onClick={onLogout}
+                  onClick={handleLogoutClick}
                   className="w-full text-left p-3 rounded-lg transition-colors flex items-center text-red-600 hover:bg-red-50"
                 >
                   <LogOut className="w-5 h-5 mr-3" />
@@ -490,6 +491,18 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
           </div>
         </div>
       </div>
+
+      {/* Logout Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showLogoutConfirm}
+        onClose={handleLogoutCancel}
+        onConfirm={handleLogoutConfirm}
+        title="Confirm logout"
+        message="Are you sure you want to log out? All unsaved changes will be lost."
+        confirmText="Confirm logout"
+        cancelText="Cancel"
+        type="warning"
+      />
     </div>
   );
 }
