@@ -35,7 +35,7 @@ const GOAL_SUGGESTIONS = [
   }
 ];
 
-export default function RegisterPage({ onRegisterSuccess }) {
+export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
   const [formData, setFormData] = useState({
     username: '',
     password: '',
@@ -141,6 +141,15 @@ export default function RegisterPage({ onRegisterSuccess }) {
         <div className="text-center mb-6">
           <h1 className="text-3xl font-bold text-gray-800 mb-2">🎮 Level Up</h1>
           <p className="text-gray-600">Start your journey to success!</p>
+          {onNavigateBack && (
+            <button
+              onClick={onNavigateBack}
+              className="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-white border-2 border-gray-300 text-gray-700 rounded-lg hover:border-pink-300 hover:text-pink-600 transition-all duration-200 shadow-sm hover:shadow-md"
+            >
+              <span>←</span>
+              <span className="font-medium">Back to Welcome</span>
+            </button>
+          )}
         </div>
 
         {/* Progress indicator */}
