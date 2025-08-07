@@ -97,7 +97,7 @@ export default function Modal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center" style={{zIndex: isGamePenalty ? 9999 : 10001}}>
       <div className="bg-white rounded-2xl shadow-xl max-w-md w-full mx-4 p-6">
         {/* Close button */}
         {showCloseButton && (

@@ -41,6 +41,7 @@ export default function Homepage({ currentUser, onLogout, onNavigateToSettings }
   const [showTimeLimitedTask, setShowTimeLimitedTask] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
   const [warningType, setWarningType] = useState('');
+  const [showDismissConfirm, setShowDismissConfirm] = useState(false);
 
   const [stats, setStats] = useState({
     knowledge: 75,
@@ -52,6 +53,7 @@ export default function Homepage({ currentUser, onLogout, onNavigateToSettings }
 
   // Time-limited task data
   const [currentTimeLimitedTask, setCurrentTimeLimitedTask] = useState(null);
+  const [lastDismissedTask, setLastDismissedTask] = useState(null);
 
   const [user, setUser] = useState({
     name: currentUser || "Elena",
@@ -90,19 +92,31 @@ export default function Homepage({ currentUser, onLogout, onNavigateToSettings }
   };
 
   const handleRejectTask = () => {
+    // Show confirmation dialog instead of immediately rejecting
+    setShowDismissConfirm(true);
+  };
+
+  const handleConfirmDismiss = () => {
     if (currentTimeLimitedTask) {
       applyStatChanges(currentTimeLimitedTask.penalty, false);
+      setLastDismissedTask(currentTimeLimitedTask); // Save for warning dialog
     }
     
     setShowTimeLimitedTask(false);
     setCurrentTimeLimitedTask(null);
+    setShowDismissConfirm(false);
     setWarningType('rejection');
     setShowWarning(true);
+  };
+
+  const handleCancelDismiss = () => {
+    setShowDismissConfirm(false);
   };
 
   const handleTimeUp = () => {
     if (currentTimeLimitedTask) {
       applyStatChanges(currentTimeLimitedTask.penalty, false);
+      setLastDismissedTask(currentTimeLimitedTask); // Save for warning dialog
     }
     
     setShowTimeLimitedTask(false);
@@ -113,6 +127,7 @@ export default function Homepage({ currentUser, onLogout, onNavigateToSettings }
 
   const handleWarningClose = () => {
     setShowWarning(false);
+    setLastDismissedTask(null); // Clear saved task data
   };
 
   const handleSettingsClick = () => {
@@ -325,7 +340,7 @@ export default function Homepage({ currentUser, onLogout, onNavigateToSettings }
             />
           </div>
         )}
-        {showWarning && currentTimeLimitedTask && (
+        {showWarning && lastDismissedTask && (
           <Modal
             isOpen={showWarning}
             onClose={handleWarningClose}
@@ -333,8 +348,23 @@ export default function Homepage({ currentUser, onLogout, onNavigateToSettings }
             message={warningType === 'rejection' ? 'You chose to avoid the challenge...' : 'The quest time has ended...'}
             type="game-penalty"
             variant="notification"
-            penalty={currentTimeLimitedTask.penalty}
+            penalty={lastDismissedTask.penalty}
             showCloseButton={false}
+          />
+        )}
+        
+        {/* Dismiss Confirmation Dialog */}
+        {showDismissConfirm && currentTimeLimitedTask && (
+          <Modal
+            isOpen={showDismissConfirm}
+            onClose={handleCancelDismiss}
+            onConfirm={handleConfirmDismiss}
+            title="Confirm Quest Dismissal"
+            message={`Are you sure you want to dismiss this quest? You will lose: ${currentTimeLimitedTask.penalty}`}
+            confirmText="Yes, Dismiss Quest"
+            cancelText="Continue Quest"
+            type="danger"
+            variant="confirmation"
           />
         )}
       </div>
