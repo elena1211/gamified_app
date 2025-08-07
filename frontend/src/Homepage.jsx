@@ -7,6 +7,40 @@ import MainGoal from './components/MainGoal';
 import TimeLimitedTaskPopup from './components/TimeLimitedTaskPopup';
 import WarningPopup from './components/WarningPopup';
 
+// API endpoints
+const API_BASE_URL = 'http://127.0.0.1:8002/api';
+const API_ENDPOINTS = {
+  tasks: `${API_BASE_URL}/tasks/`,
+  taskComplete: `${API_BASE_URL}/tasks/complete/`,
+  userStats: `${API_BASE_URL}/user/stats/`,
+  goal: `${API_BASE_URL}/goal/`
+};
+
+// Time-limited task data
+const TIME_LIMITED_TASKS = [
+  {
+    title: "Start Reading Now",
+    description: "Pick up a book or open an e-book and start reading for 5 minutes",
+    duration: 300,
+    reward: "+3 Knowledge, +2 Discipline",
+    penalty: "-1 Energy, -1 Knowledge"
+  },
+  {
+    title: "Get Ready for Library",
+    description: "Pack your bag, get dressed, and prepare to go to the library in 1 minute",
+    duration: 60,
+    reward: "+2 Energy, +1 Discipline",
+    penalty: "-2 Energy, -1 Discipline"
+  },
+  {
+    title: "Clean Your Desk Now",
+    description: "Clear your desk and organise all the clutter",
+    duration: 180,
+    reward: "+2 Discipline, +1 Charisma",
+    penalty: "-1 Discipline, +1 Stress"
+  }
+];
+
 export default function Homepage() {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -24,30 +58,6 @@ export default function Homepage() {
   });
 
   // Time-limited task data
-  const timeLimitedTasks = [
-    {
-      title: "Start Reading Now",
-      description: "Pick up a book or open an e-book and start reading for 5 minutes",
-      duration: 300,
-      reward: "+3 Knowledge, +2 Discipline",
-      penalty: "-1 Energy, -1 Knowledge"
-    },
-    {
-      title: "Get Ready for Library",
-      description: "Pack your bag, get dressed, and prepare to go to the library in 1 minute",
-      duration: 60,
-      reward: "+2 Energy, +1 Discipline",
-      penalty: "-2 Energy, -1 Discipline"
-    },
-    {
-      title: "Clean Your Desk Now",
-      description: "Clear your desk and organise all the clutter",
-      duration: 180,
-      reward: "+2 Discipline, +1 Charisma",
-      penalty: "-1 Discipline, +1 Stress"
-    }
-  ];
-
   const [currentTimeLimitedTask, setCurrentTimeLimitedTask] = useState(null);
 
   const [user, setUser] = useState({
@@ -67,7 +77,7 @@ export default function Homepage() {
   // Show random time-limited task after 3 seconds for testing
   useEffect(() => {
     const timer = setTimeout(() => {
-      const randomTask = timeLimitedTasks[Math.floor(Math.random() * timeLimitedTasks.length)];
+      const randomTask = TIME_LIMITED_TASKS[Math.floor(Math.random() * TIME_LIMITED_TASKS.length)];
       setCurrentTimeLimitedTask(randomTask);
       setShowTimeLimitedTask(true);
     }, 3000);
@@ -117,7 +127,7 @@ export default function Homepage() {
     
     try {
       // Call backend API to toggle task completion status
-      const response = await fetch('http://127.0.0.1:8002/api/tasks/complete/', {
+      const response = await fetch(API_ENDPOINTS.taskComplete, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -179,20 +189,6 @@ export default function Homepage() {
     }
   };
 
-  const handleTaskUncomplete = (task) => {
-    if (task.reward) {
-      // Reverse the previously awarded points
-      const reverseReward = task.reward.replace(/\+/g, '-');
-      applyStatChanges(reverseReward, false);
-    }
-  };
-
-  const handleTaskFail = (task) => {
-    // Minor negative effect for task failure
-    const penalty = "-1 Energy, +1 Stress";
-    applyStatChanges(penalty, false);
-  };
-
   const applyStatChanges = (changeString, isReward) => {
     // Parse change strings like "+3 Knowledge, +2 Discipline" or "-1 Energy, -1 Knowledge"
     const changes = changeString.split(',').map(change => change.trim());
@@ -222,7 +218,7 @@ export default function Homepage() {
       if (!preventScroll) {
         setLoading(true);
       }
-      const response = await fetch('http://127.0.0.1:8002/api/tasks/');
+      const response = await fetch(API_ENDPOINTS.tasks);
       
       if (response.ok) {
         const data = await response.json();
@@ -243,7 +239,7 @@ export default function Homepage() {
   const fetchUserStats = async () => {
     try {
       console.log(`📊 Fetching user stats...`);
-      const response = await fetch('http://127.0.0.1:8002/api/user/stats/');
+      const response = await fetch(API_ENDPOINTS.userStats);
       
       if (response.ok) {
         const data = await response.json();
@@ -308,7 +304,6 @@ export default function Homepage() {
           <TaskList 
             tasks={tasks} 
             onTaskComplete={handleTaskComplete}
-            onTaskUncomplete={handleTaskUncomplete}
           />
         </div>
         {/* Control Buttons */}
@@ -325,7 +320,7 @@ export default function Homepage() {
             </button>
             <button 
               onClick={() => {
-                const randomTask = timeLimitedTasks[Math.floor(Math.random() * timeLimitedTasks.length)];
+                const randomTask = TIME_LIMITED_TASKS[Math.floor(Math.random() * TIME_LIMITED_TASKS.length)];
                 setCurrentTimeLimitedTask(randomTask);
                 setShowTimeLimitedTask(true);
               }}

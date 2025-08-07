@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react';
 
+const API_ENDPOINTS = {
+  goal: 'http://127.0.0.1:8002/api/goal/'
+};
+
 export default function MainGoal() {
   const [goal, setGoal] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -12,7 +16,7 @@ export default function MainGoal() {
   const fetchGoal = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://127.0.0.1:8002/api/goal/');
+      const response = await fetch(API_ENDPOINTS.goal);
       
       if (response.ok) {
         const data = await response.json();

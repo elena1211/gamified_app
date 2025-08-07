@@ -1,9 +1,8 @@
-from django.shortcuts import render
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.http import JsonResponse
 from .models import Task, User, Goal, UserTaskLog
 from django.utils import timezone
+from datetime import date
 import random
 
 
@@ -16,7 +15,6 @@ class TaskListView(APIView):
             user = User.objects.get(username='elena')
             
             # Get today's date for checking completion status
-            from datetime import date
             today = date.today()
             
             # Get completed task IDs for today
@@ -163,7 +161,6 @@ class TaskCompleteView(APIView):
             task = Task.objects.get(id=task_id)
             
             # Check if task is already completed today
-            from datetime import date
             today = date.today()
             existing_log = UserTaskLog.objects.filter(
                 user=user,
