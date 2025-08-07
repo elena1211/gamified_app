@@ -3,7 +3,6 @@ import BottomNav from './components/BottomNav';
 import StatsPanel from './components/StatsPanel';
 import UserProfileCard from './components/UserProfileCard';
 import TaskList from './components/TaskList';
-import TaskCard from './components/TaskCard';
 import TimeLimitedTaskPopup from './components/TimeLimitedTaskPopup';
 import WarningPopup from './components/WarningPopup';
 
@@ -198,27 +197,25 @@ export default function Homepage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-100 to-purple-100 pb-20">
-      <div className="container mx-auto px-4 py-6 space-y-6">
-        
-        <div className="bg-white rounded-xl p-6 shadow-sm">
+    <div className="min-h-screen bg-pink-50 !px-8 !py-12">
+      <div className="max-w-4xl mx-auto space-y-8">
+        {/* Profile Card */}
+        <div className="bg-white rounded-2xl p-8 shadow-md flex flex-col items-center">
           <UserProfileCard user={user} />
         </div>
-
-        <div className="bg-white rounded-xl p-6 shadow-sm">
+        {/* Stats Panel */}
+        <div className="bg-white rounded-2xl p-8 shadow-md">
           <StatsPanel stats={stats} />
         </div>
-
-        <div className="bg-white rounded-xl p-6 shadow-sm">
-          <h3 className="text-lg font-semibold mb-4 text-gray-800">Today's Quests</h3>
-          
+        {/* Task List */}
+        <div className="bg-white rounded-2xl p-8 shadow-md">
           <TaskList 
             tasks={tasks} 
             onTaskComplete={handleTaskComplete}
             onTaskUncomplete={handleTaskUncomplete}
           />
         </div>
-
+        {/* Control Buttons */}
         <div className="text-center">
           <div className="flex justify-center gap-3 mb-4">
             <button 
@@ -227,7 +224,6 @@ export default function Homepage() {
             >
               🔄 Refresh Quests
             </button>
-            
             <button 
               onClick={() => {
                 const randomTask = timeLimitedTasks[Math.floor(Math.random() * timeLimitedTasks.length)];
@@ -240,30 +236,28 @@ export default function Homepage() {
             </button>
           </div>
         </div>
+        <BottomNav />
+        {/* Popups */}
+        {showTimeLimitedTask && currentTimeLimitedTask && (
+          <div style={{ position: 'relative', zIndex: 9999 }}>
+            <TimeLimitedTaskPopup
+              task={currentTimeLimitedTask}
+              onAccept={handleAcceptTask}
+              onReject={handleRejectTask}
+              onTimeUp={handleTimeUp}
+            />
+          </div>
+        )}
+        {showWarning && currentTimeLimitedTask && (
+          <div style={{ position: 'relative', zIndex: 9999 }}>
+            <WarningPopup
+              type={warningType}
+              penalty={currentTimeLimitedTask.penalty}
+              onClose={handleWarningClose}
+            />
+          </div>
+        )}
       </div>
-
-      <BottomNav />
-
-      {showTimeLimitedTask && currentTimeLimitedTask && (
-        <div style={{ position: 'relative', zIndex: 9999 }}>
-          <TimeLimitedTaskPopup
-            task={currentTimeLimitedTask}
-            onAccept={handleAcceptTask}
-            onReject={handleRejectTask}
-            onTimeUp={handleTimeUp}
-          />
-        </div>
-      )}
-
-      {showWarning && currentTimeLimitedTask && (
-        <div style={{ position: 'relative', zIndex: 9999 }}>
-          <WarningPopup
-            type={warningType}
-            penalty={currentTimeLimitedTask.penalty}
-            onClose={handleWarningClose}
-          />
-        </div>
-      )}
     </div>
   );
 }

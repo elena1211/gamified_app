@@ -1,45 +1,44 @@
 export default function StatsPanel({ stats }) {
   const statNames = [
-    { key: "knowledge", label: "Knowledge", emoji: "📚" },
-    { key: "discipline", label: "Discipline", emoji: "💪" },
-    { key: "energy", label: "Energy", emoji: "⚡" },
-    { key: "charisma", label: "Charisma", emoji: "✨" },
-    { key: "stress", label: "Stress", emoji: "😰" }
+    { key: "knowledge", label: "Knowledge", emoji: "📚", color: "#8b5cf6" },
+    { key: "discipline", label: "Discipline", emoji: "💪", color: "#06b6d4" },
+    { key: "energy", label: "Energy", emoji: "⚡", color: "#eab308" },
+    { key: "charisma", label: "Charisma", emoji: "✨", color: "#ec4899" },
+    { key: "stress", label: "Stress", emoji: "😰", color: "#ef4444" }
   ];
 
   return (
-    <div className="bg-white rounded-2xl p-4 shadow-sm">
-      <h3 className="font-bold text-lg mb-4 text-gray-800">📊 Your Stats</h3>
-      <div className="space-y-4">
-        {statNames.map(({ key, label, emoji }) => {
+    <div>
+      <h3 className="font-bold text-lg mb-6 text-gray-800">📊 Your Stats</h3>
+      <div className="space-y-5">
+        {statNames.map(({ key, label, emoji, color }) => {
           const value = stats?.[key] || 0;
           return (
-            <div key={key} className="space-y-2">
-              <div className="flex justify-between items-center">
+            <div key={key}>
+              <div className="flex justify-between items-center mb-2">
                 <span className="text-sm text-gray-700 font-medium flex items-center gap-2">
-                  <span>{emoji}</span>
-                  {label}
+                  <span className="text-base">{emoji}</span>
+                  <span>{label}</span>
                 </span>
-                <span className="text-sm text-gray-700 font-bold">{value}%</span>
+                <span className="text-sm text-gray-600 font-semibold">{value}%</span>
               </div>
-              <div 
-                style={{
-                  backgroundColor: '#f3f4f6',
-                  height: '8px',
-                  borderRadius: '4px',
-                  overflow: 'hidden'
-                }}
-              >
-                <div
-                  style={{ 
-                    width: `${value}%`,
-                    height: '100%',
-                    backgroundColor: '#ec4899',
-                    borderRadius: '4px',
-                    transition: 'width 1s ease-out',
-                    minWidth: value > 0 ? '2px' : '0px'
+              <div className="relative">
+                <div 
+                  className="w-full bg-gray-200 rounded-full overflow-hidden"
+                  style={{
+                    height: '10px',
                   }}
-                ></div>
+                >
+                  <div
+                    className="h-full rounded-full transition-all duration-1000 ease-out"
+                    style={{ 
+                      width: `${value}%`,
+                      backgroundColor: color,
+                      minWidth: value > 0 ? '4px' : '0px',
+                      boxShadow: value > 0 ? `0 0 8px ${color}40` : 'none'
+                    }}
+                  ></div>
+                </div>
               </div>
             </div>
           );
@@ -48,4 +47,3 @@ export default function StatsPanel({ stats }) {
     </div>
   );
 }
-
