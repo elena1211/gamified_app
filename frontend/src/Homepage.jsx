@@ -3,6 +3,7 @@ import BottomNav from './components/BottomNav';
 import StatsPanel from './components/StatsPanel';
 import UserProfileCard from './components/UserProfileCard';
 import TaskList from './components/TaskList';
+import MainGoal from './components/MainGoal';
 import TimeLimitedTaskPopup from './components/TimeLimitedTaskPopup';
 import WarningPopup from './components/WarningPopup';
 
@@ -49,15 +50,18 @@ export default function Homepage() {
 
   const [currentTimeLimitedTask, setCurrentTimeLimitedTask] = useState(null);
 
-  const user = {
+  const [user, setUser] = useState({
     name: "Elena",
     level: 5,
-    streak: 7,
+    streak: 0,
     avatar: "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiByeD0iMTAwIiBmaWxsPSIjZmM5MWJmIi8+CjxjaXJjbGUgY3g9IjEwMCIgY3k9IjgwIiByPSIzMCIgZmlsbD0iI2ZmZmZmZiIvPgo8ZWxsaXBzZSBjeD0iMTAwIiBjeT0iMTUwIiByeD0iNDAiIHJ5PSIzMCIgZmlsbD0iI2ZmZmZmZiIvPgo8L3N2Zz4K"
-  };
+  });
+
+  const [userStats, setUserStats] = useState(null);
 
   useEffect(() => {
     fetchTasks();
+    fetchUserStats();
   }, []);
 
   // Show random time-limited task after 3 seconds for testing
@@ -108,9 +112,70 @@ export default function Homepage() {
     setShowWarning(false);
   };
 
-  const handleTaskComplete = (task) => {
-    if (task.reward) {
-      applyStatChanges(task.reward, true);
+  const handleTaskComplete = async (task) => {
+    console.log(`🎯 Attempting to toggle task ${task.id}: ${task.title}`);
+    
+    try {
+      // Call backend API to toggle task completion status
+      const response = await fetch('http://127.0.0.1:8002/api/tasks/complete/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ task_id: task.id })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`📨 API Response:`, data);
+        
+        if (data.success) {
+          // Show progress message
+          if (data.task_completed) {
+            console.log(`✅ Task completed! Progress: ${data.completed_tasks}/${data.total_tasks} tasks today`);
+          } else {
+            console.log(`⬜ Task marked as incomplete! Progress: ${data.completed_tasks}/${data.total_tasks} tasks today`);
+          }
+
+          // Update local task state to reflect the change
+          setTasks(prevTasks => prevTasks.map(t => 
+            t.id === task.id 
+              ? { ...t, completed: data.task_completed }
+              : t
+          ));
+
+          // Apply stat changes based on task completion status
+          if (data.task_completed && task.reward) {
+            // Task completed: apply positive stat changes
+            applyStatChanges(task.reward, true);
+          } else if (!data.task_completed && task.reward) {
+            // Task uncompleted: reverse the stat changes
+            const reverseReward = task.reward.replace(/\+/g, '-');
+            applyStatChanges(reverseReward, false);
+          }
+
+          // Update streak based on API response
+          setUser(prevUser => {
+            const newUser = { ...prevUser, streak: data.streak };
+            console.log(`👤 Updating streak from ${prevUser.streak} to ${data.streak}`);
+            return newUser;
+          });
+
+          // Update user stats to reflect the total completed tasks change
+          fetchUserStats();
+        } else {
+          console.log(`ℹ️ ${data.message}`);
+        }
+      } else {
+        console.error('Failed to complete task');
+      }
+    } catch (err) {
+      console.error('Error completing task:', err);
+      
+      // Fallback to local stat changes if API fails
+      if (task.reward) {
+        applyStatChanges(task.reward, true);
+      }
     }
   };
 
@@ -152,9 +217,11 @@ export default function Homepage() {
     });
   };
 
-  const fetchTasks = async () => {
+  const fetchTasks = async (preventScroll = false) => {
     try {
-      setLoading(true);
+      if (!preventScroll) {
+        setLoading(true);
+      }
       const response = await fetch('http://127.0.0.1:8002/api/tasks/');
       
       if (response.ok) {
@@ -167,7 +234,34 @@ export default function Homepage() {
     } catch (err) {
       setError('Connection error: ' + err.message);
     } finally {
-      setLoading(false);
+      if (!preventScroll) {
+        setLoading(false);
+      }
+    }
+  };
+
+  const fetchUserStats = async () => {
+    try {
+      console.log(`📊 Fetching user stats...`);
+      const response = await fetch('http://127.0.0.1:8002/api/user/stats/');
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`📊 User stats received:`, data);
+        
+        setUserStats(data);
+        setUser(prevUser => {
+          const newUser = {
+            ...prevUser,
+            level: data.level,
+            streak: data.current_streak
+          };
+          console.log(`👤 Updating user streak from ${prevUser.streak} to ${data.current_streak} via fetchUserStats`);
+          return newUser;
+        });
+      }
+    } catch (err) {
+      console.error('Failed to fetch user stats:', err);
     }
   };
 
@@ -186,7 +280,7 @@ export default function Homepage() {
           <h2 className="font-bold mb-2">❌ Connection Error</h2>
           <p className="mb-4">{error}</p>
           <button 
-            onClick={fetchTasks}
+            onClick={() => fetchTasks(false)}
             className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded text-sm"
           >
             Retry Connection
@@ -201,8 +295,10 @@ export default function Homepage() {
       <div className="max-w-4xl mx-auto space-y-8">
         {/* Profile Card */}
         <div className="bg-white rounded-2xl p-8 shadow-md flex flex-col items-center">
-          <UserProfileCard user={user} />
+          <UserProfileCard user={user} userStats={userStats} />
         </div>
+        {/* Main Goal */}
+        <MainGoal />
         {/* Stats Panel */}
         <div className="bg-white rounded-2xl p-8 shadow-md">
           <StatsPanel stats={stats} />
@@ -219,7 +315,10 @@ export default function Homepage() {
         <div className="text-center">
           <div className="flex justify-center gap-3 mb-4">
             <button 
-              onClick={fetchTasks}
+              onClick={(e) => {
+                e.preventDefault();
+                fetchTasks(true);
+              }}
               className="bg-purple-500 hover:bg-purple-600 text-white px-6 py-3 rounded-xl shadow-md transition-all duration-300 hover:scale-105"
             >
               🔄 Refresh Quests

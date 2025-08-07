@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-export default function TaskList({ tasks: initialTasks, onTaskComplete, onTaskUncomplete }) {
+export default function TaskList({ tasks: initialTasks, onTaskComplete }) {
   const [tasks, setTasks] = useState(initialTasks);
 
   // Synchronise internal state when external tasks update
@@ -10,16 +10,10 @@ export default function TaskList({ tasks: initialTasks, onTaskComplete, onTaskUn
 
   const toggleTask = (id) => {
     const task = tasks.find(t => t.id === id);
-    const updated = tasks.map((task) =>
-      task.id === id ? { ...task, completed: !task.completed } : task
-    );
-    setTasks(updated);
     
-    // Trigger appropriate callback based on task state change
-    if (!task.completed && onTaskComplete) {
+    // Call the completion handler which now handles both complete and uncomplete
+    if (onTaskComplete) {
       onTaskComplete(task);
-    } else if (task.completed && onTaskUncomplete) {
-      onTaskUncomplete(task);
     }
   };
 
@@ -41,9 +35,8 @@ export default function TaskList({ tasks: initialTasks, onTaskComplete, onTaskUn
               <input
                 type="checkbox"
                 checked={task.completed}
-                onChange={() => toggleTask(task.id)}
-                onClick={(e) => e.stopPropagation()}
-                className="mt-1 w-5 h-5 accent-pink-500 rounded"
+                readOnly
+                className="mt-1 w-5 h-5 accent-pink-500 rounded pointer-events-none"
               />
               <div className="flex-1 min-w-0">
                 <span
