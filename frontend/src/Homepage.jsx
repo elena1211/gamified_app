@@ -41,7 +41,7 @@ const TIME_LIMITED_TASKS = [
   }
 ];
 
-export default function Homepage() {
+export default function Homepage({ currentUser }) {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -61,10 +61,10 @@ export default function Homepage() {
   const [currentTimeLimitedTask, setCurrentTimeLimitedTask] = useState(null);
 
   const [user, setUser] = useState({
-    name: "Elena",
+    name: currentUser || "Elena",
     level: 5,
     streak: 0,
-    avatar: "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiByeD0iMTAwIiBmaWxsPSIjZmM5MWJmIi8+CjxjaXJjbGUgY3g9IjEwMCIgY3k9IjgwIiByPSIzMCIgZmlsbD0iI2ZmZmZmZiIvPgo8ZWxsaXBzZSBjeD0iMTAwIiBjeT0iMTUwIiByeD0iNDAiIHJ5PSIzMCIgZmlsbD0iI2ZmZmZmZiIvPgo8L3N2Zz4K"
+    avatar: "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjAwIiB2aWV3Qm94PSIwIDAgMjAwIDIwMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIHJ4PSIxMDAiIGZpbGw9IiNmYzkxYmYiLz4KPGNpcmNsZSBjeD0iMTAwIiBjeT0iODAiIHI9IjMwIiBmaWxsPSIjZmZmZmZmIi8+CjxlbGxpcHNlIGN4PSIxMDAiIGN5PSIxNTAiIHJ4PSI0MCIgcnk9IjMwIiBmaWxsPSIjZmZmZmZmIi8+Cjwvc3ZnPgo="
   });
 
   const [userStats, setUserStats] = useState(null);
@@ -132,7 +132,10 @@ export default function Homepage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ task_id: task.id })
+        body: JSON.stringify({ 
+          task_id: task.id,
+          user: currentUser || 'elena'
+        })
       });
 
       if (response.ok) {
@@ -218,7 +221,7 @@ export default function Homepage() {
       if (!preventScroll) {
         setLoading(true);
       }
-      const response = await fetch(API_ENDPOINTS.tasks);
+      const response = await fetch(`${API_ENDPOINTS.tasks}?user=${currentUser || 'elena'}`);
       
       if (response.ok) {
         const data = await response.json();
@@ -239,7 +242,7 @@ export default function Homepage() {
   const fetchUserStats = async () => {
     try {
       console.log(`📊 Fetching user stats...`);
-      const response = await fetch(API_ENDPOINTS.userStats);
+      const response = await fetch(`${API_ENDPOINTS.userStats}?user=${currentUser || 'elena'}`);
       
       if (response.ok) {
         const data = await response.json();
@@ -294,7 +297,7 @@ export default function Homepage() {
           <UserProfileCard user={user} userStats={userStats} />
         </div>
         {/* Main Goal */}
-        <MainGoal />
+        <MainGoal currentUser={currentUser} />
         {/* Stats Panel */}
         <div className="bg-white rounded-2xl p-8 shadow-md">
           <StatsPanel stats={stats} />

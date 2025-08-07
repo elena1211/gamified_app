@@ -1,18 +1,21 @@
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework import status
+from django.contrib.auth import authenticate, login
+from django.contrib.auth.hashers import make_password
 from .models import Task, User, Goal, UserTaskLog
 from django.utils import timezone
-from datetime import date
+from datetime import date, timedelta
 import random
 
 
 class TaskListView(APIView):
     """API view that returns task data from database"""
     def get(self, request):
+        username = request.GET.get('user', 'elena')  # Default to 'elena' for backward compatibility
+        
         try:
-            # prepare to fetch tasks for a specific user
-            # Assuming the user is 'elena' for demonstration purposes
-            user = User.objects.get(username='elena')
+            user = User.objects.get(username=username)
             
             # Get today's date for checking completion status
             today = date.today()
@@ -113,9 +116,10 @@ class TaskDetailView(APIView):
 class GoalView(APIView):
     """API view for user's main goal"""
     def get(self, request):
+        username = request.GET.get('user', 'elena')  # Default to 'elena'
+        
         try:
-            # Get the test user (later can be based on authentication)
-            user = User.objects.get(username='elena')
+            user = User.objects.get(username=username)
             
             # Get user's main goal (first active goal)
             goal = Goal.objects.filter(user=user, is_completed=False).first()
@@ -155,9 +159,11 @@ class GoalView(APIView):
 class TaskCompleteView(APIView):
     """API view for marking tasks as complete or uncomplete"""
     def post(self, request):
+        username = request.data.get('user', 'elena')  # Default to 'elena'
+        
         try:
             task_id = request.data.get('task_id')
-            user = User.objects.get(username='elena')
+            user = User.objects.get(username=username)
             task = Task.objects.get(id=task_id)
             
             # Check if task is already completed today
@@ -225,8 +231,10 @@ class TaskCompleteView(APIView):
 class UserStatsView(APIView):
     """API view for user statistics including streak"""
     def get(self, request):
+        username = request.GET.get('user', 'elena')  # Default to 'elena'
+        
         try:
-            user = User.objects.get(username='elena')
+            user = User.objects.get(username=username)
             
             stats = {
                 "level": user.level,
@@ -246,3 +254,163 @@ class UserStatsView(APIView):
                 "last_activity_date": None,
                 "total_completed_tasks": 0
             })
+
+
+class RegisterView(APIView):
+    """API view for user registration"""
+    def post(self, request):
+        try:
+            username = request.data.get('username')
+            password = request.data.get('password')
+            email = request.data.get('email', '')
+            goal_title = request.data.get('goal_title')
+            goal_description = request.data.get('goal_description', '')
+            
+            # Validation
+            if not username or not password or not goal_title:
+                return Response({
+                    "error": "Username, password, and goal title are required"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Check if username already exists
+            if User.objects.filter(username=username).exists():
+                return Response({
+                    "error": "Username already exists"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Create user
+            user = User.objects.create(
+                username=username,
+                email=email,
+                password=make_password(password),
+                level=1,
+                current_streak=0,
+                max_streak=0
+            )
+            
+            # Create user's main goal
+            Goal.objects.create(
+                user=user,
+                title=goal_title,
+                description=goal_description
+            )
+            
+            # Create default tasks for the user
+            default_tasks = [
+                {
+                    'title': '🧠 Practice Leetcode Problem',
+                    'description': 'Complete a medium-level algorithm problem',
+                    'attribute': 'knowledge',
+                    'difficulty': 2,
+                    'reward_point': 14
+                },
+                {
+                    'title': '📚 Read 30 pages',
+                    'description': 'Read and take notes on any educational book',
+                    'attribute': 'knowledge',
+                    'difficulty': 1,
+                    'reward_point': 10
+                },
+                {
+                    'title': '🏃‍♂️ 30-minute workout',
+                    'description': 'Include cardio and strength training',
+                    'attribute': 'energy',
+                    'difficulty': 2,
+                    'reward_point': 12
+                },
+                {
+                    'title': '🧘‍♀️ 10-minute meditation',
+                    'description': 'Use guided meditation app or practice breathing',
+                    'attribute': 'discipline',
+                    'difficulty': 1,
+                    'reward_point': 8
+                },
+                {
+                    'title': '🗣️ Practice presentation skills',
+                    'description': 'Record yourself giving a 5-minute presentation',
+                    'attribute': 'charisma',
+                    'difficulty': 3,
+                    'reward_point': 20
+                },
+                {
+                    'title': '🧹 Organise workspace',
+                    'description': 'Clean and organise your desk and surrounding area',
+                    'attribute': 'discipline',
+                    'difficulty': 1,
+                    'reward_point': 8
+                },
+                {
+                    'title': '📝 Write journal entry',
+                    'description': 'Reflect on today\'s experiences and goals',
+                    'attribute': 'discipline',
+                    'difficulty': 1,
+                    'reward_point': 6
+                },
+                {
+                    'title': '💡 Learn something new',
+                    'description': 'Watch educational video or read article on new topic',
+                    'attribute': 'knowledge',
+                    'difficulty': 2,
+                    'reward_point': 12
+                }
+            ]
+            
+            for task_data in default_tasks:
+                Task.objects.create(
+                    user=user,
+                    title=task_data['title'],
+                    description=task_data['description'],
+                    attribute=task_data['attribute'],
+                    difficulty=task_data['difficulty'],
+                    reward_point=task_data['reward_point'],
+                    deadline=timezone.now() + timedelta(days=365)  # 1 year deadline
+                )
+            
+            return Response({
+                "success": True,
+                "message": "User registered successfully",
+                "username": username,
+                "goal": goal_title
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            return Response({
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class LoginView(APIView):
+    """API view for user login"""
+    def post(self, request):
+        try:
+            username = request.data.get('username')
+            password = request.data.get('password')
+            
+            if not username or not password:
+                return Response({
+                    "error": "Username and password are required"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Authenticate user
+            user = authenticate(username=username, password=password)
+            
+            if user:
+                # Update streak for login
+                user.update_streak()
+                
+                return Response({
+                    "success": True,
+                    "message": "Login successful",
+                    "username": username,
+                    "level": user.level,
+                    "streak": user.current_streak
+                })
+            else:
+                return Response({
+                    "error": "Invalid username or password"
+                }, status=status.HTTP_401_UNAUTHORIZED)
+                
+        except Exception as e:
+            return Response({
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

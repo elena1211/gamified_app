@@ -4,7 +4,7 @@ const API_ENDPOINTS = {
   goal: 'http://127.0.0.1:8002/api/goal/'
 };
 
-export default function MainGoal() {
+export default function MainGoal({ currentUser }) {
   const [goal, setGoal] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -16,7 +16,7 @@ export default function MainGoal() {
   const fetchGoal = async () => {
     try {
       setLoading(true);
-      const response = await fetch(API_ENDPOINTS.goal);
+      const response = await fetch(`${API_ENDPOINTS.goal}?user=${currentUser || 'elena'}`);
       
       if (response.ok) {
         const data = await response.json();
