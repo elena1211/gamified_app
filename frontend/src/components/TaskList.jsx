@@ -24,7 +24,7 @@ export default function TaskList({ tasks: initialTasks, onTaskComplete, onTaskUn
   };
 
   return (
-    <div className="bg-white rounded-2xl p-4 shadow-sm">
+    <div>
       <h3 className="font-bold text-lg mb-4 text-gray-800">📋 Today's Tasks</h3>
       <div className="space-y-3">
         {tasks.map((task) => (
