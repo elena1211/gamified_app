@@ -1,4 +1,7 @@
-// Design system constants for consistent styling across the application
+/**
+ * Design system constants for consistent styling across the application
+ * Centralizes colors, emojis, animations, and layout classes
+ */
 
 export const COLORS = {
   gradient: {
