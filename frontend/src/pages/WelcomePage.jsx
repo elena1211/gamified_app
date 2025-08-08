@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { API_ENDPOINTS, apiRequest } from '../config/api.js';
 import { COLORS, EMOJIS, ANIMATION_CLASSES, LAYOUT_CLASSES } from '../config/constants.js';
+import { useTranslation } from 'react-i18next';
 
 export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
+  const { t } = useTranslation('common');
   const [isLoginMode, setIsLoginMode] = useState(false);
   const [formData, setFormData] = useState({
     username: '',
@@ -23,7 +25,7 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
     e.preventDefault();
     
     if (!formData.username.trim() || !formData.password.trim()) {
-      setError('Please enter both username and password');
+      setError(t('auth.fieldsRequired'));
       return;
     }
     
@@ -41,7 +43,7 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
       
       onLoginSuccess(data.username);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || t('auth.invalidCredentials'));
     } finally {
       setLoading(false);
     }
@@ -63,28 +65,28 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
             <div className="flex items-center gap-3 text-left">
               <span className="text-2xl">🎯</span>
               <div>
-                <h3 className="font-semibold text-gray-800">Set Your Goals</h3>
+                <h3 className="font-semibold text-gray-800">{t('tasks.mainGoalTitle')}</h3>
                 <p className="text-sm text-gray-600">Define your path to success</p>
               </div>
             </div>
             <div className="flex items-center gap-3 text-left">
               <span className="text-2xl">📋</span>
               <div>
-                <h3 className="font-semibold text-gray-800">Complete Quests</h3>
+                <h3 className="font-semibold text-gray-800">{t('tasks.dailyTasks')}</h3>
                 <p className="text-sm text-gray-600">Turn tasks into exciting challenges</p>
               </div>
             </div>
             <div className="flex items-center gap-3 text-left">
               <span className="text-2xl">🔥</span>
               <div>
-                <h3 className="font-semibold text-gray-800">Build Streaks</h3>
+                <h3 className="font-semibold text-gray-800">{t('tasks.streak')}</h3>
                 <p className="text-sm text-gray-600">Maintain momentum and stay motivated</p>
               </div>
             </div>
             <div className="flex items-center gap-3 text-left">
               <span className="text-2xl">📊</span>
               <div>
-                <h3 className="font-semibold text-gray-800">Track Progress</h3>
+                <h3 className="font-semibold text-gray-800">{t('tasks.stats')}</h3>
                 <p className="text-sm text-gray-600">Watch your skills grow over time</p>
               </div>
             </div>
@@ -96,14 +98,14 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
               onClick={onNavigateToRegister}
               className={`w-full ${COLORS.button.primary} text-white py-4 rounded-xl text-lg font-semibold shadow-lg ${ANIMATION_CLASSES.button} hover:shadow-xl`}
             >
-              {EMOJIS.rocket} Start Your Journey
+              {EMOJIS.rocket} {t('auth.signUp')}
             </button>
             
             <button
               onClick={() => setIsLoginMode(true)}
               className={`w-full ${COLORS.button.secondary} ${COLORS.text.primary} py-4 rounded-xl text-lg font-medium ${ANIMATION_CLASSES.button}`}
             >
-              {EMOJIS.login} I Already Have an Account
+              {EMOJIS.login} {t('auth.alreadyHaveAccount')}
             </button>
           </div>
 
@@ -122,7 +124,7 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
       <div className={`${LAYOUT_CLASSES.card} p-8 max-w-md w-full`}>
         <div className="text-center mb-6">
           <div className="text-5xl mb-3">{EMOJIS.login}</div>
-          <h1 className={`text-3xl font-bold ${COLORS.text.primary} mb-2`}>Welcome Back!</h1>
+          <h1 className={`text-3xl font-bold ${COLORS.text.primary} mb-2`}>{t('welcome')}!</h1>
           <p className={COLORS.text.secondary}>Continue your epic journey</p>
         </div>
 
@@ -135,7 +137,7 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Username
+              {t('auth.username')}
             </label>
             <input
               type="text"
@@ -143,14 +145,14 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
               value={formData.username}
               onChange={handleInputChange}
               className={LAYOUT_CLASSES.input}
-              placeholder="Enter your username"
+              placeholder={t('auth.enterUsername')}
               required
             />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Password
+              {t('auth.password')}
             </label>
             <input
               type="password"
@@ -158,7 +160,7 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
               value={formData.password}
               onChange={handleInputChange}
               className={LAYOUT_CLASSES.input}
-              placeholder="Enter your password"
+              placeholder={t('auth.enterPassword')}
               required
             />
           </div>
@@ -171,10 +173,10 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
             {loading ? (
               <div className="flex items-center justify-center gap-2">
                 <div className={`w-4 h-4 border-2 border-white border-t-transparent rounded-full ${ANIMATION_CLASSES.spinner}`}></div>
-                Signing In...
+                {t('common.loading')}...
               </div>
             ) : (
-              `${EMOJIS.logo} Enter Game`
+              `${EMOJIS.logo} ${t('auth.signIn')}`
             )}
           </button>
         </form>
@@ -184,18 +186,18 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
             onClick={() => setIsLoginMode(false)}
             className="text-gray-500 hover:text-gray-700 text-sm transition-colors"
           >
-            ← Back to Welcome
+            ← {t('common.back')}
           </button>
         </div>
 
         <div className="mt-4 text-center">
           <p className="text-sm text-gray-600">
-            Don't have an account?{' '}
+            {t('auth.dontHaveAccount')}{' '}
             <button
               onClick={onNavigateToRegister}
               className="text-pink-500 hover:text-pink-600 font-medium"
             >
-              Start your journey here
+              {t('auth.clickToRegister')}
             </button>
           </p>
         </div>

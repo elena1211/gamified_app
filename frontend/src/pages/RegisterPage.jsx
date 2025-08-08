@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { API_ENDPOINTS, apiRequest } from '../config/api.js';
 import { COLORS, EMOJIS, ANIMATION_CLASSES, LAYOUT_CLASSES } from '../config/constants.js';
+import { useTranslation } from 'react-i18next';
 
 const GOAL_SUGGESTIONS = [
   {
@@ -26,14 +27,20 @@ const GOAL_SUGGESTIONS = [
   {
     title: "Start a Business",
     description: "Develop entrepreneurial skills and launch a successful venture"
-  },
-  {
-    title: "Custom Goal",
-    description: "Create your own personalized goal"
   }
 ];
 
 export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
+  const { t } = useTranslation(['common', 'settings']);
+  
+  // Add custom goal option with translation
+  const COMPLETE_GOAL_SUGGESTIONS = [
+    ...GOAL_SUGGESTIONS,
+    {
+      title: t("customGoal", { defaultValue: "Custom Goal" }),
+      description: "Create your own personalized goal"
+    }
+  ];
   const [formData, setFormData] = useState({
     username: '',
     password: '',
@@ -60,25 +67,25 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
     setFormData(prev => ({
       ...prev,
       selectedGoal: goal,
-      customGoalTitle: goal.title === 'Custom Goal' ? '' : goal.title,
-      customGoalDescription: goal.title === 'Custom Goal' ? '' : goal.description
+      customGoalTitle: goal.title === t("customGoal") ? '' : goal.title,
+      customGoalDescription: goal.title === t("customGoal") ? '' : goal.description
     }));
   };
 
   const handleNextStep = () => {
     // Validation for step 1
     if (!formData.username.trim()) {
-      setError('Username is required');
+      setError(t('fieldsRequired'));
       return;
     }
     
     if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters');
+      setError(t('passwordTooShort'));
       return;
     }
     
     if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match');
+      setError(t('passwordMismatch'));
       return;
     }
     
@@ -91,12 +98,12 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
     
     // Validation for step 2
     if (!formData.selectedGoal) {
-      setError('Please select a goal');
+      setError(t('selectGoal'));
       return;
     }
     
-    if (formData.selectedGoal.title === 'Custom Goal' && !formData.customGoalTitle.trim()) {
-      setError('Please enter your custom goal title');
+    if (formData.selectedGoal.title === t("customGoal") && !formData.customGoalTitle.trim()) {
+      setError(t('goalTitle') + ' is required');
       return;
     }
     
@@ -118,7 +125,7 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
       // Registration successful
       onRegisterSuccess(data.username);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || t('registrationFailed'));
     } finally {
       setLoading(false);
     }
@@ -136,7 +143,7 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
               className="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-white border-2 border-gray-300 text-gray-700 rounded-lg hover:border-pink-300 hover:text-pink-600 transition-all duration-200 shadow-sm hover:shadow-md"
             >
               <span>←</span>
-              <span className="font-medium">Back to Welcome</span>
+              <span className="font-medium">{t('back')}</span>
             </button>
           )}
         </div>
@@ -165,11 +172,11 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
         <form onSubmit={step === 1 ? (e) => { e.preventDefault(); handleNextStep(); } : handleSubmit}>
           {step === 1 && (
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">Account Information</h2>
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">{t('accountInformation')}</h2>
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Username *
+                  {t('username')} *
                 </label>
                 <input
                   type="text"
@@ -177,14 +184,14 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
                   value={formData.username}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                  placeholder="Choose a username"
+                  placeholder={t('enterUsername')}
                   required
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email (optional)
+                  {t('email')} (optional)
                 </label>
                 <input
                   type="email"
@@ -192,13 +199,13 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
                   value={formData.email}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                  placeholder="your@email.com"
+                  placeholder={t('enterEmail')}
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Password *
+                  {t('password')} *
                 </label>
                 <input
                   type="password"
@@ -206,14 +213,14 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
                   value={formData.password}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                  placeholder="At least 6 characters"
+                  placeholder={t('newPassword')}
                   required
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Confirm Password *
+                  {t('confirmPassword')} *
                 </label>
                 <input
                   type="password"
@@ -221,7 +228,7 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
                   value={formData.confirmPassword}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                  placeholder="Confirm your password"
+                  placeholder={t('confirmNewPassword')}
                   required
                 />
               </div>
@@ -230,17 +237,17 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
                 type="submit"
                 className="w-full bg-pink-500 hover:bg-pink-600 text-white py-3 rounded-lg font-medium transition-colors"
               >
-                Next: Choose Your Goal →
+                Next: {t('mainGoalTitle')} →
               </button>
             </div>
           )}
 
           {step === 2 && (
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">Choose Your Main Goal</h2>
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">{t('mainGoalTitle')}</h2>
               
               <div className="space-y-3 max-h-64 overflow-y-auto">
-                {GOAL_SUGGESTIONS.map((goal, index) => (
+                {COMPLETE_GOAL_SUGGESTIONS.map((goal, index) => (
                   <div
                     key={index}
                     onClick={() => handleGoalSelect(goal)}
@@ -256,11 +263,11 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
                 ))}
               </div>
 
-              {formData.selectedGoal?.title === 'Custom Goal' && (
+              {formData.selectedGoal?.title === t("customGoal") && (
                 <div className="space-y-3 mt-4 p-4 bg-gray-50 rounded-lg">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Goal Title *
+                      {t('goalTitle')} *
                     </label>
                     <input
                       type="text"
@@ -268,13 +275,13 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
                       value={formData.customGoalTitle}
                       onChange={handleInputChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                      placeholder="What do you want to achieve?"
+                      placeholder={t('goalPlaceholder')}
                       required
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Description
+                      {t('goalDescription')}
                     </label>
                     <textarea
                       name="customGoalDescription"
@@ -282,7 +289,7 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
                       onChange={handleInputChange}
                       rows="3"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                      placeholder="Describe your goal in detail..."
+                      placeholder={t('descPlaceholder')}
                     />
                   </div>
                 </div>
@@ -294,14 +301,14 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
                   onClick={() => setStep(1)}
                   className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-3 rounded-lg font-medium transition-colors"
                 >
-                  ← Back
+                  ← {t('back')}
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
                   className="flex-1 bg-pink-500 hover:bg-pink-600 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
                 >
-                  {loading ? 'Creating Account...' : 'Start Journey! 🚀'}
+                  {loading ? t('loading') + '...' : t('signUp') + '! 🚀'}
                 </button>
               </div>
             </div>

@@ -1,10 +1,16 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, User, Shield, Bell, Palette, HelpCircle, LogOut, Eye, EyeOff, Trash2, Key, Moon, Sun, Globe } from 'lucide-react';
-import { API_ENDPOINTS, apiRequest } from '../config/api.js';
-import { COLORS } from '../config/constants.js';
+import { useTranslation } from 'react-i18next';
+import { ArrowLeft, User, Shield, Bell, Palette, LogOut, Eye, EyeOff, Trash2, Key, Moon, Sun, Globe } from 'lucide-react';
+import { API_ENDPOINTS } from '../config/api.js';
+import LanguageSwitcher from '../components/LanguageSwitcher.jsx';
 import Modal from '../components/Modal.jsx';
 
+/**
+ * System Settings Page component
+ * Handles user account, security, notifications, appearance, and support settings
+ */
 export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
+  const { t, i18n } = useTranslation(['common', 'settings']);
   const [activeSection, setActiveSection] = useState('account');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
@@ -25,7 +31,6 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
   
   const [preferences, setPreferences] = useState({
     theme: localStorage.getItem('theme') || 'light',
-    language: localStorage.getItem('language') || 'en',
     notifications: localStorage.getItem('notifications') !== 'false',
     soundEffects: localStorage.getItem('soundEffects') !== 'false',
     autoSave: localStorage.getItem('autoSave') !== 'false',
@@ -36,7 +41,7 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
   // Initialize theme on component mount
   useEffect(() => {
     document.documentElement.classList.toggle('dark', preferences.theme === 'dark');
-  }, []);
+  }, [preferences.theme]);
 
   const handleLogoutClick = () => {
     setShowLogoutConfirm(true);
@@ -52,23 +57,22 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
   };
 
   const sections = [
-    { id: 'account', title: 'Account Management', icon: User },
-    { id: 'security', title: 'Security Settings', icon: Shield },
-    { id: 'notifications', title: 'Notification Settings', icon: Bell },
-    { id: 'appearance', title: 'Appearance Settings', icon: Palette },
-    { id: 'support', title: 'Help & Support', icon: HelpCircle }
+    { id: 'account', title: t('settings:account'), icon: User },
+    { id: 'security', title: t('settings:security'), icon: Shield },
+    { id: 'notifications', title: t('settings:notificationSettings'), icon: Bell },
+    { id: 'appearance', title: t('settings:appearance'), icon: Palette }
   ];
 
   const handlePasswordChange = async (e) => {
     e.preventDefault();
     
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      setMessage('New password confirmation does not match');
+      setMessage(t('settings:passwordMismatch'));
       return;
     }
     
     if (passwordForm.newPassword.length < 6) {
-      setMessage('New password must be at least 6 characters');
+      setMessage(t('settings:passwordTooShort'));
       return;
     }
     
@@ -89,13 +93,13 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
       const data = await response.json();
       
       if (data.success) {
-        setMessage('Password changed successfully!');
+        setMessage(t('settings:passwordChanged'));
         setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
       } else {
-        setMessage(data.error || 'Password change failed');
+        setMessage(data.error || t('settings:passwordChangeError'));
       }
-    } catch (err) {
-      setMessage('Network error, please try again');
+    } catch {
+      setMessage(t('settings:networkError'));
     } finally {
       setLoading(false);
     }
@@ -137,7 +141,7 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
       } else {
         setMessage(data.error || 'Deletion failed');
       }
-    } catch (err) {
+    } catch {
       setMessage('Network error, please try again');
     } finally {
       setLoading(false);
@@ -153,7 +157,13 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
       document.documentElement.classList.toggle('dark', value === 'dark');
     }
     
-    setMessage(`${key.charAt(0).toUpperCase() + key.slice(1)} updated successfully!`);
+    // Use i18n to change language
+    if (key === 'language') {
+      i18n.changeLanguage(value);
+    }
+    
+    const settingName = key.charAt(0).toUpperCase() + key.slice(1);
+    setMessage(t('settings:settingUpdated', { setting: settingName }));
     setTimeout(() => setMessage(''), 3000);
   };
 
@@ -162,26 +172,26 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
       <div className="bg-gray-50 p-4 rounded-lg">
         <h3 className="font-semibold text-gray-800 mb-2 flex items-center">
           <User className="w-5 h-5 mr-2" />
-          Account Information
+          {t('settings:accountInformation')}
         </h3>
         <div className="space-y-2 text-sm text-gray-600">
-          <p><span className="font-medium">Username: </span>{currentUser}</p>
-          <p><span className="font-medium">Registration Date: </span>1st January 2024</p>
-          <p><span className="font-medium">Last Login: </span>Today</p>
-          <p><span className="font-medium">Account Status: </span><span className="text-green-600">Active</span></p>
+          <p><span className="font-medium">{t('settings:username')}: </span>{currentUser}</p>
+          <p><span className="font-medium">{t('settings:registrationDate')}: </span>1st January 2024</p>
+          <p><span className="font-medium">{t('settings:lastLogin')}: </span>Today</p>
+          <p><span className="font-medium">{t('settings:accountStatus')}: </span><span className="text-green-600">{t('settings:active')}</span></p>
         </div>
       </div>
       
       <div className="border border-red-200 bg-red-50 p-4 rounded-lg">
         <h3 className="font-semibold text-red-800 mb-3 flex items-center">
           <Trash2 className="w-5 h-5 mr-2" />
-          Delete Account
+          {t('settings:deleteAccount')}
         </h3>
-        <p className="text-sm text-red-600 mb-4">⚠️ Warning: This action will permanently delete your account and all data, and cannot be undone.</p>
+        <p className="text-sm text-red-600 mb-4">{t('settings:deleteAccountWarning')}</p>
         <div className="space-y-3">
           <input
             type="password"
-            placeholder="Enter password to confirm deletion"
+            placeholder={t('settings:enterPasswordToConfirm')}
             value={accountForm.deletePassword}
             onChange={(e) => setAccountForm({ ...accountForm, deletePassword: e.target.value })}
             className="w-full p-3 border border-red-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
@@ -193,7 +203,7 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
               loading || !accountForm.deletePassword ? 'opacity-50' : 'hover:bg-red-700'
             }`}
           >
-            {loading ? 'Deleting...' : 'Confirm Account Deletion'}
+            {loading ? t('settings:deleting') : t('settings:confirmAccountDeletion')}
           </button>
         </div>
       </div>
@@ -205,13 +215,13 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
       <div className="bg-gray-50 p-4 rounded-lg">
         <h3 className="font-semibold text-gray-800 mb-3 flex items-center">
           <Key className="w-5 h-5 mr-2" />
-          Change Password
+          {t('settings:changePassword')}
         </h3>
         <form onSubmit={handlePasswordChange} className="space-y-4">
           <div className="relative">
             <input
               type={showCurrentPassword ? "text" : "password"}
-              placeholder="Current password"
+              placeholder={t('settings:currentPassword')}
               value={passwordForm.currentPassword}
               onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
               className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
@@ -228,7 +238,7 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
           <div className="relative">
             <input
               type={showNewPassword ? "text" : "password"}
-              placeholder="New password (minimum 6 characters)"
+              placeholder={t('settings:newPassword')}
               value={passwordForm.newPassword}
               onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
               className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
@@ -244,7 +254,7 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
           
           <input
             type="password"
-            placeholder="Confirm new password"
+            placeholder={t('settings:confirmNewPassword')}
             value={passwordForm.confirmPassword}
             onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
             className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
@@ -257,18 +267,18 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
               loading ? 'opacity-50' : 'hover:bg-pink-700'
             }`}
           >
-            {loading ? 'Changing...' : 'Change Password'}
+            {loading ? t('settings:changing') : t('settings:changePassword')}
           </button>
         </form>
       </div>
       
       <div className="bg-blue-50 p-4 rounded-lg">
-        <h3 className="font-semibold text-blue-800 mb-2">Security Recommendations</h3>
+        <h3 className="font-semibold text-blue-800 mb-2">{t('settings:securityRecommendations')}</h3>
         <ul className="text-sm text-blue-600 space-y-1">
-          <li>• Change your password regularly</li>
-          <li>• Use complex password combinations</li>
-          <li>• Avoid using the same password on other websites</li>
-          <li>• Ensure your login environment is secure</li>
+          <li>{t('settings:securityTip1')}</li>
+          <li>{t('settings:securityTip2')}</li>
+          <li>{t('settings:securityTip3')}</li>
+          <li>{t('settings:securityTip4')}</li>
         </ul>
       </div>
     </div>
@@ -277,10 +287,10 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
   const renderNotificationsSection = () => (
     <div className="space-y-4">
       {[
-        { key: 'notifications', label: 'Receive Notifications', desc: 'Allow system to send notifications' },
-        { key: 'dailyReminder', label: 'Daily Reminder', desc: 'Daily reminders to complete tasks' },
-        { key: 'weeklyReport', label: 'Weekly Report', desc: 'Send weekly progress reports' },
-        { key: 'soundEffects', label: 'Sound Effects', desc: 'Enable operation sound effects' }
+        { key: 'notifications', label: t('settings:receiveNotifications'), desc: t('settings:receiveNotificationsDesc') },
+        { key: 'dailyReminder', label: t('settings:dailyReminder'), desc: t('settings:dailyReminderDesc') },
+        { key: 'weeklyReport', label: t('settings:weeklyReport'), desc: t('settings:weeklyReportDesc') },
+        { key: 'soundEffects', label: t('settings:soundEffects'), desc: t('settings:soundEffectsDesc') }
       ].map(item => (
         <div key={item.key} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
           <div>
@@ -307,12 +317,12 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
       <div className="bg-gray-50 p-4 rounded-lg">
         <h3 className="font-semibold text-gray-800 mb-3 flex items-center">
           <Sun className="w-5 h-5 mr-2" />
-          Theme Settings
+          {t('settings:themeSettings')}
         </h3>
         <div className="grid grid-cols-2 gap-3">
           {[
-            { value: 'light', label: 'Light Theme', icon: Sun },
-            { value: 'dark', label: 'Dark Theme', icon: Moon }
+            { value: 'light', label: t('settings:lightTheme'), icon: Sun },
+            { value: 'dark', label: t('settings:darkTheme'), icon: Moon }
           ].map(theme => (
             <button
               key={theme.value}
@@ -333,26 +343,17 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
       <div className="bg-gray-50 p-4 rounded-lg">
         <h3 className="font-semibold text-gray-800 mb-3 flex items-center">
           <Globe className="w-5 h-5 mr-2" />
-          Language Settings
+          {t('settings:language')}
         </h3>
-        <select
-          value={preferences.language}
-          onChange={(e) => updatePreference('language', e.target.value)}
-          className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-        >
-          <option value="en">English</option>
-          <option value="zh-TW">繁體中文</option>
-          <option value="zh-CN">简体中文</option>
-          <option value="ja">日本語</option>
-        </select>
+        <LanguageSwitcher />
       </div>
       
       <div className="bg-gray-50 p-4 rounded-lg">
-        <h3 className="font-semibold text-gray-800 mb-3">Auto Save Settings</h3>
+        <h3 className="font-semibold text-gray-800 mb-3">{t('settings:autoSaveSettings')}</h3>
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-medium">Auto Save Preferences</p>
-            <p className="text-sm text-gray-600">Automatically save your settings and preferences</p>
+            <p className="font-medium">{t('settings:autoSavePreferences')}</p>
+            <p className="text-sm text-gray-600">{t('settings:autoSaveDesc')}</p>
           </div>
           <button
             onClick={() => updatePreference('autoSave', !preferences.autoSave)}
@@ -366,51 +367,8 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
           </button>
         </div>
         <p className="text-xs text-gray-500 mt-2">
-          ✅ All settings are automatically saved to your browser's local storage
+          {t('settings:autoSaveNote')}
         </p>
-      </div>
-    </div>
-  );
-
-  const renderSupportSection = () => (
-    <div className="space-y-4">
-      <div className="bg-gray-50 p-4 rounded-lg">
-        <h3 className="font-semibold text-gray-800 mb-3">Help Resources</h3>
-        <div className="space-y-2">
-          <button 
-            onClick={() => window.open('https://github.com/elena1211/gamified_app', '_blank')}
-            className="w-full text-left p-3 bg-white rounded border hover:bg-gray-50"
-          >
-            📖 User Manual
-          </button>
-          <button 
-            onClick={() => setMessage('Support feature coming soon!')}
-            className="w-full text-left p-3 bg-white rounded border hover:bg-gray-50"
-          >
-            💬 Online Support
-          </button>
-          <button 
-            onClick={() => window.open('mailto:support@example.com?subject=Feedback', '_blank')}
-            className="w-full text-left p-3 bg-white rounded border hover:bg-gray-50"
-          >
-            📧 Feedback
-          </button>
-          <button 
-            onClick={() => setMessage('You are running the latest version!')}
-            className="w-full text-left p-3 bg-white rounded border hover:bg-gray-50"
-          >
-            🔄 Check for Updates
-          </button>
-        </div>
-      </div>
-      
-      <div className="bg-gray-50 p-4 rounded-lg">
-        <h3 className="font-semibold text-gray-800 mb-2">Application Information</h3>
-        <div className="text-sm text-gray-600 space-y-1">
-          <p>Version: 1.0.0</p>
-          <p>Last Updated: 1st January 2024</p>
-          <p>Developer: Elena Team</p>
-        </div>
       </div>
     </div>
   );
@@ -421,7 +379,6 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
       case 'security': return renderSecuritySection();
       case 'notifications': return renderNotificationsSection();
       case 'appearance': return renderAppearanceSection();
-      case 'support': return renderSupportSection();
       default: return renderAccountSection();
     }
   };
@@ -438,7 +395,7 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
             >
               <ArrowLeft className="w-6 h-6" />
             </button>
-            <h1 className="text-xl font-bold text-gray-800">System Settings</h1>
+            <h1 className="text-xl font-bold text-gray-800">{t('settings:systemSettings')}</h1>
           </div>
         </div>
       </div>
@@ -469,7 +426,7 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
                   className="w-full text-left p-3 rounded-lg transition-colors flex items-center text-red-600 hover:bg-red-50"
                 >
                   <LogOut className="w-5 h-5 mr-3" />
-                  Log Out
+                  {t('settings:logOut')}
                 </button>
               </div>
             </div>
@@ -497,10 +454,10 @@ export default function SystemSettingsPage({ currentUser, onBack, onLogout }) {
         isOpen={showLogoutConfirm}
         onClose={handleLogoutCancel}
         onConfirm={handleLogoutConfirm}
-        title="Confirm Logout"
-        message="Are you sure you want to log out? You'll need to sign in again to continue using the application."
-        confirmText="Confirm Logout"
-        cancelText="Cancel"
+        title={t('settings:confirmLogout')}
+        message={t('settings:logoutMessage')}
+        confirmText={t('settings:confirmLogoutBtn')}
+        cancelText={t('settings:cancel')}
         type="warning"
         variant="confirmation"
       />

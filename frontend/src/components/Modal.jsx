@@ -1,4 +1,5 @@
 import { X, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Unified modal component for all dialog types
@@ -9,16 +10,23 @@ export default function Modal({
   isOpen,
   onClose,
   onConfirm,
-  title = "Confirm Operation",
+  title,
   message = "Are you sure you want to proceed with this operation?",
-  confirmText = "Confirm",
-  cancelText = "Cancel",
+  confirmText,
+  cancelText,
   type = "warning", // warning, danger, success, game-penalty
   variant = "confirmation", // confirmation, notification
   showCloseButton = true,
   penalty = null, // For game penalty notifications
 }) {
+  const { t } = useTranslation(['common', 'dashboard']);
+  
   if (!isOpen) return null;
+
+  // Set default values using translations
+  const defaultTitle = title || t('common:confirm');
+  const defaultConfirmText = confirmText || t('common:confirm');
+  const defaultCancelText = cancelText || t('common:cancel');
 
   const isGamePenalty = type === 'game-penalty';
   const isNotification = variant === 'notification';
@@ -28,7 +36,7 @@ export default function Modal({
       // Game-specific emojis for penalties
       return (
         <div className="text-6xl mb-2">
-          {title.includes('Dismissed') ? '😰' : '⏰'}
+          {defaultTitle.includes(t('dashboard:quest.questDismissed')) ? '😰' : '⏰'}
         </div>
       );
     }
@@ -72,16 +80,16 @@ export default function Modal({
             <div className="text-center">
               <p className="text-red-800 font-medium mb-2">{message}</p>
               <div className="text-red-600">
-                <span className="font-semibold">Penalty:</span>
+                <span className="font-semibold">{t('dashboard:quest.penalty')}:</span>
                 <span className="ml-1">{penalty}</span>
               </div>
             </div>
           </div>
           <div className="text-center mb-6">
             <p className="text-gray-600 text-sm">
-              {title.includes('Dismissed')
-                ? 'Remember to accept challenges bravely next time - you can do it!'
-                : "That's okay, act faster next time!"
+              {defaultTitle.includes(t('dashboard:quest.questDismissed'))
+                ? "Remember to be brave next time!"
+                : "Act faster next time!"
               }
             </p>
           </div>
@@ -105,6 +113,7 @@ export default function Modal({
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-gray-600 transition-colors"
+              aria-label="Close modal"
             >
               <X className="w-5 h-5" />
             </button>
@@ -118,7 +127,7 @@ export default function Modal({
 
         {/* Title */}
         <h3 className={`text-lg font-semibold text-center mb-3 ${getTitleColor()}`}>
-          {title}
+          {defaultTitle}
         </h3>
 
         {/* Message */}
@@ -131,14 +140,14 @@ export default function Modal({
               onClick={onClose}
               className="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors font-medium"
             >
-              {cancelText}
+              {defaultCancelText}
             </button>
           )}
           <button
             onClick={onConfirm || onClose}
             className={`${isNotification ? 'w-full' : 'flex-1'} px-4 py-2 text-white rounded-lg transition-colors font-medium ${getButtonColors()}`}
           >
-            {isGamePenalty ? 'I Understand 😤' : confirmText}
+            {isGamePenalty ? "I understand" : defaultConfirmText}
           </button>
         </div>
       </div>

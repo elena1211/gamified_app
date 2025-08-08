@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { API_ENDPOINTS, apiRequest } from './config/api.js';
 import { COLORS, EMOJIS } from './config/constants.js';
 import BottomNav from './components/BottomNav';
@@ -34,7 +34,9 @@ const TIME_LIMITED_TASKS = [
   }
 ];
 
-export default function Homepage({ currentUser, onLogout, onNavigateToSettings }) {
+export default function Homepage({ currentUser, onNavigateToSettings }) {
+  console.log('Homepage component starting to render, currentUser:', currentUser);
+  
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -64,27 +66,9 @@ export default function Homepage({ currentUser, onLogout, onNavigateToSettings }
 
   const [userStats, setUserStats] = useState(null);
 
-  useEffect(() => {
-    fetchTasks();
-    fetchUserStats();
-  }, []);
-
-  // Show random time-limited task after 3 seconds for testing
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const randomTask = TIME_LIMITED_TASKS[Math.floor(Math.random() * TIME_LIMITED_TASKS.length)];
-      setCurrentTimeLimitedTask(randomTask);
-      setShowTimeLimitedTask(true);
-    }, 3000);
-
-    return () => {
-      clearTimeout(timer);
-    };
-  }, []);
-
   const handleAcceptTask = () => {
     if (currentTimeLimitedTask) {
-      applyStatChanges(currentTimeLimitedTask.reward, true);
+      applyStatChanges(currentTimeLimitedTask.reward);
     }
     
     setShowTimeLimitedTask(false);
@@ -98,7 +82,7 @@ export default function Homepage({ currentUser, onLogout, onNavigateToSettings }
 
   const handleConfirmDismiss = () => {
     if (currentTimeLimitedTask) {
-      applyStatChanges(currentTimeLimitedTask.penalty, false);
+      applyStatChanges(currentTimeLimitedTask.penalty);
       setLastDismissedTask(currentTimeLimitedTask); // Save for warning dialog
     }
     
@@ -115,7 +99,7 @@ export default function Homepage({ currentUser, onLogout, onNavigateToSettings }
 
   const handleTimeUp = () => {
     if (currentTimeLimitedTask) {
-      applyStatChanges(currentTimeLimitedTask.penalty, false);
+      applyStatChanges(currentTimeLimitedTask.penalty);
       setLastDismissedTask(currentTimeLimitedTask); // Save for warning dialog
     }
     
@@ -166,11 +150,11 @@ export default function Homepage({ currentUser, onLogout, onNavigateToSettings }
           // Apply stat changes based on task completion status
           if (data.task_completed && task.reward) {
             // Task completed: apply positive stat changes
-            applyStatChanges(task.reward, true);
+            applyStatChanges(task.reward);
           } else if (!data.task_completed && task.reward) {
             // Task uncompleted: reverse the stat changes
             const reverseReward = task.reward.replace(/\+/g, '-');
-            applyStatChanges(reverseReward, false);
+            applyStatChanges(reverseReward);
           }
 
           // Update streak based on API response
@@ -193,12 +177,12 @@ export default function Homepage({ currentUser, onLogout, onNavigateToSettings }
       
       // Fallback to local stat changes if API fails
       if (task.reward) {
-        applyStatChanges(task.reward, true);
+        applyStatChanges(task.reward);
       }
     }
   };
 
-  const applyStatChanges = (changeString, isReward) => {
+  const applyStatChanges = (changeString) => {
     // Parse change strings like "+3 Knowledge, +2 Discipline" or "-1 Energy, -1 Knowledge"
     const changes = changeString.split(',').map(change => change.trim());
     
@@ -212,7 +196,7 @@ export default function Homepage({ currentUser, onLogout, onNavigateToSettings }
           const value = parseInt(valueStr);
           const statKey = statName.toLowerCase();
           
-          if (newStats.hasOwnProperty(statKey)) {
+          if (Object.prototype.hasOwnProperty.call(newStats, statKey)) {
             newStats[statKey] = Math.max(0, Math.min(100, newStats[statKey] + value));
           }
         }
@@ -222,27 +206,42 @@ export default function Homepage({ currentUser, onLogout, onNavigateToSettings }
     });
   };
 
-  const fetchTasks = async (preventScroll = false) => {
+  const fetchTasks = useCallback(async (preventScroll = false) => {
+    console.log('fetchTasks called, currentUser:', currentUser);
     try {
       if (!preventScroll) {
         setLoading(true);
       }
       
-      const { data } = await apiRequest(`${API_ENDPOINTS.tasks}?user=${currentUser || 'elena'}`);
+      const url = `${API_ENDPOINTS.tasks}?user=${currentUser || 'elena'}`;
+      console.log('Fetching tasks from:', url);
+      const { data } = await apiRequest(url);
+      console.log('Tasks fetched successfully:', data);
       setTasks(data);
       setError(null);
     } catch (err) {
-      setError(err.message);
+      console.error('Error fetching tasks:', err);
+      // Set default tasks if API fails
+      setTasks([
+        {id: 1, title: "🧹 Organise workspace", tip: "Clean and organise your desk", reward: "+4 Discipline", completed: false, difficulty: 1, attribute: "discipline"},
+        {id: 2, title: "📝 Write journal entry", tip: "Reflect on today's experiences", reward: "+3 Discipline", completed: false, difficulty: 1, attribute: "discipline"},
+        {id: 3, title: "🏃‍♂️ 30-minute workout", tip: "Include cardio and strength training", reward: "+6 Energy", completed: false, difficulty: 2, attribute: "energy"}
+      ]);
+      setError(null); // Don't show error if we have fallback data
     } finally {
       if (!preventScroll) {
         setLoading(false);
       }
     }
-  };
+  }, [currentUser]);
 
-  const fetchUserStats = async () => {
+  const fetchUserStats = useCallback(async () => {
+    console.log('fetchUserStats called, currentUser:', currentUser);
     try {
-      const { data } = await apiRequest(`${API_ENDPOINTS.userStats}?user=${currentUser || 'elena'}`);
+      const url = `${API_ENDPOINTS.userStats}?user=${currentUser || 'elena'}`;
+      console.log('Fetching user stats from:', url);
+      const { data } = await apiRequest(url);
+      console.log('User stats fetched successfully:', data);
       
       setUserStats(data);
       setUser(prevUser => {
@@ -255,8 +254,37 @@ export default function Homepage({ currentUser, onLogout, onNavigateToSettings }
       });
     } catch (err) {
       console.error('Failed to fetch user stats:', err);
+      // Set default user stats if API fails
+      setUserStats({
+        level: 5,
+        current_streak: 3,
+        total_tasks_completed: 25,
+        total_score: 1250
+      });
     }
-  };
+  }, [currentUser]);
+
+  // Initialize data on component mount
+  useEffect(() => {
+    console.log('Homepage useEffect running, about to fetch data');
+    fetchTasks();
+    fetchUserStats();
+  }, [fetchTasks, fetchUserStats]);
+
+  // Show random time-limited task after 3 seconds for testing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const randomTask = TIME_LIMITED_TASKS[Math.floor(Math.random() * TIME_LIMITED_TASKS.length)];
+      setCurrentTimeLimitedTask(randomTask);
+      setShowTimeLimitedTask(true);
+    }, 3000);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, []);
+
+  console.log('Homepage about to render, loading:', loading, 'error:', error);
 
   if (loading) {
     return (

@@ -4,6 +4,7 @@ import Homepage from './Homepage';
 import RegisterPage from './pages/RegisterPage';
 import WelcomePage from './pages/WelcomePage';
 import SystemSettingsPage from './pages/SystemSettingsPage';
+import ErrorBoundary from './components/ErrorBoundary';
 
 function AppRoutes() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -88,11 +89,13 @@ function AppRoutes() {
         path="/home" 
         element={
           currentUser ? 
-            <Homepage 
-              currentUser={currentUser} 
-              onLogout={handleLogout}
-              onNavigateToSettings={handleNavigateToSettings}
-            /> : 
+            <ErrorBoundary>
+              <Homepage 
+                currentUser={currentUser} 
+                onLogout={handleLogout}
+                onNavigateToSettings={handleNavigateToSettings}
+              />
+            </ErrorBoundary> : 
             <Navigate to="/welcome" replace />
         } 
       />
@@ -100,11 +103,13 @@ function AppRoutes() {
         path="/settings" 
         element={
           currentUser ? 
-            <SystemSettingsPage 
-              currentUser={currentUser}
-              onBack={handleNavigateToHome}
-              onLogout={handleLogout}
-            /> : 
+            <ErrorBoundary>
+              <SystemSettingsPage 
+                currentUser={currentUser}
+                onBack={handleNavigateToHome}
+                onLogout={handleLogout}
+              />
+            </ErrorBoundary> : 
             <Navigate to="/welcome" replace />
         } 
       />
@@ -118,11 +123,13 @@ function AppRoutes() {
 
 function App() {
   return (
-    <Router>
-      <div className="App">
-        <AppRoutes />
-      </div>
-    </Router>
+    <ErrorBoundary>
+      <Router>
+        <div className="App">
+          <AppRoutes />
+        </div>
+      </Router>
+    </ErrorBoundary>
   );
 }
 
