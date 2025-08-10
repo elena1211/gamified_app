@@ -34,7 +34,7 @@ const TIME_LIMITED_TASKS = [
   }
 ];
 
-export default function Homepage({ currentUser, onNavigateToSettings }) {
+export default function Homepage({ currentUser, onNavigateToSettings, onNavigateToTaskManager }) {
   console.log('Homepage component starting to render, currentUser:', currentUser);
   
   const [tasks, setTasks] = useState([]);
@@ -117,6 +117,12 @@ export default function Homepage({ currentUser, onNavigateToSettings }) {
   const handleSettingsClick = () => {
     if (onNavigateToSettings) {
       onNavigateToSettings();
+    }
+  };
+
+  const handleTaskManagerClick = () => {
+    if (onNavigateToTaskManager) {
+      onNavigateToTaskManager();
     }
   };
 
@@ -206,6 +212,48 @@ export default function Homepage({ currentUser, onNavigateToSettings }) {
     });
   };
 
+  // Helper function to randomly select 3 balanced daily tasks
+  const selectDailyTasks = (allTasks) => {
+    if (allTasks.length <= 3) {
+      return allTasks;
+    }
+
+    // Group tasks by difficulty for balanced selection
+    const tasksByDifficulty = {
+      1: allTasks.filter(task => task.difficulty === 1),
+      2: allTasks.filter(task => task.difficulty === 2),
+      3: allTasks.filter(task => task.difficulty === 3 || !task.difficulty)
+    };
+
+    const selectedTasks = [];
+    
+    // Try to get one task from each difficulty level
+    for (let difficulty = 1; difficulty <= 3; difficulty++) {
+      const tasksInDifficulty = tasksByDifficulty[difficulty];
+      if (tasksInDifficulty.length > 0) {
+        const randomIndex = Math.floor(Math.random() * tasksInDifficulty.length);
+        selectedTasks.push(tasksInDifficulty[randomIndex]);
+      }
+    }
+
+    // If we still need more tasks, randomly pick from remaining tasks
+    while (selectedTasks.length < 3 && selectedTasks.length < allTasks.length) {
+      const remainingTasks = allTasks.filter(task => 
+        !selectedTasks.some(selected => selected.id === task.id)
+      );
+      
+      if (remainingTasks.length > 0) {
+        const randomIndex = Math.floor(Math.random() * remainingTasks.length);
+        selectedTasks.push(remainingTasks[randomIndex]);
+      } else {
+        break;
+      }
+    }
+
+    console.log('🎲 Selected daily tasks:', selectedTasks);
+    return selectedTasks;
+  };
+
   const fetchTasks = useCallback(async (preventScroll = false) => {
     console.log('fetchTasks called, currentUser:', currentUser);
     try {
@@ -216,17 +264,25 @@ export default function Homepage({ currentUser, onNavigateToSettings }) {
       const url = `${API_ENDPOINTS.tasks}?user=${currentUser || 'elena'}`;
       console.log('Fetching tasks from:', url);
       const { data } = await apiRequest(url);
-      console.log('Tasks fetched successfully:', data);
-      setTasks(data);
+      console.log('All tasks fetched:', data);
+      
+      // Select 3 random daily tasks from the full list
+      const selectedTasks = selectDailyTasks(data);
+      setTasks(selectedTasks);
       setError(null);
     } catch (err) {
       console.error('Error fetching tasks:', err);
-      // Set default tasks if API fails
-      setTasks([
+      // Set default tasks if API fails - expanded pool for random selection
+      const fallbackTasks = [
         {id: 1, title: "🧹 Organise workspace", tip: "Clean and organise your desk", reward: "+4 Discipline", completed: false, difficulty: 1, attribute: "discipline"},
         {id: 2, title: "📝 Write journal entry", tip: "Reflect on today's experiences", reward: "+3 Discipline", completed: false, difficulty: 1, attribute: "discipline"},
-        {id: 3, title: "🏃‍♂️ 30-minute workout", tip: "Include cardio and strength training", reward: "+6 Energy", completed: false, difficulty: 2, attribute: "energy"}
-      ]);
+        {id: 3, title: "🏃‍♂️ 30-minute workout", tip: "Include cardio and strength training", reward: "+6 Energy", completed: false, difficulty: 2, attribute: "energy"},
+        {id: 4, title: "💻 Practice coding", tip: "Solve a Leetcode problem", reward: "+5 Knowledge", completed: false, difficulty: 2, attribute: "knowledge"},
+        {id: 5, title: "🧘‍♀️ Meditation", tip: "10 minutes of mindfulness", reward: "+3 Energy, +2 Discipline", completed: false, difficulty: 1, attribute: "energy"},
+        {id: 6, title: "📚 Learn something new", tip: "Read an educational article", reward: "+4 Knowledge", completed: false, difficulty: 1, attribute: "knowledge"}
+      ];
+      const selectedTasks = selectDailyTasks(fallbackTasks);
+      setTasks(selectedTasks);
       setError(null); // Don't show error if we have fallback data
     } finally {
       if (!preventScroll) {
@@ -341,7 +397,7 @@ export default function Homepage({ currentUser, onNavigateToSettings }) {
               }}
               className="bg-purple-500 hover:bg-purple-600 text-white px-6 py-3 rounded-xl shadow-md transition-all duration-300 hover:scale-105"
             >
-              🔄 Refresh Quests
+              🎲 New Daily Tasks
             </button>
             <button 
               onClick={() => {
@@ -355,7 +411,10 @@ export default function Homepage({ currentUser, onNavigateToSettings }) {
             </button>
           </div>
         </div>
-        <BottomNav onSettingsClick={handleSettingsClick} />
+        <BottomNav 
+          onSettingsClick={handleSettingsClick} 
+          onTaskManagerClick={handleTaskManagerClick}
+        />
         
         {/* Popups */}
         {showTimeLimitedTask && currentTimeLimitedTask && (

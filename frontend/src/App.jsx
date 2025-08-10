@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Homepage from './Homepage';
+import TaskManagerPage from './TaskManagerPage';
 import RegisterPage from './pages/RegisterPage';
 import WelcomePage from './pages/WelcomePage';
 import SystemSettingsPage from './pages/SystemSettingsPage';
@@ -40,6 +41,10 @@ function AppRoutes() {
 
   const handleNavigateToSettings = () => {
     navigate('/settings');
+  };
+
+  const handleNavigateToTaskManager = () => {
+    navigate('/tasks');
   };
 
   const handleNavigateToHome = () => {
@@ -93,6 +98,21 @@ function AppRoutes() {
               <Homepage 
                 currentUser={currentUser} 
                 onLogout={handleLogout}
+                onNavigateToSettings={handleNavigateToSettings}
+                onNavigateToTaskManager={handleNavigateToTaskManager}
+              />
+            </ErrorBoundary> : 
+            <Navigate to="/welcome" replace />
+        } 
+      />
+      <Route 
+        path="/tasks" 
+        element={
+          currentUser ? 
+            <ErrorBoundary>
+              <TaskManagerPage 
+                currentUser={currentUser}
+                onNavigateToHome={handleNavigateToHome}
                 onNavigateToSettings={handleNavigateToSettings}
               />
             </ErrorBoundary> : 
