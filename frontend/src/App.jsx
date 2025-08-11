@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import TaskManagerPage from './pages/TaskManagerPage';
@@ -6,33 +5,22 @@ import RegisterPage from './pages/RegisterPage';
 import WelcomePage from './pages/WelcomePage';
 import SystemSettingsPage from './pages/SystemSettingsPage';
 import ErrorBoundary from './components/ErrorBoundary';
+import { AppProvider, useAppContext } from './context/AppContext';
 
 function AppRoutes() {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { 
+    currentUser, 
+    isLoading, 
+    handleLoginSuccess, 
+    handleLogout 
+  } = useAppContext();
+  
   const navigate = useNavigate();
 
   console.log('AppRoutes rendering, currentUser:', currentUser, 'isLoading:', isLoading);
 
-  // Initialize user state from localStorage on app start
-  useEffect(() => {
-    console.log('AppRoutes useEffect running');
-    const savedUser = localStorage.getItem('currentUser');
-    console.log('Saved user from localStorage:', savedUser);
-    if (savedUser) {
-      setCurrentUser(savedUser);
-    }
-    setIsLoading(false);
-  }, []);
-
-  const handleLoginSuccess = (username) => {
-    setCurrentUser(username);
-    localStorage.setItem('currentUser', username);
-  };
-
   const handleRegisterSuccess = (username) => {
-    setCurrentUser(username);
-    localStorage.setItem('currentUser', username);
+    handleLoginSuccess(username);
   };
 
   const handleNavigateToRegister = () => {
@@ -55,9 +43,8 @@ function AppRoutes() {
     navigate('/home');
   };
 
-  const handleLogout = () => {
-    setCurrentUser(null);
-    localStorage.removeItem('currentUser');
+  const handleLogoutAndNavigate = () => {
+    handleLogout();
     navigate('/welcome');
   };
 
@@ -101,7 +88,7 @@ function AppRoutes() {
             <ErrorBoundary>
               <HomePage 
                 currentUser={currentUser} 
-                onLogout={handleLogout}
+                onLogout={handleLogoutAndNavigate}
                 onNavigateToSettings={handleNavigateToSettings}
                 onNavigateToTaskManager={handleNavigateToTaskManager}
               />
@@ -130,7 +117,7 @@ function AppRoutes() {
             <ErrorBoundary>
               <SystemSettingsPage 
                 currentUser={currentUser}
-                onLogout={handleLogout}
+                onLogout={handleLogoutAndNavigate}
                 onNavigateToHome={handleNavigateToHome}
                 onNavigateToTaskManager={handleNavigateToTaskManager}
               />
@@ -150,11 +137,13 @@ function App() {
   console.log('App component is rendering');
   return (
     <ErrorBoundary>
-      <Router>
-        <div className="App">
-          <AppRoutes />
-        </div>
-      </Router>
+      <AppProvider>
+        <Router>
+          <div className="App">
+            <AppRoutes />
+          </div>
+        </Router>
+      </AppProvider>
     </ErrorBoundary>
   );
 }

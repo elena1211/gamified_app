@@ -3,6 +3,7 @@ import { Plus, Edit, Trash2, Clock, CheckCircle, XCircle, Save, X } from 'lucide
 import { API_ENDPOINTS, apiRequest } from '../config/api.js';
 import BottomNav from '../components/BottomNav';
 import RewardPopup from '../components/RewardPopup';
+import { useAppContext } from '../context/AppContext';
 
 // Move TaskCard outside the main component to prevent re-creation
 const TaskCard = ({ 
@@ -197,13 +198,19 @@ const TaskCard = ({
 };
 
 export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavigateToSettings }) {
-  const [tasks, setTasks] = useState([]);
-  const [completedTasks, setCompletedTasks] = useState([
-    {id: 101, title: "💻 Practice coding", description: "Completed Leetcode problem", reward_point: "5", difficulty: 2, attribute: "intelligence", completedAt: "2025-08-10"},
-    {id: 102, title: "🚶‍♀️ Morning walk", description: "30-minute walk in the park", reward_point: "3", difficulty: 1, attribute: "energy", completedAt: "2025-08-09"},
-    {id: 103, title: "📖 Read chapter", description: "Read one chapter of productivity book", reward_point: "4", difficulty: 1, attribute: "intelligence", completedAt: "2025-08-08"}
-  ]);
-  const [loading, setLoading] = useState(true);
+  // Use global state from context
+  const { 
+    tasks, 
+    completedTasks, 
+    updateTasksState, 
+    updateCompletedTasksState,
+    getAttributePoints,
+    applyStatChanges,
+    updateUserStats
+  } = useAppContext();
+
+  // Local state for UI only
+  const [loading, setLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [editData, setEditData] = useState(null);
@@ -244,9 +251,44 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
   ];
 
   const fetchAllTasks = async () => {
+    // Only fetch if tasks are empty (avoid refetching on navigation)
+    if (tasks.length > 0) {
+      console.log('Tasks already loaded, skipping fetch');
+      return;
+    }
+
     setLoading(true);
     try {
-      setTasks([
+      // Fetch tasks from backend
+      const { data } = await apiRequest(`${API_ENDPOINTS.tasks}?user=${currentUser}`);
+      
+      // Transform backend data to match our component structure
+      const transformedTasks = data
+        .filter(task => !task.completed) // Only get uncompleted tasks for active tab
+        .map(task => ({
+          id: task.id,
+          title: task.title,
+          description: task.tip || '',
+          reward_point: task.reward?.match(/\+(\d+)/)?.[1] || '0', // Extract points from reward string
+          difficulty: task.difficulty || 1,
+          attribute: task.attribute || 'discipline'
+        }));
+      
+      updateTasksState(transformedTasks);
+      
+      // Initialize completed tasks if empty
+      if (completedTasks.length === 0) {
+        updateCompletedTasksState([
+          {id: 101, title: "💻 Practice coding", description: "Completed Leetcode problem", reward_point: "5", difficulty: 2, attribute: "intelligence", completedAt: "2025-08-10"},
+          {id: 102, title: "🚶‍♀️ Morning walk", description: "30-minute walk in the park", reward_point: "3", difficulty: 1, attribute: "energy", completedAt: "2025-08-09"},
+          {id: 103, title: "📖 Read chapter", description: "Read one chapter of productivity book", reward_point: "4", difficulty: 1, attribute: "intelligence", completedAt: "2025-08-08"}
+        ]);
+      }
+      
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+      // Fallback to static data if API fails
+      updateTasksState([
         {id: 1, title: "🧹 Organise workspace", description: "Clean and organise your desk", reward_point: "4", difficulty: 1, attribute: "discipline"},
         {id: 2, title: "📝 Write journal entry", description: "Reflect on today's experiences", reward_point: "3", difficulty: 1, attribute: "discipline"},
         {id: 3, title: "🏃‍♂️ 30-minute workout", description: "Include cardio and strength training", reward_point: "5", difficulty: 2, attribute: "energy"},
@@ -271,18 +313,26 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
     if (!newTask.title.trim()) return;
 
     try {
+      // In a real app, you would POST to the backend to create a new task
+      // For now, we'll add it locally and assign a temporary ID
       const taskData = {
         ...newTask,
         user: currentUser || 'elena',
         completed: false
       };
 
-      const newId = Math.max(...tasks.map(t => t.id || 0)) + 1;
+      const newId = Math.max(...tasks.map(t => t.id || 0)) + 1000; // Use high ID to avoid conflicts
       const createdTask = { ...taskData, id: newId };
       
-      setTasks(prev => [...prev, createdTask]);
+      updateTasksState([...tasks, createdTask]);
       setNewTask({ title: '', description: '', reward_point: '', difficulty: 1, attribute: 'discipline' });
       setShowAddForm(false);
+      
+      // TODO: Implement actual API call to create task in backend
+      // await apiRequest(API_ENDPOINTS.tasks, {
+      //   method: 'POST',
+      //   body: JSON.stringify(taskData)
+      // });
       
     } catch (error) {
       console.error('Error adding task:', error);
@@ -291,7 +341,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
 
   const handleEditTask = async (taskId, updatedData) => {
     try {
-      setTasks(prev => prev.map(task => 
+      updateTasksState(tasks.map(task => 
         task.id === taskId ? { ...task, ...updatedData } : task
       ));
       setEditingTask(null);
@@ -310,30 +360,79 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
     if (!confirm(`Complete "${task.title}"?`)) return;
     
     try {
+      // Call backend API to mark task as complete
+      const { data } = await apiRequest(API_ENDPOINTS.taskComplete, {
+        method: 'POST',
+        body: JSON.stringify({
+          task_id: task.id,
+          user: currentUser || 'elena'
+        })
+      });
+      
+      if (data.success) {
+        const completedTask = {
+          ...task,
+          completedAt: new Date().toISOString().split('T')[0]
+        };
+        
+        // Create reward string based on task attributes
+        const rewardString = `+${task.reward_point} ${task.attribute}`;
+        
+        // Apply stat changes to global context
+        applyStatChanges(rewardString);
+        
+        // Update streak in global context
+        updateUserStats({ currentStreak: data.streak || 0 });
+        
+        // Use context function to get current points for attribute
+        const newTotalPoints = getAttributePoints(task.attribute) + parseInt(task.reward_point || 0);
+        
+        // Show reward popup with updated stats
+        setRewardData({
+          taskTitle: task.title,
+          rewardPoints: parseInt(task.reward_point || 0),
+          attribute: task.attribute,
+          totalPoints: newTotalPoints,
+          currentStreak: data.streak || 0 // Get streak from backend response
+        });
+        setShowRewardPopup(true);
+        
+        updateCompletedTasksState([completedTask, ...completedTasks]);
+        updateTasksState(tasks.filter(t => t.id !== task.id));
+        
+        console.log('✅ Task completed successfully:', data);
+        console.log('📈 Applied stat changes:', rewardString);
+      } else {
+        throw new Error(data.message || 'Failed to complete task');
+      }
+    } catch (error) {
+      console.error('Error completing task:', error);
+      
+      // Even if API fails, apply local stat changes
+      const rewardString = `+${task.reward_point} ${task.attribute}`;
+      applyStatChanges(rewardString);
+      
+      // Still update local state
       const completedTask = {
         ...task,
         completedAt: new Date().toISOString().split('T')[0]
       };
       
-      // Calculate total points for the attribute
-      const currentAttributePoints = completedTasks
-        .filter(t => t.attribute === task.attribute)
-        .reduce((sum, t) => sum + parseInt(t.reward_point || 0), 0);
-      const newTotalPoints = currentAttributePoints + parseInt(task.reward_point || 0);
+      const newTotalPoints = getAttributePoints(task.attribute) + parseInt(task.reward_point || 0);
       
-      // Show reward popup
       setRewardData({
         taskTitle: task.title,
         rewardPoints: parseInt(task.reward_point || 0),
         attribute: task.attribute,
-        totalPoints: newTotalPoints
+        totalPoints: newTotalPoints,
+        currentStreak: 0
       });
       setShowRewardPopup(true);
       
-      setCompletedTasks(prev => [completedTask, ...prev]);
-      setTasks(prev => prev.filter(t => t.id !== task.id));
-    } catch (error) {
-      console.error('Error completing task:', error);
+      updateCompletedTasksState([completedTask, ...completedTasks]);
+      updateTasksState(tasks.filter(t => t.id !== task.id));
+      
+      alert(`Task completed locally. Server error: ${error.message}`);
     }
   };
 
@@ -346,7 +445,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
     if (!confirm('Are you sure you want to delete this task?')) return;
     
     try {
-      setTasks(prev => prev.filter(task => task.id !== taskId));
+      updateTasksState(tasks.filter(task => task.id !== taskId));
     } catch (error) {
       console.error('Error deleting task:', error);
     }
