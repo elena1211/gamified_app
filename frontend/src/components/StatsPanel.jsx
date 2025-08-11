@@ -1,9 +1,10 @@
 const StatsPanel = ({ stats = {} }) => {
   const statNames = [
-    { key: "knowledge", label: "Knowledge", emoji: "📚", color: "#8b5cf6" },
+    { key: "intelligence", label: "Intelligence", emoji: "🧠", color: "#8b5cf6" },
     { key: "discipline", label: "Discipline", emoji: "💪", color: "#06b6d4" },
     { key: "energy", label: "Energy", emoji: "⚡", color: "#eab308" },
-    { key: "charisma", label: "Charisma", emoji: "✨", color: "#ec4899" },
+    { key: "social", label: "Social", emoji: "👥", color: "#ec4899" },
+    { key: "wellness", label: "Wellness", emoji: "❤️", color: "#10b981" },
     { key: "stress", label: "Stress", emoji: "😰", color: "#ef4444" }
   ];
 
