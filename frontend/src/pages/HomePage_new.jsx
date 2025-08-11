@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { API_ENDPOINTS, apiRequest } from '../config/api.js';
 import BottomNav from '../components/BottomNav';
 import StatsPanel from '../components/StatsPanel';
@@ -190,7 +190,8 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
             return newUser;
           });
 
-          // No need to fetchUserStats again since we already have the data
+          // Update user stats to reflect the total completed tasks change
+          fetchUserStats();
         } else {
           console.error('Task completion failed');
         }
@@ -285,7 +286,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
         setLoading(false);
       }
     }
-  }, []); // Remove currentUser dependency
+  }, [currentUser]);
 
   const fetchUserStats = useCallback(async () => {
     console.log('fetchUserStats called, currentUser:', currentUser);
@@ -318,14 +319,14 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
         total_score: 1250
       });
     }
-  }, []); // Remove dependencies
+  }, [currentUser, updateUserStats]);
 
-  // Initialize data on component mount only once
+  // Initialize data on component mount
   useEffect(() => {
     console.log('Homepage useEffect running, about to fetch data');
     fetchTasks();
     fetchUserStats();
-  }, []); // Only run once on mount
+  }, [fetchTasks, fetchUserStats]);
 
   // Show random time-limited task after 3 seconds for testing
   useEffect(() => {

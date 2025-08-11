@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { API_ENDPOINTS, apiRequest } from '../config/api.js';
 import BottomNav from '../components/BottomNav';
 import StatsPanel from '../components/StatsPanel';
@@ -59,6 +59,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
   // Use global state from context
   const { 
     attributeStats, 
+    updateAttributeStats, 
     applyStatChanges,
     userStats,
     updateUserStats 
@@ -71,6 +72,9 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
   const [showWarning, setShowWarning] = useState(false);
   const [warningType, setWarningType] = useState('');
   const [showDismissConfirm, setShowDismissConfirm] = useState(false);
+
+  // Remove local stats state - now using context
+  // const [stats, setStats] = useState({ ... });
 
   // Time-limited task data
   const [currentTimeLimitedTask, setCurrentTimeLimitedTask] = useState(null);
@@ -163,6 +167,8 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
         const data = await response.json();
         
         if (data.success) {
+          // Show progress message - removed console.log for production
+
           // Update local task state to reflect the change
           setTasks(prevTasks => prevTasks.map(t => 
             t.id === task.id 
@@ -174,12 +180,10 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
           if (data.task_completed && task.reward) {
             // Task completed: apply positive stat changes
             applyStatChanges(task.reward);
-            console.log('📈 Applied stat changes:', task.reward);
           } else if (!data.task_completed && task.reward) {
             // Task uncompleted: reverse the stat changes
             const reverseReward = task.reward.replace(/\+/g, '-');
             applyStatChanges(reverseReward);
-            console.log('📉 Reversed stat changes:', reverseReward);
           }
 
           // Update streak based on API response using context
@@ -190,9 +194,10 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
             return newUser;
           });
 
-          // No need to fetchUserStats again since we already have the data
+          // Update user stats to reflect the total completed tasks change
+          fetchUserStats();
         } else {
-          console.error('Task completion failed');
+          // Task completion failed - removed console.log for production
         }
       } else {
         console.error('Failed to complete task');
@@ -203,7 +208,6 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
       // Fallback to local stat changes if API fails
       if (task.reward) {
         applyStatChanges(task.reward);
-        console.log('📈 Applied fallback stat changes:', task.reward);
       }
     }
   };
@@ -285,7 +289,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
         setLoading(false);
       }
     }
-  }, []); // Remove currentUser dependency
+  }, [currentUser]);
 
   const fetchUserStats = useCallback(async () => {
     console.log('fetchUserStats called, currentUser:', currentUser);
@@ -318,14 +322,14 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
         total_score: 1250
       });
     }
-  }, []); // Remove dependencies
+  }, [currentUser, updateUserStats]);
 
-  // Initialize data on component mount only once
+  // Initialize data on component mount
   useEffect(() => {
     console.log('Homepage useEffect running, about to fetch data');
     fetchTasks();
     fetchUserStats();
-  }, []); // Only run once on mount
+  }, [fetchTasks, fetchUserStats]);
 
   // Show random time-limited task after 3 seconds for testing
   useEffect(() => {
