@@ -1,18 +1,15 @@
-import { useTranslation } from 'react-i18next';
-
 const StatsPanel = ({ stats = {} }) => {
-  const { t } = useTranslation('dashboard');
   const statNames = [
-    { key: "knowledge", label: t("knowledge"), emoji: "📚", color: "#8b5cf6" },
-    { key: "discipline", label: t("discipline"), emoji: "💪", color: "#06b6d4" },
-    { key: "energy", label: t("energy"), emoji: "⚡", color: "#eab308" },
-    { key: "charisma", label: t("charisma"), emoji: "✨", color: "#ec4899" },
-    { key: "stress", label: t("stress"), emoji: "😰", color: "#ef4444" }
+    { key: "knowledge", label: "Knowledge", emoji: "📚", color: "#8b5cf6" },
+    { key: "discipline", label: "Discipline", emoji: "💪", color: "#06b6d4" },
+    { key: "energy", label: "Energy", emoji: "⚡", color: "#eab308" },
+    { key: "charisma", label: "Charisma", emoji: "✨", color: "#ec4899" },
+    { key: "stress", label: "Stress", emoji: "😰", color: "#ef4444" }
   ];
 
   return (
     <div>
-      <h3 className="font-bold text-lg mb-6 text-gray-800">📊 {t('statistics')}</h3>
+      <h3 className="font-bold text-lg mb-6 text-gray-800">📊 Statistics</h3>
       <div className="space-y-5">
         {statNames.map(({ key, label, emoji, color }) => {
           const value = stats?.[key] || 0;

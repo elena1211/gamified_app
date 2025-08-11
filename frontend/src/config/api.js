@@ -37,15 +37,28 @@ export const apiRequest = async (url, options = {}) => {
   };
 
   try {
+    console.log('Making API request to:', url, 'with config:', config);
     const response = await fetch(url, config);
-    const data = await response.json();
     
     if (!response.ok) {
-      throw new Error(data.error || `HTTP error! status: ${response.status}`);
+      let errorMessage = `HTTP error! status: ${response.status}`;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.error || errorMessage;
+      } catch (parseError) {
+        console.error('Failed to parse error response:', parseError);
+      }
+      throw new Error(errorMessage);
     }
     
+    const data = await response.json();
+    console.log('API response:', data);
     return { data, response };
   } catch (error) {
+    console.error('API request failed:', error);
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('Connection error: Unable to connect to server. Please check if the backend is running.');
+    }
     throw new Error(`Connection error: ${error.message}`);
   }
 };

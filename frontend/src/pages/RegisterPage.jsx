@@ -37,7 +37,7 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
   const COMPLETE_GOAL_SUGGESTIONS = [
     ...GOAL_SUGGESTIONS,
     {
-      title: t("customGoal", { defaultValue: "Custom Goal" }),
+      title: "Custom Goal",
       description: "Create your own personalized goal"
     }
   ];
@@ -67,25 +67,25 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
     setFormData(prev => ({
       ...prev,
       selectedGoal: goal,
-      customGoalTitle: goal.title === t("customGoal") ? '' : goal.title,
-      customGoalDescription: goal.title === t("customGoal") ? '' : goal.description
+      customGoalTitle: goal.title === "Custom Goal" ? '' : goal.title,
+      customGoalDescription: goal.title === "Custom Goal" ? '' : goal.description
     }));
   };
 
   const handleNextStep = () => {
     // Validation for step 1
     if (!formData.username.trim()) {
-      setError(t('fieldsRequired'));
+      setError('All fields are required');
       return;
     }
     
     if (formData.password.length < 6) {
-      setError(t('passwordTooShort'));
+      setError('Password must be at least 6 characters');
       return;
     }
     
     if (formData.password !== formData.confirmPassword) {
-      setError(t('passwordMismatch'));
+      setError('Passwords do not match');
       return;
     }
     
@@ -98,12 +98,12 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
     
     // Validation for step 2
     if (!formData.selectedGoal) {
-      setError(t('selectGoal'));
+      setError('Please select a goal');
       return;
     }
     
-    if (formData.selectedGoal.title === t("customGoal") && !formData.customGoalTitle.trim()) {
-      setError(t('goalTitle') + ' is required');
+    if (formData.selectedGoal.title === "Custom Goal" && !formData.customGoalTitle.trim()) {
+      setError('Goal Title is required');
       return;
     }
     
@@ -125,7 +125,7 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
       // Registration successful
       onRegisterSuccess(data.username);
     } catch (err) {
-      setError(err.message || t('registrationFailed'));
+      setError(err.message || 'Registration failed');
     } finally {
       setLoading(false);
     }
@@ -143,7 +143,7 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
               className="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-white border-2 border-gray-300 text-gray-700 rounded-lg hover:border-pink-300 hover:text-pink-600 transition-all duration-200 shadow-sm hover:shadow-md"
             >
               <span>←</span>
-              <span className="font-medium">{t('back')}</span>
+              <span className="font-medium">Back</span>
             </button>
           )}
         </div>
@@ -172,11 +172,11 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
         <form onSubmit={step === 1 ? (e) => { e.preventDefault(); handleNextStep(); } : handleSubmit}>
           {step === 1 && (
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">{t('accountInformation')}</h2>
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">Account Information</h2>
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('username')} *
+                  Username *
                 </label>
                 <input
                   type="text"
@@ -184,14 +184,14 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
                   value={formData.username}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                  placeholder={t('enterUsername')}
+                  placeholder="Enter Your Username"
                   required
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('email')} (optional)
+                  Email (optional)
                 </label>
                 <input
                   type="email"
@@ -199,13 +199,13 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
                   value={formData.email}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                  placeholder={t('enterEmail')}
+                  placeholder="Enter Your Email"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('password')} *
+                  Password *
                 </label>
                 <input
                   type="password"
@@ -213,14 +213,14 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
                   value={formData.password}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                  placeholder={t('newPassword')}
+                  placeholder="Enter Your Password"
                   required
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('confirmPassword')} *
+                  Confirm Password *
                 </label>
                 <input
                   type="password"
@@ -228,7 +228,7 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
                   value={formData.confirmPassword}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                  placeholder={t('confirmNewPassword')}
+                  placeholder="Confirm Your Password"
                   required
                 />
               </div>
@@ -237,14 +237,14 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
                 type="submit"
                 className="w-full bg-pink-500 hover:bg-pink-600 text-white py-3 rounded-lg font-medium transition-colors"
               >
-                Next: {t('mainGoalTitle')} →
+                Next: Set Your Main Goal →
               </button>
             </div>
           )}
 
           {step === 2 && (
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">{t('mainGoalTitle')}</h2>
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">Set Your Main Goal</h2>
               
               <div className="space-y-3 max-h-64 overflow-y-auto">
                 {COMPLETE_GOAL_SUGGESTIONS.map((goal, index) => (
@@ -263,11 +263,11 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
                 ))}
               </div>
 
-              {formData.selectedGoal?.title === t("customGoal") && (
+              {formData.selectedGoal?.title === "Custom Goal" && (
                 <div className="space-y-3 mt-4 p-4 bg-gray-50 rounded-lg">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {t('goalTitle')} *
+                      Goal Title *
                     </label>
                     <input
                       type="text"
@@ -275,13 +275,13 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
                       value={formData.customGoalTitle}
                       onChange={handleInputChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                      placeholder={t('goalPlaceholder')}
+                      placeholder="Enter your goal title"
                       required
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {t('goalDescription')}
+                      Goal Description
                     </label>
                     <textarea
                       name="customGoalDescription"
@@ -289,7 +289,7 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
                       onChange={handleInputChange}
                       rows="3"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                      placeholder={t('descPlaceholder')}
+                      placeholder="Describe your goal in detail"
                     />
                   </div>
                 </div>
@@ -301,14 +301,14 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
                   onClick={() => setStep(1)}
                   className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-3 rounded-lg font-medium transition-colors"
                 >
-                  ← {t('back')}
+                  ← Back
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
                   className="flex-1 bg-pink-500 hover:bg-pink-600 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
                 >
-                  {loading ? t('loading') + '...' : t('signUp') + '! 🚀'}
+                  {loading ? 'Loading...' : 'Sign Up! 🚀'}
                 </button>
               </div>
             </div>
