@@ -27,28 +27,28 @@ const EMOJIS = {
   stress: '😰'
 };
 
-// Time-limited task data
+// Time-limited task data - Enhanced rewards (1-10 points)
 const TIME_LIMITED_TASKS = [
   {
     title: "Start Reading Now",
     description: "Pick up a book or open an e-book and start reading for 5 minutes",
     duration: 300,
-    reward: "+3 Intelligence, +2 Discipline",
-    penalty: "-1 Energy, -1 Intelligence"
+    reward: "+8 Intelligence, +5 Discipline, +2 Wellness",
+    penalty: "-3 Energy, -2 Intelligence"
   },
   {
     title: "Get Ready for Library",
     description: "Pack your bag, get dressed, and prepare to go to the library in 1 minute",
     duration: 60,
-    reward: "+2 Energy, +1 Discipline",
-    penalty: "-2 Energy, -1 Discipline"
+    reward: "+6 Energy, +4 Discipline, +3 Social",
+    penalty: "-5 Energy, -3 Discipline"
   },
   {
     title: "Clean Your Desk Now",
     description: "Clear your desk and organise all the clutter",
     duration: 180,
-    reward: "+2 Discipline, +1 Wellness",
-    penalty: "-1 Discipline, +1 Stress"
+    reward: "+7 Discipline, +6 Wellness, +2 Energy",
+    penalty: "-4 Discipline, +3 Stress"
   }
 ];
 
@@ -291,14 +291,14 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
       setError(null);
     } catch (err) {
       console.error('Error fetching tasks:', err);
-      // Set default tasks if API fails - expanded pool for random selection
+      // Set default tasks if API fails - enhanced rewards (1-10 points)
       const fallbackTasks = [
-        {id: 1, title: "🧹 Organise workspace", tip: "Clean and organise your desk", reward: "+4 Discipline", completed: false, difficulty: 1, attribute: "discipline"},
-        {id: 2, title: "📝 Write journal entry", tip: "Reflect on today's experiences", reward: "+3 Discipline", completed: false, difficulty: 1, attribute: "discipline"},
-        {id: 3, title: "🏃‍♂️ 30-minute workout", tip: "Include cardio and strength training", reward: "+6 Energy", completed: false, difficulty: 2, attribute: "energy"},
-        {id: 4, title: "💻 Practice coding", tip: "Solve a Leetcode problem", reward: "+5 Intelligence", completed: false, difficulty: 2, attribute: "intelligence"},
-        {id: 5, title: "🧘‍♀️ Meditation", tip: "10 minutes of mindfulness", reward: "+3 Energy, +2 Discipline", completed: false, difficulty: 1, attribute: "energy"},
-        {id: 6, title: "📚 Learn something new", tip: "Read an educational article", reward: "+4 Intelligence", completed: false, difficulty: 1, attribute: "intelligence"}
+        {id: 1, title: "🧹 Organise workspace", tip: "Clean and organise your desk", reward: "+6 Discipline, +8 Wellness, +2 Energy", completed: false, difficulty: 1, attribute: "discipline"},
+        {id: 2, title: "📝 Write journal entry", tip: "Reflect on today's experiences", reward: "+5 Discipline, +7 Wellness, +3 Intelligence", completed: false, difficulty: 1, attribute: "discipline"},
+        {id: 3, title: "🏃‍♂️ 30-minute workout", tip: "Include cardio and strength training", reward: "+9 Energy, +6 Discipline, +8 Wellness", completed: false, difficulty: 2, attribute: "energy"},
+        {id: 4, title: "💻 Practice coding", tip: "Solve a Leetcode problem", reward: "+8 Intelligence, +5 Discipline, +2 Wellness", completed: false, difficulty: 2, attribute: "intelligence"},
+        {id: 5, title: "🧘‍♀️ Meditation", tip: "10 minutes of mindfulness", reward: "+4 Energy, +6 Discipline, +10 Wellness, -3 Stress", completed: false, difficulty: 1, attribute: "energy"},
+        {id: 6, title: "📚 Learn something new", tip: "Read an educational article", reward: "+7 Intelligence, +4 Discipline, +3 Wellness", completed: false, difficulty: 1, attribute: "intelligence"}
       ];
       const selectedTasks = selectDailyTasks(fallbackTasks);
       setTasks(selectedTasks);

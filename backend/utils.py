@@ -29,19 +29,45 @@ def get_user_from_request(request, method='GET', default_username='elena'):
 
 def format_task_reward(task):
     """
-    Format task reward string based on task attributes
+    Format task reward string based on task attributes with enhanced rewards
     
     Args:
         task: Task object
         
     Returns:
-        Formatted reward string
+        Formatted reward string with 1-10 point range and multiple attributes
     """
-    reward_attr = task.attribute.title()
-    reward_str = f"+{task.reward_point//2} {reward_attr}"
-    if task.difficulty > 1:
-        reward_str += f", +{task.difficulty-1} Discipline"
-    return reward_str
+    # Primary attribute gets the main reward (2-10 points based on difficulty and reward_point)
+    primary_attr = task.attribute.title()
+    base_reward = min(10, max(2, task.reward_point // 2))
+    
+    reward_parts = [f"+{base_reward} {primary_attr}"]
+    
+    # Add secondary rewards based on difficulty and task type
+    if task.difficulty >= 2:
+        # Medium/Hard tasks get discipline bonus
+        discipline_bonus = min(6, task.difficulty * 2)
+        reward_parts.append(f"+{discipline_bonus} Discipline")
+    
+    if task.difficulty >= 3:
+        # Hard tasks get additional wellness or social bonus
+        if 'social' in task.title.lower() or 'present' in task.title.lower():
+            reward_parts.append("+3 Social")
+        elif 'clean' in task.title.lower() or 'organise' in task.title.lower():
+            reward_parts.append("+4 Wellness")
+        else:
+            reward_parts.append("+2 Wellness")
+    
+    # Special bonuses for specific task types
+    if 'workout' in task.title.lower() or 'exercise' in task.title.lower():
+        reward_parts.append("+3 Wellness")
+    elif 'meditat' in task.title.lower():
+        reward_parts.append("+5 Wellness")
+        reward_parts.append("-2 Stress")
+    elif 'social' in task.title.lower() or 'friend' in task.title.lower():
+        reward_parts.append("+4 Social")
+    
+    return ", ".join(reward_parts)
 
 
 def task_to_dict(task, is_completed=False):
