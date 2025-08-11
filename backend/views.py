@@ -77,14 +77,14 @@ class TaskListView(APIView):
                     "id": 1,
                     "title": "🧠 Practice Leetcode Problem",
                     "tip": "Complete within 25 minutes + Document your thought process",
-                    "reward": "+2 Knowledge, +1 Discipline",
+                    "reward": "+2 Intelligence, +1 Discipline",
                     "completed": False
                 },
                 {
                     "id": 2,
                     "title": "📚 Read 30 pages",
                     "tip": "Focus on key concepts and take notes",
-                    "reward": "+3 Knowledge, +1 Discipline",
+                    "reward": "+3 Intelligence, +1 Discipline",
                     "completed": False
                 }
             ]
@@ -300,14 +300,14 @@ class RegisterView(APIView):
                 {
                     'title': '🧠 Practice Leetcode Problem',
                     'description': 'Complete a medium-level algorithm problem',
-                    'attribute': 'knowledge',
+                    'attribute': 'intelligence',
                     'difficulty': 2,
                     'reward_point': 14
                 },
                 {
                     'title': '📚 Read 30 pages',
                     'description': 'Read and take notes on any educational book',
-                    'attribute': 'knowledge',
+                    'attribute': 'intelligence',
                     'difficulty': 1,
                     'reward_point': 10
                 },
@@ -328,7 +328,7 @@ class RegisterView(APIView):
                 {
                     'title': '🗣️ Practice presentation skills',
                     'description': 'Record yourself giving a 5-minute presentation',
-                    'attribute': 'charisma',
+                    'attribute': 'social',
                     'difficulty': 3,
                     'reward_point': 20
                 },
@@ -349,7 +349,7 @@ class RegisterView(APIView):
                 {
                     'title': '💡 Learn something new',
                     'description': 'Watch educational video or read article on new topic',
-                    'attribute': 'knowledge',
+                    'attribute': 'intelligence',
                     'difficulty': 2,
                     'reward_point': 12
                 }

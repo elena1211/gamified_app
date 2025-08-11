@@ -10,18 +10,20 @@ import Modal from '../components/Modal';
 
 // Local constants for this component
 const COLORS = {
-  knowledge: 'bg-blue-500',
+  intelligence: 'bg-blue-500',
   discipline: 'bg-purple-500', 
   energy: 'bg-green-500',
-  charisma: 'bg-yellow-500',
+  social: 'bg-pink-500',
+  wellness: 'bg-yellow-500',
   stress: 'bg-red-500'
 };
 
 const EMOJIS = {
-  knowledge: '🧠',
+  intelligence: '🧠',
   discipline: '🎯',
   energy: '⚡',
-  charisma: '✨',
+  social: '👥',
+  wellness: '🌟',
   stress: '😰'
 };
 
@@ -31,8 +33,8 @@ const TIME_LIMITED_TASKS = [
     title: "Start Reading Now",
     description: "Pick up a book or open an e-book and start reading for 5 minutes",
     duration: 300,
-    reward: "+3 Knowledge, +2 Discipline",
-    penalty: "-1 Energy, -1 Knowledge"
+    reward: "+3 Intelligence, +2 Discipline",
+    penalty: "-1 Energy, -1 Intelligence"
   },
   {
     title: "Get Ready for Library",
@@ -45,13 +47,13 @@ const TIME_LIMITED_TASKS = [
     title: "Clean Your Desk Now",
     description: "Clear your desk and organise all the clutter",
     duration: 180,
-    reward: "+2 Discipline, +1 Charisma",
+    reward: "+2 Discipline, +1 Wellness",
     penalty: "-1 Discipline, +1 Stress"
   }
 ];
 
-export default function Homepage({ currentUser, onNavigateToSettings, onNavigateToTaskManager }) {
-  console.log('Homepage component starting to render, currentUser:', currentUser);
+export default function HomePage({ currentUser, onNavigateToSettings, onNavigateToTaskManager }) {
+  console.log('HomePage component starting to render, currentUser:', currentUser);
   
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -62,10 +64,11 @@ export default function Homepage({ currentUser, onNavigateToSettings, onNavigate
   const [showDismissConfirm, setShowDismissConfirm] = useState(false);
 
   const [stats, setStats] = useState({
-    knowledge: 75,
+    intelligence: 75,
     discipline: 60,
     energy: 85,
-    charisma: 70,
+    social: 70,
+    wellness: 80,
     stress: 30
   });
 
@@ -205,7 +208,7 @@ export default function Homepage({ currentUser, onNavigateToSettings, onNavigate
   };
 
   const applyStatChanges = (changeString) => {
-    // Parse change strings like "+3 Knowledge, +2 Discipline" or "-1 Energy, -1 Knowledge"
+    // Parse change strings like "+3 Intelligence, +2 Discipline" or "-1 Energy, -1 Intelligence"
     const changes = changeString.split(',').map(change => change.trim());
     
     setStats(prevStats => {
@@ -293,9 +296,9 @@ export default function Homepage({ currentUser, onNavigateToSettings, onNavigate
         {id: 1, title: "🧹 Organise workspace", tip: "Clean and organise your desk", reward: "+4 Discipline", completed: false, difficulty: 1, attribute: "discipline"},
         {id: 2, title: "📝 Write journal entry", tip: "Reflect on today's experiences", reward: "+3 Discipline", completed: false, difficulty: 1, attribute: "discipline"},
         {id: 3, title: "🏃‍♂️ 30-minute workout", tip: "Include cardio and strength training", reward: "+6 Energy", completed: false, difficulty: 2, attribute: "energy"},
-        {id: 4, title: "💻 Practice coding", tip: "Solve a Leetcode problem", reward: "+5 Knowledge", completed: false, difficulty: 2, attribute: "knowledge"},
+        {id: 4, title: "💻 Practice coding", tip: "Solve a Leetcode problem", reward: "+5 Intelligence", completed: false, difficulty: 2, attribute: "intelligence"},
         {id: 5, title: "🧘‍♀️ Meditation", tip: "10 minutes of mindfulness", reward: "+3 Energy, +2 Discipline", completed: false, difficulty: 1, attribute: "energy"},
-        {id: 6, title: "📚 Learn something new", tip: "Read an educational article", reward: "+4 Knowledge", completed: false, difficulty: 1, attribute: "knowledge"}
+        {id: 6, title: "📚 Learn something new", tip: "Read an educational article", reward: "+4 Intelligence", completed: false, difficulty: 1, attribute: "intelligence"}
       ];
       const selectedTasks = selectDailyTasks(fallbackTasks);
       setTasks(selectedTasks);

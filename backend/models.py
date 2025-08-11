@@ -72,10 +72,11 @@ class User(AbstractUser):
 # Model to store various attributes for a user
 class UserAttribute(models.Model):
     ATTRIBUTE_CHOICES = [
-        ('knowledge', 'Knowledge'),
+        ('intelligence', 'Intelligence'),
         ('discipline', 'Discipline'),
         ('energy', 'Energy'),
-        ('charisma', 'Charisma'),
+        ('social', 'Social'),
+        ('wellness', 'Wellness'),
         ('stress', 'Stress')
     ]
 
@@ -153,10 +154,11 @@ class SubGoal(models.Model):
 
 class Task(models.Model):
     ATTRIBUTE_CHOICES = [
-        ('knowledge', 'Knowledge'),
+        ('intelligence', 'Intelligence'),
         ('discipline', 'Discipline'),
         ('energy', 'Energy'),
-        ('charisma', 'Charisma'),
+        ('social', 'Social'),
+        ('wellness', 'Wellness'),
         ('stress', 'Stress')
     ]
 

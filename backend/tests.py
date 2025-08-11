@@ -23,7 +23,7 @@ class APITestCase(TestCase):
             user=self.user,
             title='Test Task',
             description='This is a test task',
-            attribute='knowledge',
+            attribute='intelligence',
             difficulty=1,
             reward_point=10,
             deadline='2025-12-31 23:59:59'
