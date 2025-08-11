@@ -77,14 +77,14 @@ class TaskListView(APIView):
                     "id": 1,
                     "title": "🧠 Practice Leetcode Problem",
                     "tip": "Complete within 25 minutes + Document your thought process",
-                    "reward": "+2 Intelligence, +1 Discipline",
+                    "reward": "+8 Intelligence, +5 Discipline, +2 Wellness",
                     "completed": False
                 },
                 {
                     "id": 2,
                     "title": "📚 Read 30 pages",
                     "tip": "Focus on key concepts and take notes",
-                    "reward": "+3 Intelligence, +1 Discipline",
+                    "reward": "+7 Intelligence, +4 Discipline, +3 Wellness",
                     "completed": False
                 }
             ]

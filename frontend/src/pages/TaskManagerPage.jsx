@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Edit, Trash2, Clock, CheckCircle, XCircle, Save, X } from 'lucide-react';
 import { API_ENDPOINTS, apiRequest } from '../config/api.js';
 import BottomNav from '../components/BottomNav';
+import RewardPopup from '../components/RewardPopup';
 
 // Move TaskCard outside the main component to prevent re-creation
 const TaskCard = ({ 
@@ -208,6 +209,15 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
   const [editData, setEditData] = useState(null);
   const [activeTab, setActiveTab] = useState('active');
   
+  // RewardPopup state
+  const [showRewardPopup, setShowRewardPopup] = useState(false);
+  const [rewardData, setRewardData] = useState({
+    taskTitle: '',
+    rewardPoints: 0,
+    attribute: 'discipline',
+    totalPoints: 0
+  });
+  
   const addFormRef = useRef(null);
   
   const [newTask, setNewTask] = useState({
@@ -304,6 +314,21 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
         ...task,
         completedAt: new Date().toISOString().split('T')[0]
       };
+      
+      // Calculate total points for the attribute
+      const currentAttributePoints = completedTasks
+        .filter(t => t.attribute === task.attribute)
+        .reduce((sum, t) => sum + parseInt(t.reward_point || 0), 0);
+      const newTotalPoints = currentAttributePoints + parseInt(task.reward_point || 0);
+      
+      // Show reward popup
+      setRewardData({
+        taskTitle: task.title,
+        rewardPoints: parseInt(task.reward_point || 0),
+        attribute: task.attribute,
+        totalPoints: newTotalPoints
+      });
+      setShowRewardPopup(true);
       
       setCompletedTasks(prev => [completedTask, ...prev]);
       setTasks(prev => prev.filter(t => t.id !== task.id));
@@ -542,6 +567,15 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
         onHomeClick={onNavigateToHome} 
         onTaskManagerClick={() => {}}
         currentPage="tasks"
+      />
+
+      <RewardPopup
+        isVisible={showRewardPopup}
+        onClose={() => setShowRewardPopup(false)}
+        taskTitle={rewardData.taskTitle}
+        rewardPoints={rewardData.rewardPoints}
+        attribute={rewardData.attribute}
+        totalPoints={rewardData.totalPoints}
       />
     </div>
   );

@@ -12,9 +12,13 @@ function AppRoutes() {
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
 
+  console.log('AppRoutes rendering, currentUser:', currentUser, 'isLoading:', isLoading);
+
   // Initialize user state from localStorage on app start
   useEffect(() => {
+    console.log('AppRoutes useEffect running');
     const savedUser = localStorage.getItem('currentUser');
+    console.log('Saved user from localStorage:', savedUser);
     if (savedUser) {
       setCurrentUser(savedUser);
     }
@@ -143,6 +147,7 @@ function AppRoutes() {
 }
 
 function App() {
+  console.log('App component is rendering');
   return (
     <ErrorBoundary>
       <Router>
