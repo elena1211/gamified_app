@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import Homepage from './Homepage';
-import TaskManagerPage from './TaskManagerPage';
+import HomePage from './pages/HomePage';
+import TaskManagerPage from './pages/TaskManagerPage';
 import RegisterPage from './pages/RegisterPage';
 import WelcomePage from './pages/WelcomePage';
 import SystemSettingsPage from './pages/SystemSettingsPage';
@@ -95,7 +95,7 @@ function AppRoutes() {
         element={
           currentUser ? 
             <ErrorBoundary>
-              <Homepage 
+              <HomePage 
                 currentUser={currentUser} 
                 onLogout={handleLogout}
                 onNavigateToSettings={handleNavigateToSettings}
@@ -126,8 +126,9 @@ function AppRoutes() {
             <ErrorBoundary>
               <SystemSettingsPage 
                 currentUser={currentUser}
-                onBack={handleNavigateToHome}
                 onLogout={handleLogout}
+                onNavigateToHome={handleNavigateToHome}
+                onNavigateToTaskManager={handleNavigateToTaskManager}
               />
             </ErrorBoundary> : 
             <Navigate to="/welcome" replace />

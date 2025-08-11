@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
  * Bottom navigation component
  * Provides navigation between main sections of the app
  */
-export default function BottomNav({ onSettingsClick, onHomeClick, onTaskManagerClick }) {
+export default function BottomNav({ onSettingsClick, onHomeClick, onTaskManagerClick, currentPage = 'home' }) {
   const { t } = useTranslation('common');
   
   return (
@@ -14,7 +14,11 @@ export default function BottomNav({ onSettingsClick, onHomeClick, onTaskManagerC
         <div className="flex justify-center items-center gap-12">
           <button 
             onClick={onHomeClick}
-            className="flex flex-col items-center text-pink-600 hover:text-pink-700 transition-colors"
+            className={`flex flex-col items-center transition-colors ${
+              currentPage === 'home' 
+                ? 'text-pink-600' 
+                : 'text-gray-500 hover:text-pink-600'
+            }`}
           >
             <Home size={24} />
             <span className="text-xs mt-1 font-medium">Home</span>
@@ -22,7 +26,11 @@ export default function BottomNav({ onSettingsClick, onHomeClick, onTaskManagerC
           
           <button 
             onClick={onTaskManagerClick}
-            className="flex flex-col items-center text-gray-500 hover:text-pink-600 transition-colors"
+            className={`flex flex-col items-center transition-colors ${
+              currentPage === 'tasks' 
+                ? 'text-pink-600' 
+                : 'text-gray-500 hover:text-pink-600'
+            }`}
           >
             <ClipboardList size={24} />
             <span className="text-xs mt-1 font-medium">Tasks</span>
@@ -30,7 +38,11 @@ export default function BottomNav({ onSettingsClick, onHomeClick, onTaskManagerC
           
           <button 
             onClick={onSettingsClick}
-            className="flex flex-col items-center text-gray-500 hover:text-pink-600 transition-colors"
+            className={`flex flex-col items-center transition-colors ${
+              currentPage === 'settings' 
+                ? 'text-pink-600' 
+                : 'text-gray-500 hover:text-pink-600'
+            }`}
           >
             <Settings size={24} />
             <span className="text-xs mt-1 font-medium">Settings</span>

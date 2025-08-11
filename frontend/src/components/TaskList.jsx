@@ -1,9 +1,7 @@
 import { useState, useEffect } from "react";
-import { useTranslation } from 'react-i18next';
 
 export default function TaskList({ tasks: initialTasks, onTaskComplete }) {
   const [tasks, setTasks] = useState(initialTasks);
-  const { t } = useTranslation('dashboard');
 
   // Synchronise internal state when external tasks update
   useEffect(() => {
@@ -21,7 +19,7 @@ export default function TaskList({ tasks: initialTasks, onTaskComplete }) {
 
   return (
     <div>
-      <h3 className="font-bold text-lg mb-4 text-gray-800">📋 {t('dailyTasks')}</h3>
+      <h3 className="font-bold text-lg mb-4 text-gray-800">📋 Daily Tasks</h3>
       <div className="space-y-3">
         {tasks.map((task) => (
           <div

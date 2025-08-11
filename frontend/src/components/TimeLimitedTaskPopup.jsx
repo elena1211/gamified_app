@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
 
 export default function TimeLimitedTaskPopup({ task, onAccept, onReject, onTimeUp }) {
   const [timeLeft, setTimeLeft] = useState(task.duration);
-  const { t } = useTranslation('dashboard');
 
   useEffect(() => {
     if (timeLeft <= 0) {
@@ -53,7 +51,7 @@ export default function TimeLimitedTaskPopup({ task, onAccept, onReject, onTimeU
       >
         <div className="text-center mb-4">
           <div className="text-3xl mb-2">⚡</div>
-          <h2 className="text-xl font-bold text-gray-800">{t('timeLimitedQuest')}</h2>
+          <h2 className="text-xl font-bold text-gray-800">Time-Limited Quest</h2>
         </div>
 
         <div className="bg-yellow-50 rounded-xl p-4 mb-4">
@@ -64,17 +62,17 @@ export default function TimeLimitedTaskPopup({ task, onAccept, onReject, onTimeU
             <div className="text-2xl font-bold text-red-600 mb-1">
               {formatTime(timeLeft)}
             </div>
-            <p className="text-xs text-gray-500">{t('timeRemaining')}</p>
+            <p className="text-xs text-gray-500">Time Remaining</p>
           </div>
         </div>
 
         <div className="mb-6">
           <div className="flex justify-between items-center mb-2">
-            <span className="text-sm text-green-600">✅ {t('reward')}:</span>
+            <span className="text-sm text-green-600">✅ Reward:</span>
             <span className="text-sm font-medium">{task.reward}</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-sm text-red-600">❌ {t('penalty')}:</span>
+            <span className="text-sm text-red-600">❌ Penalty:</span>
             <span className="text-sm font-medium">{task.penalty}</span>
           </div>
         </div>
@@ -84,13 +82,13 @@ export default function TimeLimitedTaskPopup({ task, onAccept, onReject, onTimeU
             onClick={onAccept}
             className="flex-1 bg-green-500 hover:bg-green-600 text-white py-3 rounded-xl font-medium transition-colors"
           >
-            {t('acceptChallenge')}
+            Accept Challenge
           </button>
           <button
             onClick={onReject}
             className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-3 rounded-xl font-medium transition-colors"
           >
-            {t('dismiss')}
+            Dismiss
           </button>
         </div>
       </div>

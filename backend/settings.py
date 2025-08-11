@@ -135,11 +135,13 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",  # React default
     "http://localhost:5173",  # Vite default
     "http://localhost:5174",  # Vite alternative port
-    "http://localhost:5175",  # Current Vite port
+    "http://localhost:5175",  # Previous Vite port
+    "http://localhost:5176",  # Current Vite port
     "http://127.0.0.1:3000",
     "http://127.0.0.1:5173",
     "http://127.0.0.1:5174",
     "http://127.0.0.1:5175",
+    "http://127.0.0.1:5176",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
