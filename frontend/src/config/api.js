@@ -12,6 +12,7 @@ export const API_ENDPOINTS = {
   
   // User
   userStats: `${API_BASE_URL}/user/stats/`,
+  userProgress: `${API_BASE_URL}/user/progress/`,
   changePassword: `${API_BASE_URL}/user/change-password/`,
   deleteAccount: `${API_BASE_URL}/user/delete-account/`,
   

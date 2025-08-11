@@ -5,8 +5,9 @@ from django.contrib.auth import authenticate, login
 from django.contrib.auth.hashers import make_password, check_password
 from .models import Task, User, Goal, UserTaskLog
 from django.utils import timezone
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 import random
+from django.db.models import Count, Q
 
 
 class TaskListView(APIView):
@@ -503,6 +504,71 @@ class DeleteAccountView(APIView):
                 "message": "Account deleted successfully"
             })
             
+        except Exception as e:
+            return Response({
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ProgressStatsView(APIView):
+    """API view to get user's progress statistics"""
+    def get(self, request):
+        username = request.GET.get('user', 'elena')
+        range_type = request.GET.get('range', 'today')  # today, week, month
+        
+        try:
+            user = User.objects.get(username=username)
+            today = date.today()
+            
+            if range_type == 'today':
+                start_date = today
+                end_date = today
+            elif range_type == 'week':
+                # Calculate start of week (Monday)
+                start_date = today - timedelta(days=today.weekday())
+                end_date = today
+            elif range_type == 'month':
+                start_date = today.replace(day=1)
+                end_date = today
+            else:
+                start_date = today
+                end_date = today
+            
+            # Get assigned tasks in the date range
+            assigned_tasks = UserTaskLog.objects.filter(
+                user=user,
+                assigned_at__date__range=[start_date, end_date]
+            )
+            
+            total_assigned = assigned_tasks.count()
+            total_completed = assigned_tasks.filter(status='completed').count()
+            
+            # Calculate completion rate
+            completion_rate = total_completed / total_assigned if total_assigned > 0 else 0
+            
+            # Get current streak
+            current_streak = user.current_streak
+            
+            return Response({
+                "range": range_type,
+                "period": {
+                    "start": start_date.strftime('%Y-%m-%d'),
+                    "end": end_date.strftime('%Y-%m-%d')
+                },
+                "assigned": total_assigned,
+                "completed": total_completed,
+                "completion_rate": round(completion_rate, 2),
+                "streak": current_streak,
+                "details": {
+                    "pending": assigned_tasks.filter(status='pending').count(),
+                    "missed": assigned_tasks.filter(status='missed').count()
+                }
+            })
+            
+        except User.DoesNotExist:
+            return Response({
+                "error": "User not found"
+            }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({
                 "error": str(e)

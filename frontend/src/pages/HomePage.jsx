@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { API_ENDPOINTS, apiRequest } from '../config/api.js';
 import BottomNav from '../components/BottomNav';
 import StatsPanel from '../components/StatsPanel';
+import ProgressPanel from '../components/ProgressPanel';
 import UserProfileCard from '../components/UserProfileCard';
 import TaskList from '../components/TaskList';
 import MainGoal from '../components/MainGoal';
@@ -71,6 +72,9 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
   const [showWarning, setShowWarning] = useState(false);
   const [warningType, setWarningType] = useState('');
   const [showDismissConfirm, setShowDismissConfirm] = useState(false);
+
+  // Reference for progress panel refresh function
+  const progressRefresh = useRef(null);
 
   // Time-limited task data
   const [currentTimeLimitedTask, setCurrentTimeLimitedTask] = useState(null);
@@ -191,6 +195,11 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
           });
 
           // No need to fetchUserStats again since we already have the data
+          
+          // Refresh progress panel when task completion changes
+          if (progressRefresh.current) {
+            progressRefresh.current();
+          }
         } else {
           console.error('Task completion failed');
         }
@@ -380,6 +389,11 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
         <div className="bg-white rounded-2xl p-8 shadow-md">
           <StatsPanel stats={attributeStats} />
         </div>
+        {/* Progress Panel */}
+        <ProgressPanel 
+          currentUser={currentUser} 
+          onRefresh={progressRefresh}
+        />
         {/* Task List */}
         <div className="bg-white rounded-2xl p-8 shadow-md">
           <TaskList 
