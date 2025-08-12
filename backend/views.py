@@ -7,6 +7,7 @@ from .models import Task, User, Goal, UserTaskLog
 from django.utils import timezone
 from datetime import date, timedelta, datetime
 import random
+import math
 from django.db.models import Count, Q
 
 
@@ -170,12 +171,6 @@ class GoalView(APIView):
 
 
 from django.db import models
-from django.contrib.auth.models import AbstractUser
-from django.utils import timezone
-from datetime import date, timedelta
-import math
-
-
 def calculate_task_exp(task):
     """Calculate EXP gained from completing a task"""
     base_exp = 10 + (task.difficulty or 1) * 5
@@ -642,6 +637,10 @@ class DynamicTaskCompleteView(APIView):
         try:
             user = User.objects.get(username=username)
 
+            # Store old level and exp for level-up detection
+            old_level = user.level
+            old_exp = user.exp
+
             # For time-limited tasks, create unique task each time to allow multiple completions
             if task_type == 'time_limited':
                 # Add timestamp to make each time-limited task unique (for database uniqueness)
@@ -669,14 +668,38 @@ class DynamicTaskCompleteView(APIView):
                     earned_points=reward_points
                 )
 
+                # Add EXP when completing time-limited task
+                exp_gained = calculate_task_exp(task)
+                user.exp += exp_gained
+
+                # Update level based on new EXP
+                new_level = calculate_level_from_exp(user.exp)
+                user.level = new_level
+
+                # Check for level up
+                leveled_up = new_level > old_level
+
                 # Update user streak
                 user.update_streak()
+
+                # Save user changes
+                user.save()
 
                 return Response({
                     'success': True,
                     'message': f'Time-limited task completed successfully',
                     'task_completed': True,
-                    'streak': user.current_streak
+                    'streak': user.current_streak,
+                    'user_stats': {
+                        'level': user.level,
+                        'exp': user.exp,
+                        'level_up': leveled_up,
+                        'old_level': old_level,
+                        'next_level_exp': get_exp_for_level(user.level + 1),
+                        'current_level_exp': get_exp_for_level(user.level),
+                        'exp_progress': user.exp - get_exp_for_level(user.level),
+                        'exp_needed': get_exp_for_level(user.level + 1) - get_exp_for_level(user.level)
+                    }
                 })
 
             else:
@@ -714,14 +737,38 @@ class DynamicTaskCompleteView(APIView):
                         earned_points=reward_points
                     )
 
+                    # Add EXP when completing daily task
+                    exp_gained = calculate_task_exp(task)
+                    user.exp += exp_gained
+
+                    # Update level based on new EXP
+                    new_level = calculate_level_from_exp(user.exp)
+                    user.level = new_level
+
+                    # Check for level up
+                    leveled_up = new_level > old_level
+
                     # Update user streak
                     user.update_streak()
+
+                    # Save user changes
+                    user.save()
 
                     return Response({
                         'success': True,
                         'message': f'Daily task completed successfully',
                         'task_completed': True,
-                        'streak': user.current_streak
+                        'streak': user.current_streak,
+                        'user_stats': {
+                            'level': user.level,
+                            'exp': user.exp,
+                            'level_up': leveled_up,
+                            'old_level': old_level,
+                            'next_level_exp': get_exp_for_level(user.level + 1),
+                            'current_level_exp': get_exp_for_level(user.level),
+                            'exp_progress': user.exp - get_exp_for_level(user.level),
+                            'exp_needed': get_exp_for_level(user.level + 1) - get_exp_for_level(user.level)
+                        }
                     })
                 else:
                     return Response({

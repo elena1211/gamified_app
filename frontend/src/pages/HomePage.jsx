@@ -8,10 +8,9 @@ import MainGoal from '../components/MainGoal';
 import TimeLimitedTaskPopup from '../components/TimeLimitedTaskPopup';
 import Modal from '../components/Modal';
 import WeeklyTaskStats from '../components/WeeklyTaskStats';
-import LevelUpNotification from '../components/LevelUpNotification';
 import LevelUpModal from '../components/LevelUpModal';
 import { useAppContext } from '../context/AppContext';
-import { getAvatarStage, checkLevelUp } from '../utils/avatar';
+import { getAvatarStage } from '../utils/avatar';
 
 // Time-limited task data - Enhanced rewards (1-10 points)
 const TIME_LIMITED_TASKS = [
@@ -68,10 +67,6 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
     newStage: 1
   });
 
-  // Original level up notification states (keeping for backward compatibility)
-  const [showLevelUp, setShowLevelUp] = useState(false);
-  const [newLevel, setNewLevel] = useState(0);
-
   // Time-limited task data
   const [currentTimeLimitedTask, setCurrentTimeLimitedTask] = useState(null);
   const [lastDismissedTask, setLastDismissedTask] = useState(null);
@@ -79,6 +74,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
   const [user, setUser] = useState({
     name: currentUser || "tester",
     level: 5,
+    exp: 0,
     streak: 0,
     avatar: "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjAwIiB2aWV3Qm94PSIwIDAgMjAwIDIwMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIHJ4PSIxMDAiIGZpbGw9IiNmYzkxYmYiLz4KPGNpcmNsZSBjeD0iMTAwIiBjeT0iODAiIHI9IjMwIiBmaWxsPSIjZmZmZmZmIi8+CjxlbGxpcHNlIGN4PSIxMDAiIGN5PSIxNTAiIHJ4PSI0MCIgcnk9IjMwIiBmaWxsPSIjZmZmZmZmIi8+Cjwvc3ZnPgo="
   });
@@ -111,8 +107,46 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
             // Apply stat changes
             applyStatChanges(currentTimeLimitedTask.reward);
 
-            // Update streak
-            updateUserStats({ currentStreak: data.streak });
+            // Check for level up from API response
+            if (data.user_stats && data.user_stats.level_up) {
+              console.log('🎉 Level up detected from time-limited task!', data.user_stats);
+              const oldStage = getAvatarStage(data.user_stats.old_level);
+              const newStage = getAvatarStage(data.user_stats.level);
+
+              setLevelUpData({
+                oldLevel: data.user_stats.old_level,
+                newLevel: data.user_stats.level,
+                newExp: data.user_stats.exp,
+                oldStage,
+                newStage
+              });
+              setShowLevelUpModal(true);
+            }
+
+            // Update user stats with level and EXP data
+            if (data.user_stats) {
+              updateUserStats({
+                currentStreak: data.streak,
+                level: data.user_stats.level,
+                exp: data.user_stats.exp
+              });
+
+              // Update user state for display
+              setUser(prev => ({
+                ...prev,
+                level: data.user_stats.level,
+                exp: data.user_stats.exp,
+                streak: data.streak
+              }));
+            } else {
+              updateUserStats({ currentStreak: data.streak });
+
+              // Update user state with streak only
+              setUser(prev => ({
+                ...prev,
+                streak: data.streak
+              }));
+            }
 
             console.log('✅ Time-limited task completed, refreshing weekly stats in 0.3s');
 
@@ -251,8 +285,22 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
                   level: data.user_stats.level,
                   exp: data.user_stats.exp
                 });
+
+                // Update user state for display
+                setUser(prev => ({
+                  ...prev,
+                  level: data.user_stats.level,
+                  exp: data.user_stats.exp,
+                  streak: data.streak
+                }));
               } else {
                 updateUserStats({ currentStreak: data.streak });
+
+                // Update user state with streak only
+                setUser(prev => ({
+                  ...prev,
+                  streak: data.streak
+                }));
               }
 
               console.log('✅ Dynamic task completion successful, refreshing weekly stats in 0.3s');
@@ -386,8 +434,22 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
                 level: data.user_stats.level,
                 exp: data.user_stats.exp
               });
+
+              // Update user state for display
+              setUser(prev => ({
+                ...prev,
+                level: data.user_stats.level,
+                exp: data.user_stats.exp,
+                streak: data.streak
+              }));
             } else {
               updateUserStats({ currentStreak: data.streak });
+
+              // Update user state with streak only
+              setUser(prev => ({
+                ...prev,
+                streak: data.streak
+              }));
             }
 
             console.log('✅ Task toggle successful, refreshing weekly stats');
@@ -509,8 +571,17 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
       setLocalUserStats(data);
       updateUserStats({
         level: data.level,
-        currentStreak: data.current_streak
+        currentStreak: data.current_streak,
+        exp: data.exp
       });
+
+      // Update user state with latest data
+      setUser(prev => ({
+        ...prev,
+        level: data.level,
+        exp: data.exp || 0,
+        streak: data.current_streak
+      }));
     } catch (err) {
       console.error('Failed to fetch user stats:', err);
       // Set default user stats if API fails
@@ -518,8 +589,16 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
         level: 5,
         current_streak: 3,
         total_tasks_completed: 25,
-        total_score: 1250
+        total_score: 1250,
+        exp: 0
       });
+      // Update user state with defaults
+      setUser(prev => ({
+        ...prev,
+        level: 5,
+        exp: 0,
+        streak: 3
+      }));
     }
   }, []); // Remove dependencies
 

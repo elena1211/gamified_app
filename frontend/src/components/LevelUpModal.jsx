@@ -35,7 +35,7 @@ const LevelUpModal = ({
                 <img
                   src={getAvatarSrc(oldStage)}
                   alt={`Stage ${oldStage}`}
-                  className="w-20 h-20 rounded-full border-4 border-gray-300 mx-auto mb-2"
+                  className="w-20 h-20 rounded-full border-4 border-gray-300 mx-auto mb-2 object-contain bg-gray-50"
                 />
                 <div className="text-sm text-gray-500">Before</div>
               </div>
@@ -46,7 +46,7 @@ const LevelUpModal = ({
                 <img
                   src={getAvatarSrc(newStage)}
                   alt={`Stage ${newStage}`}
-                  className="w-20 h-20 rounded-full border-4 border-yellow-400 mx-auto mb-2 animate-pulse"
+                  className="w-20 h-20 rounded-full border-4 border-yellow-400 mx-auto mb-2 animate-pulse object-contain bg-yellow-50"
                 />
                 <div className="text-sm text-yellow-600 font-bold">New Stage!</div>
               </div>
@@ -56,7 +56,7 @@ const LevelUpModal = ({
               <img
                 src={getAvatarSrc(newStage)}
                 alt={`Stage ${newStage}`}
-                className="w-24 h-24 rounded-full border-4 border-blue-400 mx-auto mb-2"
+                className="w-24 h-24 rounded-full border-4 border-blue-400 mx-auto mb-2 object-contain bg-blue-50"
               />
               <div className="text-sm text-blue-600">Current Avatar</div>
             </div>

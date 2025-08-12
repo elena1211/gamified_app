@@ -22,7 +22,7 @@ export default function UserProfileCard({ user, userStats = {} }) {
           <img
             src={avatarSrc}
             alt={`${avatarTitle} Avatar`}
-            className="w-20 h-20 rounded-full border-3 border-pink-200 object-cover"
+            className="w-20 h-20 rounded-full border-3 border-pink-200 object-contain bg-gray-50"
             onError={(e) => {
               // Fallback to default avatar if image fails to load
               e.target.src = user.avatar || "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjAwIiB2aWV3Qm94PSIwIDAgMjAwIDIwMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIHJ4PSIxMDAiIGZpbGw9IiNmYzkxYmYiLz4KPGNpcmNsZSBjeD0iMTAwIiBjeT0iODAiIHI9IjMwIiBmaWxsPSIjZmZmZmZmIi8+CjxlbGxpcHNlIGN4PSIxMDAiIGN5PSIxNTAiIHJ4PSI0MCIgcnk9IjMwIiBmaWxsPSIjZmZmZmZmIi8+Cjwvc3ZnPgo=";
@@ -48,7 +48,9 @@ export default function UserProfileCard({ user, userStats = {} }) {
                 style={{ width: `${Math.max(0, progressPercentage)}%` }}
               ></div>
             </div>
-          </div>          <p className="text-sm text-pink-500 font-medium">{user.streak} days streak 🔥</p>
+          </div>
+
+          <p className="text-sm text-pink-500 font-medium">{user.streak} days streak 🔥</p>
           {userStats && userStats.max_streak > 0 && (
             <p className="text-xs text-gray-500">
               📈 Max Streak: {userStats.max_streak} days
