@@ -3,6 +3,8 @@ from rest_framework.views import APIView
 from rest_framework import status
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.hashers import make_password, check_password
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 from .models import Task, User, Goal, UserTaskLog, UserAttribute
 from django.utils import timezone
 from datetime import date, timedelta, datetime
@@ -350,6 +352,7 @@ class UserStatsView(APIView):
                 "total_completed_tasks": 0
             })
 
+@method_decorator(csrf_exempt, name='dispatch')
 class RegisterView(APIView):
     """API view for user registration"""
     def post(self, request):
@@ -473,6 +476,7 @@ class RegisterView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@method_decorator(csrf_exempt, name='dispatch')
 class LoginView(APIView):
     """API view for user login"""
     def post(self, request):
@@ -489,6 +493,9 @@ class LoginView(APIView):
             user = authenticate(username=username, password=password)
 
             if user:
+                # Log the user in (creates session)
+                login(request, user)
+                
                 # Update streak for login
                 user.update_streak()
 
@@ -1044,7 +1051,7 @@ class ProgressStatsView(APIView):
 class RootView(APIView):
     """Root endpoint to verify the API is running"""
     permission_classes = []  # Allow anonymous access
-    
+
     def get(self, request):
         return Response({
             "message": "LevelUp API is running!",
@@ -1061,7 +1068,7 @@ class RootView(APIView):
 class HealthView(APIView):
     """Health check endpoint for Railway"""
     permission_classes = []  # Allow anonymous access for health checks
-    
+
     def get(self, request):
         return Response({
             "status": "healthy",
