@@ -1,27 +1,30 @@
 // API Configuration
-const API_BASE_URL = 'http://127.0.0.1:8000/api';
+// API configuration and helper functions
+import { debugLog } from '../utils/logger';
+
+const API_BASE = 'http://127.0.0.1:8000/api';
 
 export const API_ENDPOINTS = {
   // Authentication
-  login: `${API_BASE_URL}/login/`,
-  register: `${API_BASE_URL}/register/`,
+  login: `${API_BASE}/login/`,
+  register: `${API_BASE}/register/`,
 
   // Tasks
-  tasks: `${API_BASE_URL}/tasks/`,
-  taskComplete: `${API_BASE_URL}/tasks/complete/`,
-  dynamicTaskComplete: `${API_BASE_URL}/tasks/complete-dynamic/`,
-  dynamicTaskUncomplete: `${API_BASE_URL}/tasks/uncomplete-dynamic/`,
-  completedHistory: `${API_BASE_URL}/tasks/completed-history/`,
-  weeklyStats: `${API_BASE_URL}/tasks/weekly-stats/`,
+  tasks: `${API_BASE}/tasks/`,
+  taskComplete: `${API_BASE}/tasks/complete/`,
+  dynamicTaskComplete: `${API_BASE}/tasks/complete-dynamic/`,
+  dynamicTaskUncomplete: `${API_BASE}/tasks/uncomplete-dynamic/`,
+  completedHistory: `${API_BASE}/tasks/completed-history/`,
+  weeklyStats: `${API_BASE}/tasks/weekly-stats/`,
 
   // User
-  userStats: `${API_BASE_URL}/user/stats/`,
-  userProgress: `${API_BASE_URL}/user/progress/`,
-  changePassword: `${API_BASE_URL}/user/change-password/`,
-  deleteAccount: `${API_BASE_URL}/user/delete-account/`,
+  userStats: `${API_BASE}/user/stats/`,
+  userProgress: `${API_BASE}/user/progress/`,
+  changePassword: `${API_BASE}/user/change-password/`,
+  deleteAccount: `${API_BASE}/user/delete-account/`,
 
   // Goals
-  goal: `${API_BASE_URL}/goal/`
+  goal: `${API_BASE}/goal/`
 };
 
 // API utility functions
@@ -42,7 +45,7 @@ export const apiRequest = async (url, options = {}) => {
   };
 
   try {
-    console.log('Making API request to:', url, 'with config:', config);
+    debugLog('Making API request to:', url, 'with config:', config);
     const response = await fetch(url, config);
 
     if (!response.ok) {
@@ -57,7 +60,7 @@ export const apiRequest = async (url, options = {}) => {
     }
 
     const data = await response.json();
-    console.log('API response:', data);
+    debugLog('API response:', data);
     return { data, response };
   } catch (error) {
     console.error('API request failed:', error);

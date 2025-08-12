@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
+import { debugLog } from '../utils/logger';
 
 const AppContext = createContext();
 
@@ -62,7 +63,7 @@ export const AppProvider = ({ children }) => {
     try {
       // Load user stats, tasks, and goal when user logs in
       // This prevents data from being reset on page navigation
-      console.log('Loading user data for:', username);
+      debugLog('Loading user data for:', username);
 
       // Data is loaded individually by each component as needed
       // This function serves as a placeholder for future centralized data loading
@@ -134,7 +135,7 @@ export const AppProvider = ({ children }) => {
             // Set max limit for stress to 100, others to 1000
             const maxLimit = statKey === 'stress' ? 100 : 1000;
             newStats[statKey] = Math.max(0, Math.min(maxLimit, newStats[statKey] + value));
-            console.log(`📊 Updated ${statKey}: ${prevStats[statKey]} → ${newStats[statKey]} (${value > 0 ? '+' : ''}${value})`);
+            debugLog(`📊 Updated ${statKey}: ${prevStats[statKey]} → ${newStats[statKey]} (${value > 0 ? '+' : ''}${value})`);
           }
         }
       });

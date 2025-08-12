@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Calendar, TrendingUp, CheckCircle } from 'lucide-react';
 import { API_ENDPOINTS, apiRequest } from '../config/api.js';
+import { debugLog } from '../utils/logger';
 
 export default function WeeklyTaskStats({ currentUser, refreshTrigger }) {
   const [weeklyStats, setWeeklyStats] = useState(null);
@@ -8,13 +9,13 @@ export default function WeeklyTaskStats({ currentUser, refreshTrigger }) {
   const [error, setError] = useState(null);
 
   const fetchWeeklyStats = async () => {
-    console.log('🔄 WeeklyTaskStats: Fetching weekly stats for user:', currentUser, 'refreshTrigger:', refreshTrigger);
+    debugLog('🔄 WeeklyTaskStats: Fetching weekly stats for user:', currentUser, 'refreshTrigger:', refreshTrigger);
     setLoading(true);
     setError(null);
-    
+
     try {
       const { data } = await apiRequest(`${API_ENDPOINTS.weeklyStats}?user=${currentUser || 'tester'}`);
-      console.log('📊 WeeklyTaskStats: Received data:', data);
+      debugLog('📊 WeeklyTaskStats: Received data:', data);
       setWeeklyStats(data);
     } catch (error) {
       console.error('Error fetching weekly stats:', error);
@@ -42,7 +43,7 @@ export default function WeeklyTaskStats({ currentUser, refreshTrigger }) {
   };
 
   useEffect(() => {
-    console.log('🔄 WeeklyTaskStats: useEffect triggered with currentUser:', currentUser, 'refreshTrigger:', refreshTrigger);
+    debugLog('🔄 WeeklyTaskStats: useEffect triggered with currentUser:', currentUser, 'refreshTrigger:', refreshTrigger);
     fetchWeeklyStats();
   }, [currentUser, refreshTrigger]); // Add refreshTrigger dependency
 
@@ -67,7 +68,7 @@ export default function WeeklyTaskStats({ currentUser, refreshTrigger }) {
       <div className="bg-white rounded-lg shadow-sm border border-red-200 p-6">
         <div className="text-center text-red-600">
           <p className="text-sm">Failed to load weekly stats</p>
-          <button 
+          <button
             onClick={fetchWeeklyStats}
             className="mt-2 text-xs text-red-500 hover:text-red-700 underline"
           >
@@ -109,12 +110,12 @@ export default function WeeklyTaskStats({ currentUser, refreshTrigger }) {
 
       {/* Week Range */}
       <div className="text-sm text-gray-600 mb-4">
-        {new Date(weeklyStats.week_start).toLocaleDateString('en-GB', { 
-          month: 'short', 
-          day: 'numeric' 
-        })} - {new Date(weeklyStats.week_end).toLocaleDateString('en-GB', { 
-          month: 'short', 
-          day: 'numeric' 
+        {new Date(weeklyStats.week_start).toLocaleDateString('en-GB', {
+          month: 'short',
+          day: 'numeric'
+        })} - {new Date(weeklyStats.week_end).toLocaleDateString('en-GB', {
+          month: 'short',
+          day: 'numeric'
         })}
       </div>
 
@@ -123,7 +124,7 @@ export default function WeeklyTaskStats({ currentUser, refreshTrigger }) {
         <div className="flex items-end justify-between gap-1 h-16 mb-2">
           {weeklyStats.daily_breakdown.map((day, index) => (
             <div key={index} className="flex-1 flex flex-col items-center">
-              <div 
+              <div
                 className={`w-full rounded-t transition-all duration-300 flex items-end justify-center text-xs font-medium ${getCompletionColor(day.completed_tasks)} ${day.is_today ? 'ring-2 ring-purple-400 ring-opacity-50' : ''}`}
                 style={{ height: `${getCompletionHeight(day.completed_tasks)}px` }}
               >
@@ -134,12 +135,12 @@ export default function WeeklyTaskStats({ currentUser, refreshTrigger }) {
             </div>
           ))}
         </div>
-        
+
         {/* Day Labels */}
         <div className="flex justify-between text-xs text-gray-500">
           {weeklyStats.daily_breakdown.map((day, index) => (
-            <div 
-              key={index} 
+            <div
+              key={index}
               className={`flex-1 text-center ${day.is_today ? 'font-semibold text-purple-600' : ''}`}
             >
               {day.day_name}
@@ -159,7 +160,7 @@ export default function WeeklyTaskStats({ currentUser, refreshTrigger }) {
             {weeklyStats.completion_percentage}%
           </div>
         </div>
-        
+
         <div className="text-center">
           <div className="flex items-center justify-center gap-1 mb-1">
             <CheckCircle className="w-4 h-4 text-blue-600" />
@@ -175,10 +176,10 @@ export default function WeeklyTaskStats({ currentUser, refreshTrigger }) {
       {weeklyStats.total_completed_this_week > 0 && (
         <div className="mt-4 p-3 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-100">
           <p className="text-sm text-purple-700 text-center">
-            {weeklyStats.total_completed_this_week >= 20 
-              ? "🎉 Amazing week! You've completed loads of tasks!" 
-              : weeklyStats.total_completed_this_week >= 10 
-              ? "💪 Well done! Keep up the great pace!" 
+            {weeklyStats.total_completed_this_week >= 20
+              ? "🎉 Amazing week! You've completed loads of tasks!"
+              : weeklyStats.total_completed_this_week >= 10
+              ? "💪 Well done! Keep up the great pace!"
               : "✨ Good start! Keep going!"}
           </p>
         </div>

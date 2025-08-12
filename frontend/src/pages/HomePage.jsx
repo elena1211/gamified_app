@@ -11,6 +11,7 @@ import WeeklyTaskStats from '../components/WeeklyTaskStats';
 import LevelUpModal from '../components/LevelUpModal';
 import { useAppContext } from '../context/AppContext';
 import { getAvatarStage } from '../utils/avatar';
+import { debugLog } from '../utils/logger';
 
 // Time-limited task data - Enhanced rewards (1-10 points)
 const TIME_LIMITED_TASKS = [
@@ -38,7 +39,7 @@ const TIME_LIMITED_TASKS = [
 ];
 
 export default function HomePage({ currentUser, onNavigateToSettings, onNavigateToTaskManager }) {
-  console.log('HomePage component starting to render, currentUser:', currentUser);
+  debugLog('HomePage component starting to render, currentUser:', currentUser);
 
   // Use global state from context
   const {
@@ -101,7 +102,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
 
         if (response.ok) {
           const data = await response.json();
-          console.log('📡 Time-limited task completion response:', data);
+          debugLog('📡 Time-limited task completion response:', data);
 
           if (data.success) {
             // Apply stat changes
@@ -109,7 +110,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
 
             // Check for level up from API response
             if (data.user_stats && data.user_stats.level_up) {
-              console.log('🎉 Level up detected from time-limited task!', data.user_stats);
+              debugLog('🎉 Level up detected from time-limited task!', data.user_stats);
               const oldStage = getAvatarStage(data.user_stats.old_level);
               const newStage = getAvatarStage(data.user_stats.level);
 
@@ -148,12 +149,12 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
               }));
             }
 
-            console.log('✅ Time-limited task completed, refreshing weekly stats in 0.3s');
+            debugLog('✅ Time-limited task completed, refreshing weekly stats in 0.3s');
 
             // Refresh weekly stats after time-limited task completion
             setTimeout(() => {
               setRefreshTrigger(prev => prev + 1);
-              console.log('🔄 Weekly stats refresh triggered for time-limited task');
+              debugLog('🔄 Weekly stats refresh triggered for time-limited task');
             }, 300);
           }
         }
@@ -222,7 +223,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
 
   const handleTaskComplete = async (task) => {
     try {
-      console.log('🎯 Toggling task completion:', task.id, task.title, 'Current status:', task.completed);
+      debugLog('🎯 Toggling task completion:', task.id, task.title, 'Current status:', task.completed);
 
       // Check if it's a dynamic task (random daily tasks) or regular database task
       const isDynamicTask = task.is_random || task.id < 25; // Use dynamic API for random tasks or fallback tasks
@@ -246,7 +247,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
 
           if (response.ok) {
             const data = await response.json();
-            console.log('📡 Dynamic task completion response:', data);
+            debugLog('📡 Dynamic task completion response:', data);
 
             if (data.success) {
               // Update local task state to reflect the change
@@ -259,12 +260,12 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
               // Apply stat changes based on task completion
               if (task.reward) {
                 applyStatChanges(task.reward);
-                console.log('📈 Applied stat changes:', task.reward);
+                debugLog('📈 Applied stat changes:', task.reward);
               }
 
               // Check for level up from API response
               if (data.user_stats && data.user_stats.level_up) {
-                console.log('🎉 Level up detected!', data.user_stats);
+                debugLog('🎉 Level up detected!', data.user_stats);
                 const oldStage = getAvatarStage(data.user_stats.old_level);
                 const newStage = getAvatarStage(data.user_stats.level);
 
@@ -303,18 +304,18 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
                 }));
               }
 
-              console.log('✅ Dynamic task completion successful, refreshing weekly stats in 0.3s');
+              debugLog('✅ Dynamic task completion successful, refreshing weekly stats in 0.3s');
 
               // Refresh weekly stats after task completion
               setTimeout(() => {
                 setRefreshTrigger(prev => prev + 1);
-                console.log('🔄 Weekly stats refresh triggered');
+                debugLog('🔄 Weekly stats refresh triggered');
               }, 300);
             }
           }
         } else {
           // For daily tasks that are already completed, call uncomplete API
-          console.log('🔄 Uncompleting daily task via API');
+          debugLog('🔄 Uncompleting daily task via API');
           const response = await fetch(API_ENDPOINTS.dynamicTaskUncomplete, {
             method: 'POST',
             headers: {
@@ -328,7 +329,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
 
           if (response.ok) {
             const data = await response.json();
-            console.log('📡 Dynamic task uncomplete response:', data);
+            debugLog('📡 Dynamic task uncomplete response:', data);
 
             if (data.success) {
               // Update local task state to reflect the change
@@ -342,23 +343,23 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
               if (task.reward) {
                 const reverseReward = task.reward.replace(/\+/g, '-');
                 applyStatChanges(reverseReward);
-                console.log('📉 Reversed stat changes:', reverseReward);
+                debugLog('📉 Reversed stat changes:', reverseReward);
               }
 
               // Update streak based on API response
               updateUserStats({ currentStreak: data.streak });
 
-              console.log('✅ Dynamic task uncomplete successful, refreshing weekly stats');
+              debugLog('✅ Dynamic task uncomplete successful, refreshing weekly stats');
 
               // Immediately refresh weekly stats after task uncompletion
               setRefreshTrigger(prev => {
                 const newValue = prev + 1;
-                console.log('🔄 Weekly stats refresh: incrementing from', prev, 'to', newValue);
+                debugLog('🔄 Weekly stats refresh: incrementing from', prev, 'to', newValue);
                 return newValue;
               });
             }
           } else {
-            console.log('⚠️ Failed to uncomplete via API, falling back to local toggle');
+            debugLog('⚠️ Failed to uncomplete via API, falling back to local toggle');
             // Fallback to local toggle if API fails
             setTasks(prevTasks => prevTasks.map(t =>
               t.id === task.id
@@ -370,7 +371,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
             if (task.reward) {
               const reverseReward = task.reward.replace(/\+/g, '-');
               applyStatChanges(reverseReward);
-              console.log('📉 Reversed stat changes locally:', reverseReward);
+              debugLog('📉 Reversed stat changes locally:', reverseReward);
             }
           }
         }
@@ -389,7 +390,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
 
         if (response.ok) {
           const data = await response.json();
-          console.log('📡 Backend response:', data);
+          debugLog('📡 Backend response:', data);
 
           if (data.success) {
             // Update local task state to reflect the change
@@ -403,17 +404,17 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
             if (data.task_completed && task.reward) {
               // Task completed: apply positive stat changes
               applyStatChanges(task.reward);
-              console.log('📈 Applied stat changes:', task.reward);
+              debugLog('📈 Applied stat changes:', task.reward);
             } else if (!data.task_completed && task.reward) {
               // Task uncompleted: reverse the stat changes
               const reverseReward = task.reward.replace(/\+/g, '-');
               applyStatChanges(reverseReward);
-              console.log('📉 Reversed stat changes:', reverseReward);
+              debugLog('📉 Reversed stat changes:', reverseReward);
             }
 
             // Check for level up from API response (only when completing task)
             if (data.task_completed && data.user_stats && data.user_stats.level_up) {
-              console.log('🎉 Level up detected!', data.user_stats);
+              debugLog('🎉 Level up detected!', data.user_stats);
               const oldStage = getAvatarStage(data.user_stats.old_level);
               const newStage = getAvatarStage(data.user_stats.level);
 
@@ -452,12 +453,12 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
               }));
             }
 
-            console.log('✅ Task toggle successful, refreshing weekly stats');
+            debugLog('✅ Task toggle successful, refreshing weekly stats');
 
             // Immediately refresh weekly stats after task completion/uncompletion
             setRefreshTrigger(prev => {
               const newValue = prev + 1;
-              console.log('🔄 Weekly stats refresh: incrementing from', prev, 'to', newValue);
+              debugLog('🔄 Weekly stats refresh: incrementing from', prev, 'to', newValue);
               return newValue;
             });
           } else {
@@ -473,7 +474,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
       // Fallback to local stat changes if API fails
       if (task.reward) {
         applyStatChanges(task.reward);
-        console.log('📈 Applied fallback stat changes:', task.reward);
+        debugLog('📈 Applied fallback stat changes:', task.reward);
 
         // Still refresh weekly stats on fallback
         setRefreshTrigger(prev => prev + 1);
@@ -519,21 +520,21 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
       }
     }
 
-    console.log('🎲 Selected daily tasks:', selectedTasks);
+    debugLog('🎲 Selected daily tasks:', selectedTasks);
     return selectedTasks;
   };
 
     const fetchTasks = useCallback(async (preventScroll = false) => {
-    console.log('fetchTasks called, currentUser:', currentUser);
+    debugLog('fetchTasks called, currentUser:', currentUser);
     try {
       if (!preventScroll) {
         setLoading(true);
       }
 
       const url = `${API_ENDPOINTS.tasks}?user=${currentUser || 'tester'}`;
-      console.log('Fetching tasks from:', url);
+      debugLog('Fetching tasks from:', url);
       const { data } = await apiRequest(url);
-      console.log('All tasks fetched:', data);
+      debugLog('All tasks fetched:', data);
 
       // Select 3 random daily tasks from the full list
       const selectedTasks = selectDailyTasks(data);
@@ -561,12 +562,12 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
   }, []); // Remove currentUser dependency
 
   const fetchUserStats = useCallback(async () => {
-    console.log('fetchUserStats called, currentUser:', currentUser);
+    debugLog('fetchUserStats called, currentUser:', currentUser);
     try {
       const url = `${API_ENDPOINTS.userStats}?user=${currentUser || 'tester'}`;
-      console.log('Fetching user stats from:', url);
+      debugLog('Fetching user stats from:', url);
       const { data } = await apiRequest(url);
-      console.log('User stats fetched successfully:', data);
+      debugLog('User stats fetched successfully:', data);
 
       setLocalUserStats(data);
       updateUserStats({
@@ -604,7 +605,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
 
   // Initialize data on component mount only once
   useEffect(() => {
-    console.log('Homepage useEffect running, about to fetch data');
+    debugLog('Homepage useEffect running, about to fetch data');
     fetchTasks();
     fetchUserStats();
   }, []); // Only run once on mount
@@ -622,7 +623,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
     };
   }, []);
 
-  console.log('Homepage about to render, loading:', loading, 'error:', error);
+  debugLog('Homepage about to render, loading:', loading, 'error:', error);
 
   if (loading) {
     return (
