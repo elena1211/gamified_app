@@ -11,6 +11,7 @@ import os
 
 from django.core.asgi import get_asgi_application
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend.settings')
+# Use production settings for Railway deployment
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend.settings_prod')
 
 application = get_asgi_application()

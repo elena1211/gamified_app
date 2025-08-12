@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { cleanTaskTitle } from "../utils/taskUtils";
 
 export default function TaskList({ tasks: initialTasks, onTaskComplete }) {
   const [tasks, setTasks] = useState(initialTasks);
@@ -15,11 +16,6 @@ export default function TaskList({ tasks: initialTasks, onTaskComplete }) {
     if (onTaskComplete) {
       onTaskComplete(task);
     }
-  };
-
-  // Helper function to clean task title (remove timestamp)
-  const cleanTaskTitle = (title) => {
-    return title.replace(/ - \d{2}:\d{2}:\d{2}$/, '');
   };
 
   return (

@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { API_ENDPOINTS, apiRequest } from '../config/api.js';
 import { COLORS, EMOJIS, ANIMATION_CLASSES, LAYOUT_CLASSES } from '../config/constants.js';
-import { useTranslation } from 'react-i18next';
 
 const GOAL_SUGGESTIONS = [
   {
@@ -31,8 +30,6 @@ const GOAL_SUGGESTIONS = [
 ];
 
 export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
-  const { t } = useTranslation(['common', 'settings']);
-  
   // Add custom goal option with translation
   const COMPLETE_GOAL_SUGGESTIONS = [
     ...GOAL_SUGGESTIONS,
@@ -50,7 +47,7 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
     customGoalTitle: '',
     customGoalDescription: ''
   });
-  
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [step, setStep] = useState(1); // 1: User Info, 2: Goal Selection
@@ -78,38 +75,38 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
       setError('All fields are required');
       return;
     }
-    
+
     if (formData.password.length < 6) {
       setError('Password must be at least 6 characters');
       return;
     }
-    
+
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       return;
     }
-    
+
     setError('');
     setStep(2);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     // Validation for step 2
     if (!formData.selectedGoal) {
       setError('Please select a goal');
       return;
     }
-    
+
     if (formData.selectedGoal.title === "Custom Goal" && !formData.customGoalTitle.trim()) {
       setError('Goal Title is required');
       return;
     }
-    
+
     setLoading(true);
     setError('');
-    
+
     try {
       const { data } = await apiRequest(API_ENDPOINTS.register, {
         method: 'POST',
@@ -121,7 +118,7 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
           goal_description: formData.customGoalDescription
         })
       });
-      
+
       // Registration successful
       onRegisterSuccess(data.username);
     } catch (err) {
@@ -173,7 +170,7 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
           {step === 1 && (
             <div className="space-y-4">
               <h2 className="text-xl font-semibold text-gray-800 mb-4">Account Information</h2>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Username *
@@ -245,7 +242,7 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
           {step === 2 && (
             <div className="space-y-4">
               <h2 className="text-xl font-semibold text-gray-800 mb-4">Set Your Main Goal</h2>
-              
+
               <div className="space-y-3 max-h-64 overflow-y-auto">
                 {COMPLETE_GOAL_SUGGESTIONS.map((goal, index) => (
                   <div

@@ -10,7 +10,6 @@ import random
 import math
 from django.db.models import Count, Q
 
-
 def get_or_create_user(username):
     """Helper function to get or create a user with default attributes"""
     try:
@@ -53,7 +52,6 @@ def get_or_create_user(username):
 
         print(f"✅ Auto-created new user: {username}")
         return user
-
 
 class TaskListView(APIView):
     """API view that returns task data from database"""
@@ -128,7 +126,6 @@ class TaskListView(APIView):
 
         return Response(tasks)
 
-
 class TaskDetailView(APIView):
     """API view for individual task details"""
     def get(self, request, pk):
@@ -149,7 +146,6 @@ class TaskDetailView(APIView):
             return Response(task_data)
         except Task.DoesNotExist:
             return Response({"error": "Task not found"}, status=404)
-
 
 class GoalView(APIView):
     """API view for user's main goal"""
@@ -193,7 +189,6 @@ class GoalView(APIView):
             }
             return Response(default_goal)
 
-
 from django.db import models
 def calculate_task_exp(task):
     """Calculate EXP gained from completing a task"""
@@ -205,7 +200,6 @@ def calculate_task_exp(task):
 
     return base_exp
 
-
 def calculate_level_from_exp(total_exp):
     """Calculate current level from total EXP"""
     level = 1
@@ -213,13 +207,11 @@ def calculate_level_from_exp(total_exp):
         level += 1
     return level
 
-
 def get_exp_for_level(level):
     """Calculate EXP required for a specific level"""
     if level <= 1:
         return 0
     return math.floor(100 * math.pow(1.3, level - 1))
-
 
 class TaskCompleteView(APIView):
     """API view for marking tasks as complete or uncomplete"""
@@ -357,7 +349,6 @@ class UserStatsView(APIView):
                 "last_activity_date": None,
                 "total_completed_tasks": 0
             })
-
 
 class RegisterView(APIView):
     """API view for user registration"""

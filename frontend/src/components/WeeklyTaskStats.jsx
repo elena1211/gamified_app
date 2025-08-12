@@ -45,7 +45,7 @@ export default function WeeklyTaskStats({ currentUser, refreshTrigger }) {
   useEffect(() => {
     debugLog('🔄 WeeklyTaskStats: useEffect triggered with currentUser:', currentUser, 'refreshTrigger:', refreshTrigger);
     fetchWeeklyStats();
-  }, [currentUser, refreshTrigger]); // Add refreshTrigger dependency
+  }, [currentUser, refreshTrigger]); // Remove fetchWeeklyStats to prevent infinite re-renders
 
   if (loading) {
     return (

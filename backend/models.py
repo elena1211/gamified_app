@@ -3,7 +3,6 @@ from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 from datetime import date, timedelta
 
-
 class User(AbstractUser):
     level = models.PositiveIntegerField(default=1)
     exp = models.PositiveIntegerField(default=0)
@@ -68,7 +67,6 @@ class User(AbstractUser):
             self.all_tasks_completed_today = False
             self.save()
 
-
 # Model to store various attributes for a user
 class UserAttribute(models.Model):
     ATTRIBUTE_CHOICES = [
@@ -101,7 +99,6 @@ class UserAttribute(models.Model):
     def __str__(self):
         return f"{self.user.username} - {self.get_name_display()}: {self.value}"
 
-
 class Reward(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField()
@@ -114,7 +111,6 @@ class Reward(models.Model):
 
     def __str__(self):
         return self.name
-
 
 class UserReward(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -130,7 +126,6 @@ class UserReward(models.Model):
     def __str__(self):
         return f"{self.user.username} unlocked {self.reward.name}"
 
-
 class Goal(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     title = models.CharField(max_length=150)
@@ -145,7 +140,6 @@ class Goal(models.Model):
     def __str__(self):
         return self.title
 
-
 class SubGoal(models.Model):
     goal = models.ForeignKey(Goal, on_delete=models.CASCADE, related_name='subgoals')
     title = models.CharField(max_length=150)
@@ -158,7 +152,6 @@ class SubGoal(models.Model):
 
     def __str__(self):
         return f"{self.goal.title} - {self.title}"
-
 
 class Task(models.Model):
     ATTRIBUTE_CHOICES = [
@@ -187,7 +180,6 @@ class Task(models.Model):
 
     def __str__(self):
         return self.title
-
 
 class UserTaskLog(models.Model):
     STATUS_CHOICES = [

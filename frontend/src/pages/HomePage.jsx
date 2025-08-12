@@ -9,7 +9,7 @@ import TimeLimitedTaskPopup from '../components/TimeLimitedTaskPopup';
 import Modal from '../components/Modal';
 import WeeklyTaskStats from '../components/WeeklyTaskStats';
 import LevelUpModal from '../components/LevelUpModal';
-import { useAppContext } from '../context/AppContext';
+import { useAppContext } from '../context/hooks';
 import { getAvatarStage } from '../utils/avatar';
 import { debugLog } from '../utils/logger';
 
@@ -45,7 +45,6 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
   const {
     attributeStats,
     applyStatChanges,
-    userStats,
     updateUserStats
   } = useAppContext();
 
@@ -559,7 +558,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
         setLoading(false);
       }
     }
-  }, []); // Remove currentUser dependency
+  }, [currentUser]); // Include currentUser dependency
 
   const fetchUserStats = useCallback(async () => {
     debugLog('fetchUserStats called, currentUser:', currentUser);
@@ -601,27 +600,28 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
         streak: 3
       }));
     }
-  }, []); // Remove dependencies
+  }, [currentUser, updateUserStats]); // Include dependencies
 
   // Initialize data on component mount only once
   useEffect(() => {
     debugLog('Homepage useEffect running, about to fetch data');
     fetchTasks();
     fetchUserStats();
-  }, []); // Only run once on mount
+  }, [currentUser]); // Only depend on currentUser, not the functions
 
   // Show random time-limited task after 3 seconds for testing
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const randomTask = TIME_LIMITED_TASKS[Math.floor(Math.random() * TIME_LIMITED_TASKS.length)];
-      setCurrentTimeLimitedTask(randomTask);
-      setShowTimeLimitedTask(true);
-    }, 3000);
+  // Temporarily disabled to reduce flicker
+  // useEffect(() => {
+  //   const timer = setTimeout(() => {
+  //     const randomTask = TIME_LIMITED_TASKS[Math.floor(Math.random() * TIME_LIMITED_TASKS.length)];
+  //     setCurrentTimeLimitedTask(randomTask);
+  //     setShowTimeLimitedTask(true);
+  //   }, 3000);
 
-    return () => {
-      clearTimeout(timer);
-    };
-  }, []);
+  //   return () => {
+  //     clearTimeout(timer);
+  //   };
+  // }, []);
 
   debugLog('Homepage about to render, loading:', loading, 'error:', error);
 
