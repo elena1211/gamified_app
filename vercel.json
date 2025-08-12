@@ -19,7 +19,6 @@
       "dest": "/index.html"
     }
   ],
-  "functions": {},
   "env": {
     "VITE_API_URL": "https://web-production-39765.up.railway.app/api"
   }
