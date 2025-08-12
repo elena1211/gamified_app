@@ -559,32 +559,25 @@ class DynamicTaskCompleteView(APIView):
         try:
             user = User.objects.get(username=username)
             
-            # Create or get a generic task record for this dynamic task
-            task, created = Task.objects.get_or_create(
-                title=task_title,
-                user=user,
-                defaults={
-                    'description': f'Dynamic {task_type} task',
-                    'reward_point': reward_points,
-                    'attribute': attribute,
-                    'difficulty': 1 if task_type == 'daily' else 2,
-                    'deadline': timezone.now() + timedelta(days=1),  # Set deadline to tomorrow
-                    'is_random': True,  # Mark as random/dynamic task
-                    'created_by_ai': True  # Mark as AI/system generated
-                }
-            )
-            
-            # Check if already completed today
-            today = date.today()
-            existing_log = UserTaskLog.objects.filter(
-                user=user,
-                task=task,
-                status='completed',
-                completed_at__date=today
-            ).first()
-            
-            if not existing_log:
-                # Create completion log
+            # For time-limited tasks, create unique task each time to allow multiple completions
+            if task_type == 'time_limited':
+                # Add timestamp to make each time-limited task unique
+                unique_title = f"{task_title} - {timezone.now().strftime('%H:%M:%S')}"
+                
+                # Create a new task record for each time-limited task completion
+                task = Task.objects.create(
+                    title=unique_title,
+                    user=user,
+                    description=f'Time-limited task completed at {timezone.now().strftime("%H:%M")}',
+                    reward_point=reward_points,
+                    attribute=attribute,
+                    difficulty=2,
+                    deadline=timezone.now() + timedelta(days=1),
+                    is_random=True,
+                    created_by_ai=True
+                )
+                
+                # Create completion log immediately
                 UserTaskLog.objects.create(
                     user=user,
                     task=task,
@@ -598,15 +591,124 @@ class DynamicTaskCompleteView(APIView):
                 
                 return Response({
                     'success': True,
-                    'message': f'{task_type.title()} task completed successfully',
+                    'message': f'Time-limited task completed successfully',
                     'task_completed': True,
+                    'streak': user.current_streak
+                })
+            
+            else:
+                # For daily tasks, use existing logic (prevent duplicates per day)
+                task, created = Task.objects.get_or_create(
+                    title=task_title,
+                    user=user,
+                    defaults={
+                        'description': f'Dynamic {task_type} task',
+                        'reward_point': reward_points,
+                        'attribute': attribute,
+                        'difficulty': 1,
+                        'deadline': timezone.now() + timedelta(days=1),
+                        'is_random': True,
+                        'created_by_ai': True
+                    }
+                )
+                
+                # Check if already completed today
+                today = date.today()
+                existing_log = UserTaskLog.objects.filter(
+                    user=user,
+                    task=task,
+                    status='completed',
+                    completed_at__date=today
+                ).first()
+                
+                if not existing_log:
+                    # Create completion log
+                    UserTaskLog.objects.create(
+                        user=user,
+                        task=task,
+                        status='completed',
+                        completed_at=timezone.now(),
+                        earned_points=reward_points
+                    )
+                    
+                    # Update user streak
+                    user.update_streak()
+                    
+                    return Response({
+                        'success': True,
+                        'message': f'Daily task completed successfully',
+                        'task_completed': True,
+                        'streak': user.current_streak
+                    })
+                else:
+                    return Response({
+                        'success': True,
+                        'message': 'Daily task already completed today',
+                        'task_completed': True,
+                        'streak': user.current_streak
+                    })
+                
+        except User.DoesNotExist:
+            return Response({
+                'success': False,
+                'error': 'User not found'
+            }, status=404)
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+
+
+class DynamicTaskUncompleteView(APIView):
+    """API view for uncompleting dynamic daily tasks"""
+    def post(self, request):
+        username = request.data.get('user', 'elena')
+        task_title = request.data.get('task_title', '')
+        
+        try:
+            user = User.objects.get(username=username)
+            
+            # Find the task by title for this user
+            task = Task.objects.filter(
+                title=task_title,
+                user=user,
+                is_random=True
+            ).first()
+            
+            if not task:
+                return Response({
+                    'success': False,
+                    'error': 'Dynamic task not found'
+                }, status=404)
+            
+            # Find today's completion log for this task
+            today = date.today()
+            completion_log = UserTaskLog.objects.filter(
+                user=user,
+                task=task,
+                status='completed',
+                completed_at__date=today
+            ).first()
+            
+            if completion_log:
+                # Delete the completion log
+                completion_log.delete()
+                
+                # Update user streak
+                user.update_streak()
+                
+                return Response({
+                    'success': True,
+                    'message': 'Daily task uncompleted successfully',
+                    'task_completed': False,
                     'streak': user.current_streak
                 })
             else:
                 return Response({
-                    'success': True,
-                    'message': 'Task already completed today',
-                    'task_completed': True,
+                    'success': False,
+                    'message': 'No completion record found for today',
+                    'task_completed': False,
                     'streak': user.current_streak
                 })
                 
