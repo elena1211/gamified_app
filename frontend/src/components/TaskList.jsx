@@ -11,7 +11,7 @@ export default function TaskList({ tasks: initialTasks, onTaskComplete }) {
   const toggleTask = (id) => {
     const task = tasks.find(t => t.id === id);
     
-    // Call the completion handler which now handles both complete and uncomplete
+    // Call the completion handler which handles both complete and uncomplete
     if (onTaskComplete) {
       onTaskComplete(task);
     }

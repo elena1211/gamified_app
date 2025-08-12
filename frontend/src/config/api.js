@@ -9,6 +9,7 @@ export const API_ENDPOINTS = {
   // Tasks
   tasks: `${API_BASE_URL}/tasks/`,
   taskComplete: `${API_BASE_URL}/tasks/complete/`,
+  weeklyStats: `${API_BASE_URL}/tasks/weekly-stats/`,
   
   // User
   userStats: `${API_BASE_URL}/user/stats/`,

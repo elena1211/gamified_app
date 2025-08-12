@@ -465,6 +465,88 @@ class ChangePasswordView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class WeeklyStatsView(APIView):
+    """API view for weekly task completion statistics"""
+    def get(self, request):
+        username = request.GET.get('user', 'elena')
+        
+        try:
+            user = User.objects.get(username=username)
+            
+            # Calculate date range for current week (Monday to Sunday)
+            today = date.today()
+            monday = today - timedelta(days=today.weekday())
+            sunday = monday + timedelta(days=6)
+            
+            # Get completed tasks for this week
+            completed_this_week = UserTaskLog.objects.filter(
+                user=user,
+                status='completed',
+                completed_at__date__gte=monday,
+                completed_at__date__lte=sunday
+            ).count()
+            
+            # Get daily breakdown for the week
+            daily_stats = []
+            for i in range(7):
+                day = monday + timedelta(days=i)
+                day_name = day.strftime('%A')[:3]  # Mon, Tue, Wed, etc.
+                completed_count = UserTaskLog.objects.filter(
+                    user=user,
+                    status='completed',
+                    completed_at__date=day
+                ).count()
+                
+                daily_stats.append({
+                    'date': day.strftime('%Y-%m-%d'),
+                    'day_name': day_name,
+                    'completed_tasks': completed_count,
+                    'is_today': day == today
+                })
+            
+            # Get total tasks available (for completion percentage)
+            total_tasks = Task.objects.filter(user=user).count()
+            
+            # Calculate weekly completion percentage
+            max_possible_completions = total_tasks * 7  # 7 days
+            completion_percentage = (completed_this_week / max_possible_completions * 100) if max_possible_completions > 0 else 0
+            
+            return Response({
+                'week_start': monday.strftime('%Y-%m-%d'),
+                'week_end': sunday.strftime('%Y-%m-%d'),
+                'total_completed_this_week': completed_this_week,
+                'total_available_tasks': total_tasks,
+                'completion_percentage': round(completion_percentage, 1),
+                'daily_breakdown': daily_stats
+            })
+            
+        except User.DoesNotExist:
+            # Return default stats if user doesn't exist
+            today = date.today()
+            monday = today - timedelta(days=today.weekday())
+            sunday = monday + timedelta(days=6)
+            
+            daily_stats = []
+            for i in range(7):
+                day = monday + timedelta(days=i)
+                day_name = day.strftime('%A')[:3]
+                daily_stats.append({
+                    'date': day.strftime('%Y-%m-%d'),
+                    'day_name': day_name,
+                    'completed_tasks': 0,
+                    'is_today': day == today
+                })
+            
+            return Response({
+                'week_start': monday.strftime('%Y-%m-%d'),
+                'week_end': sunday.strftime('%Y-%m-%d'),
+                'total_completed_this_week': 0,
+                'total_available_tasks': 0,
+                'completion_percentage': 0,
+                'daily_breakdown': daily_stats
+            })
+
+
 class DeleteAccountView(APIView):
     """API view for deleting user account"""
     def post(self, request):

@@ -8,6 +8,7 @@ import TaskList from '../components/TaskList';
 import MainGoal from '../components/MainGoal';
 import TimeLimitedTaskPopup from '../components/TimeLimitedTaskPopup';
 import Modal from '../components/Modal';
+import WeeklyTaskStats from '../components/WeeklyTaskStats';
 import { useAppContext } from '../context/AppContext';
 
 // Local constants for this component
@@ -72,6 +73,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
   const [showWarning, setShowWarning] = useState(false);
   const [warningType, setWarningType] = useState('');
   const [showDismissConfirm, setShowDismissConfirm] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0); // Add refresh trigger for weekly stats
 
   // Reference for progress panel refresh function
   const progressRefresh = useRef(null);
@@ -92,6 +94,9 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
   const handleAcceptTask = () => {
     if (currentTimeLimitedTask) {
       applyStatChanges(currentTimeLimitedTask.reward);
+      
+      // Refresh weekly stats after time-limited task completion
+      setRefreshTrigger(prev => prev + 1);
     }
     
     setShowTimeLimitedTask(false);
@@ -151,6 +156,8 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
 
   const handleTaskComplete = async (task) => {    
     try {
+      console.log('🎯 Toggling task completion:', task.id, task.title, 'Current status:', task.completed);
+      
       // Call backend API to toggle task completion status
       const response = await fetch(API_ENDPOINTS.taskComplete, {
         method: 'POST',
@@ -165,6 +172,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
 
       if (response.ok) {
         const data = await response.json();
+        console.log('📡 Backend response:', data);
         
         if (data.success) {
           // Update local task state to reflect the change
@@ -194,12 +202,18 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
             return newUser;
           });
 
-          // No need to fetchUserStats again since we already have the data
-          
           // Refresh progress panel when task completion changes
           if (progressRefresh.current) {
             progressRefresh.current();
           }
+          
+          console.log('✅ Task toggle successful, refreshing weekly stats in 0.3s');
+          
+          // Refresh weekly stats after task completion/uncompletion
+          setTimeout(() => {
+            setRefreshTrigger(prev => prev + 1);
+            console.log('🔄 Weekly stats refresh triggered');
+          }, 300);
         } else {
           console.error('Task completion failed');
         }
@@ -213,6 +227,9 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
       if (task.reward) {
         applyStatChanges(task.reward);
         console.log('📈 Applied fallback stat changes:', task.reward);
+        
+        // Still refresh weekly stats on fallback
+        setRefreshTrigger(prev => prev + 1);
       }
     }
   };
@@ -259,7 +276,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
     return selectedTasks;
   };
 
-  const fetchTasks = useCallback(async (preventScroll = false) => {
+    const fetchTasks = useCallback(async (preventScroll = false) => {
     console.log('fetchTasks called, currentUser:', currentUser);
     try {
       if (!preventScroll) {
@@ -385,6 +402,11 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
         </div>
         {/* Main Goal */}
         <MainGoal currentUser={currentUser} />
+        {/* Weekly Stats Component */}
+        <div className="bg-white rounded-2xl p-8 shadow-md">
+          <WeeklyTaskStats currentUser={currentUser} refreshTrigger={refreshTrigger} />
+        </div>
+        
         {/* Stats Panel */}
         <div className="bg-white rounded-2xl p-8 shadow-md">
           <StatsPanel stats={attributeStats} />
