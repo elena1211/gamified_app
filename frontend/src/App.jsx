@@ -6,18 +6,19 @@ import WelcomePage from './pages/WelcomePage';
 import SystemSettingsPage from './pages/SystemSettingsPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import { AppProvider, useAppContext } from './context/AppContext';
+import { debugLog } from './utils/logger';
 
 function AppRoutes() {
-  const { 
-    currentUser, 
-    isLoading, 
-    handleLoginSuccess, 
-    handleLogout 
+  const {
+    currentUser,
+    isLoading,
+    handleLoginSuccess,
+    handleLogout
   } = useAppContext();
-  
+
   const navigate = useNavigate();
 
-  console.log('AppRoutes rendering, currentUser:', currentUser, 'isLoading:', isLoading);
+  debugLog('AppRoutes rendering, currentUser:', currentUser, 'isLoading:', isLoading);
 
   const handleRegisterSuccess = (username) => {
     handleLoginSuccess(username);
@@ -59,82 +60,82 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route 
-        path="/welcome" 
+      <Route
+        path="/welcome"
         element={
-          currentUser ? 
-            <Navigate to="/home" replace /> : 
-            <WelcomePage 
+          currentUser ?
+            <Navigate to="/home" replace /> :
+            <WelcomePage
               onLoginSuccess={handleLoginSuccess}
               onNavigateToRegister={handleNavigateToRegister}
             />
-        } 
+        }
       />
-      <Route 
-        path="/register" 
+      <Route
+        path="/register"
         element={
-          currentUser ? 
-            <Navigate to="/home" replace /> : 
-            <RegisterPage 
+          currentUser ?
+            <Navigate to="/home" replace /> :
+            <RegisterPage
               onRegisterSuccess={handleRegisterSuccess}
               onNavigateBack={handleNavigateBack}
             />
-        } 
+        }
       />
-      <Route 
-        path="/home" 
+      <Route
+        path="/home"
         element={
-          currentUser ? 
+          currentUser ?
             <ErrorBoundary>
-              <HomePage 
-                currentUser={currentUser} 
+              <HomePage
+                currentUser={currentUser}
                 onLogout={handleLogoutAndNavigate}
                 onNavigateToSettings={handleNavigateToSettings}
                 onNavigateToTaskManager={handleNavigateToTaskManager}
               />
-            </ErrorBoundary> : 
+            </ErrorBoundary> :
             <Navigate to="/welcome" replace />
-        } 
+        }
       />
-      <Route 
-        path="/tasks" 
+      <Route
+        path="/tasks"
         element={
-          currentUser ? 
+          currentUser ?
             <ErrorBoundary>
-              <TaskManagerPage 
+              <TaskManagerPage
                 currentUser={currentUser}
                 onNavigateToHome={handleNavigateToHome}
                 onNavigateToSettings={handleNavigateToSettings}
               />
-            </ErrorBoundary> : 
+            </ErrorBoundary> :
             <Navigate to="/welcome" replace />
-        } 
+        }
       />
-      <Route 
-        path="/settings" 
+      <Route
+        path="/settings"
         element={
-          currentUser ? 
+          currentUser ?
             <ErrorBoundary>
-              <SystemSettingsPage 
+              <SystemSettingsPage
                 currentUser={currentUser}
                 onLogout={handleLogoutAndNavigate}
                 onNavigateToHome={handleNavigateToHome}
                 onNavigateToTaskManager={handleNavigateToTaskManager}
               />
-            </ErrorBoundary> : 
+            </ErrorBoundary> :
             <Navigate to="/welcome" replace />
-        } 
+        }
       />
-      <Route 
-        path="/" 
-        element={<Navigate to={currentUser ? "/home" : "/welcome"} replace />} 
+      <Route
+        path="/"
+        element={<Navigate to={currentUser ? "/home" : "/welcome"} replace />}
       />
     </Routes>
   );
 }
 
 function App() {
-  console.log('App component is rendering');
+  debugLog('App component is rendering');
   return (
     <ErrorBoundary>
       <AppProvider>

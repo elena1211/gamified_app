@@ -1,5 +1,5 @@
-// Simple logger utility for development
-const isDevelopment = process.env.NODE_ENV === 'development';
+// Unified logging utility for development
+const isDevelopment = import.meta.env.MODE === 'development';
 
 export const logger = {
   log: (...args) => {
@@ -42,3 +42,8 @@ export const logger = {
     }
   }
 };
+
+// Export simplified debug functions for backward compatibility
+export const debugLog = logger.log;
+export const debugWarn = logger.warn;
+export const debugError = logger.error;

@@ -12,20 +12,20 @@ export default function ProgressPanel({ currentUser, onRefresh = null }) {
   const fetchProgressStats = async () => {
     try {
       setLoading(true);
-      
+
       // Fetch both today and week stats in parallel
-      const [todayResponse, weekResponse] = await Promise.all([
-        apiRequest(`${API_ENDPOINTS.userProgress}?user=${currentUser || 'elena'}&range=today`),
-        apiRequest(`${API_ENDPOINTS.userProgress}?user=${currentUser || 'elena'}&range=week`)
+      const [todayData, weekData] = await Promise.all([
+        apiRequest(`${API_ENDPOINTS.userProgress}?user=${currentUser || 'tester'}&range=today`),
+        apiRequest(`${API_ENDPOINTS.userProgress}?user=${currentUser || 'tester'}&range=week`)
       ]);
-      
-      setTodayStats(todayResponse.data);
-      setWeekStats(weekResponse.data);
+
+      setTodayStats(todayData.data);
+      setWeekStats(weekData.data);
       setError(null);
     } catch (err) {
       console.error('Error fetching progress stats:', err);
       setError('Failed to load progress data');
-      
+
       // Set fallback data
       setTodayStats({
         range: 'today',
@@ -122,15 +122,15 @@ export default function ProgressPanel({ currentUser, onRefresh = null }) {
                 {todayStats.completed}/{todayStats.assigned} tasks
               </div>
             </div>
-            
-            <ProgressBar 
+
+            <ProgressBar
               value={todayStats.completion_rate}
               color={getProgressColor(todayStats.completion_rate)}
               label=""
               showPercentage={true}
               animated={true}
             />
-            
+
             <p className="text-sm text-gray-600 italic">
               {getMotivationMessage(todayStats.completion_rate)}
             </p>
@@ -149,20 +149,20 @@ export default function ProgressPanel({ currentUser, onRefresh = null }) {
                 {weekStats.completed}/{weekStats.assigned} tasks
               </div>
             </div>
-            
-            <ProgressBar 
+
+            <ProgressBar
               value={weekStats.completion_rate}
               color={getProgressColor(weekStats.completion_rate)}
               label=""
               showPercentage={true}
               animated={true}
             />
-            
+
             {weekStats.streak > 0 && (
               <div className="flex items-center space-x-2 text-sm">
                 <span className="text-orange-500">🔥</span>
                 <span className="text-gray-600">
-                  {weekStats.streak} day streak! 
+                  {weekStats.streak} day streak!
                 </span>
               </div>
             )}

@@ -7,6 +7,7 @@ import WeeklyTaskStats from '../components/WeeklyTaskStats';
 import LevelUpModal from '../components/LevelUpModal';
 import { useAppContext } from '../context/AppContext';
 import { getAvatarStage } from '../utils/avatar';
+import { debugLog } from '../utils/logger';
 
 // Move TaskCard outside the main component to prevent re-creation
 const TaskCard = ({
@@ -268,7 +269,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
   const fetchAllTasks = async () => {
     // Only fetch if tasks are empty (avoid refetching on navigation)
     if (tasks.length > 0) {
-      console.log('Tasks already loaded, skipping fetch');
+      debugLog('Tasks already loaded, skipping fetch');
       return;
     }
 
@@ -308,7 +309,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
 
   const fetchCompletedHistory = async () => {
     try {
-      console.log('🔍 Fetching completed tasks history from API...');
+      debugLog('🔍 Fetching completed tasks history from API...');
       const { data } = await apiRequest(`${API_ENDPOINTS.completedHistory}?user=${currentUser}&limit=50`);
 
       if (data.success && data.completed_tasks) {
@@ -324,9 +325,9 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
         }));
 
         updateCompletedTasksState(transformedHistory);
-        console.log('✅ Loaded', transformedHistory.length, 'completed tasks from API');
+        debugLog('✅ Loaded', transformedHistory.length, 'completed tasks from API');
       } else {
-        console.log('⚠️ No completed tasks found in API response');
+        debugLog('⚠️ No completed tasks found in API response');
         updateCompletedTasksState([]);
       }
     } catch (error) {
@@ -354,7 +355,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
       // For now, we'll add it locally and assign a temporary ID
       const taskData = {
         ...newTask,
-        user: currentUser || 'elena',
+        user: currentUser || 'tester',
         completed: false
       };
 
@@ -391,7 +392,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
     if (!confirm(`Complete "${task.title}"?`)) return;
 
     try {
-      console.log('🎯 Attempting to complete task:', task.id, task.title);
+      debugLog('🎯 Attempting to complete task:', task.id, task.title);
 
       // Call backend API to mark task as complete - use fetch instead of apiRequest for better error handling
       const response = await fetch(API_ENDPOINTS.taskComplete, {
@@ -401,7 +402,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
         },
         body: JSON.stringify({
           task_id: task.id,
-          user: currentUser || 'elena'
+          user: currentUser || 'tester'
         })
       });
 
@@ -410,7 +411,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
       }
 
       const data = await response.json();
-      console.log('📡 Backend response:', data);
+      debugLog('📡 Backend response:', data);
 
       if (data.success) {
         const completedTask = {
@@ -426,7 +427,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
 
         // Check for level up from API response
         if (data.user_stats && data.user_stats.level_up) {
-          console.log('🎉 Level up detected in TaskManager!', data.user_stats);
+          debugLog('🎉 Level up detected in TaskManager!', data.user_stats);
           const oldStage = getAvatarStage(data.user_stats.old_level);
           const newStage = getAvatarStage(data.user_stats.level);
 
@@ -471,16 +472,16 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
         updateTasksState(updatedActiveTasks);
         updateCompletedTasksState(updatedCompletedTasks);
 
-        console.log('✅ Task completed successfully, refreshing weekly stats in 0.5s');
+        debugLog('✅ Task completed successfully, refreshing weekly stats in 0.5s');
 
         // Delay refresh to ensure backend has processed the completion
         setTimeout(() => {
           setRefreshTrigger(prev => prev + 1);
-          console.log('🔄 Weekly stats refresh triggered');
+          debugLog('🔄 Weekly stats refresh triggered');
         }, 500);
 
-        console.log('📈 Applied stat changes:', rewardString);
-        console.log('📋 Updated task lists - Active:', updatedActiveTasks.length, 'Completed:', updatedCompletedTasks.length);
+        debugLog('📈 Applied stat changes:', rewardString);
+        debugLog('📋 Updated task lists - Active:', updatedActiveTasks.length, 'Completed:', updatedCompletedTasks.length);
       } else {
         throw new Error(data.message || 'Failed to complete task');
       }
