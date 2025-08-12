@@ -63,10 +63,10 @@ export const AppProvider = ({ children }) => {
       // Load user stats, tasks, and goal when user logs in
       // This prevents data from being reset on page navigation
       console.log('Loading user data for:', username);
-      
+
       // You can fetch this data from API here
       // For now, we'll keep the data in context to prevent resets
-      
+
     } catch (error) {
       console.error('Error loading user data:', error);
     }
@@ -120,24 +120,24 @@ export const AppProvider = ({ children }) => {
   const applyStatChanges = (changeString) => {
     // Parse change strings like "+3 Intelligence, +2 Discipline" or "-1 Energy, -1 Intelligence"
     const changes = changeString.split(',').map(change => change.trim());
-    
+
     setAttributeStats(prevStats => {
       const newStats = { ...prevStats };
-      
+
       changes.forEach(change => {
         const match = change.match(/([+-]\d+)\s+(\w+)/i);
         if (match) {
           const [, valueStr, statName] = match;
           const value = parseInt(valueStr);
           const statKey = statName.toLowerCase();
-          
+
           if (Object.prototype.hasOwnProperty.call(newStats, statKey)) {
-            newStats[statKey] = Math.max(0, Math.min(100, newStats[statKey] + value));
+            newStats[statKey] = Math.max(0, Math.min(1000, newStats[statKey] + value));
             console.log(`📊 Updated ${statKey}: ${prevStats[statKey]} → ${newStats[statKey]} (${value > 0 ? '+' : ''}${value})`);
           }
         }
       });
-      
+
       return newStats;
     });
 
@@ -148,7 +148,7 @@ export const AppProvider = ({ children }) => {
         const [, valueStr, statName] = match;
         const value = parseInt(valueStr);
         const statKey = statName.toLowerCase();
-        
+
         if (userStats.totalPoints[statKey] !== undefined) {
           setUserStats(prev => ({
             ...prev,
@@ -178,33 +178,33 @@ export const AppProvider = ({ children }) => {
     currentUser,
     isLoading,
     setIsLoading,
-    
+
     // Auth functions
     handleLoginSuccess,
     handleLogout,
-    
+
     // Tasks state and functions
     tasks,
     completedTasks,
     updateTasksState,
     updateCompletedTasksState,
-    
+
     // User stats
     userStats,
     updateUserStats,
-    
+
     // Attribute stats (for HomePage display)
     attributeStats,
     updateAttributeStats,
     applyStatChanges,
-    
+
     // Utility functions
     getAttributePoints,
-    
+
     // Goal state
     userGoal,
     updateUserGoal,
-    
+
     // Utility functions
     loadUserData
   };

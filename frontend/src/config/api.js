@@ -1,11 +1,11 @@
 // API Configuration
-const API_BASE_URL = 'http://127.0.0.1:8000/api';
+const API_BASE_URL = 'http://127.0.0.1:8001/api';
 
 export const API_ENDPOINTS = {
   // Authentication
   login: `${API_BASE_URL}/login/`,
   register: `${API_BASE_URL}/register/`,
-  
+
   // Tasks
   tasks: `${API_BASE_URL}/tasks/`,
   taskComplete: `${API_BASE_URL}/tasks/complete/`,
@@ -13,13 +13,13 @@ export const API_ENDPOINTS = {
   dynamicTaskUncomplete: `${API_BASE_URL}/tasks/uncomplete-dynamic/`,
   completedHistory: `${API_BASE_URL}/tasks/completed-history/`,
   weeklyStats: `${API_BASE_URL}/tasks/weekly-stats/`,
-  
+
   // User
   userStats: `${API_BASE_URL}/user/stats/`,
   userProgress: `${API_BASE_URL}/user/progress/`,
   changePassword: `${API_BASE_URL}/user/change-password/`,
   deleteAccount: `${API_BASE_URL}/user/delete-account/`,
-  
+
   // Goals
   goal: `${API_BASE_URL}/goal/`
 };
@@ -44,7 +44,7 @@ export const apiRequest = async (url, options = {}) => {
   try {
     console.log('Making API request to:', url, 'with config:', config);
     const response = await fetch(url, config);
-    
+
     if (!response.ok) {
       let errorMessage = `HTTP error! status: ${response.status}`;
       try {
@@ -55,7 +55,7 @@ export const apiRequest = async (url, options = {}) => {
       }
       throw new Error(errorMessage);
     }
-    
+
     const data = await response.json();
     console.log('API response:', data);
     return { data, response };

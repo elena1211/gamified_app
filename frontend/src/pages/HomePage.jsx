@@ -8,7 +8,10 @@ import MainGoal from '../components/MainGoal';
 import TimeLimitedTaskPopup from '../components/TimeLimitedTaskPopup';
 import Modal from '../components/Modal';
 import WeeklyTaskStats from '../components/WeeklyTaskStats';
+import LevelUpNotification from '../components/LevelUpNotification';
+import LevelUpModal from '../components/LevelUpModal';
 import { useAppContext } from '../context/AppContext';
+import { getAvatarStage, checkLevelUp } from '../utils/avatar';
 
 // Time-limited task data - Enhanced rewards (1-10 points)
 const TIME_LIMITED_TASKS = [
@@ -54,6 +57,20 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
   const [warningType, setWarningType] = useState('');
   const [showDismissConfirm, setShowDismissConfirm] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0); // Add refresh trigger for weekly stats
+
+  // Level up modal states
+  const [showLevelUpModal, setShowLevelUpModal] = useState(false);
+  const [levelUpData, setLevelUpData] = useState({
+    oldLevel: 0,
+    newLevel: 0,
+    newExp: 0,
+    oldStage: 1,
+    newStage: 1
+  });
+
+  // Original level up notification states (keeping for backward compatibility)
+  const [showLevelUp, setShowLevelUp] = useState(false);
+  const [newLevel, setNewLevel] = useState(0);
 
   // Time-limited task data
   const [currentTimeLimitedTask, setCurrentTimeLimitedTask] = useState(null);
@@ -211,8 +228,32 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
                 console.log('📈 Applied stat changes:', task.reward);
               }
 
-              // Update streak based on API response
-              updateUserStats({ currentStreak: data.streak });
+              // Check for level up from API response
+              if (data.user_stats && data.user_stats.level_up) {
+                console.log('🎉 Level up detected!', data.user_stats);
+                const oldStage = getAvatarStage(data.user_stats.old_level);
+                const newStage = getAvatarStage(data.user_stats.level);
+
+                setLevelUpData({
+                  oldLevel: data.user_stats.old_level,
+                  newLevel: data.user_stats.level,
+                  newExp: data.user_stats.exp,
+                  oldStage,
+                  newStage
+                });
+                setShowLevelUpModal(true);
+              }
+
+              // Update user stats with level and EXP data
+              if (data.user_stats) {
+                updateUserStats({
+                  currentStreak: data.streak,
+                  level: data.user_stats.level,
+                  exp: data.user_stats.exp
+                });
+              } else {
+                updateUserStats({ currentStreak: data.streak });
+              }
 
               console.log('✅ Dynamic task completion successful, refreshing weekly stats in 0.3s');
 
@@ -322,8 +363,32 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
               console.log('📉 Reversed stat changes:', reverseReward);
             }
 
-            // Update streak based on API response using context
-            updateUserStats({ currentStreak: data.streak });
+            // Check for level up from API response (only when completing task)
+            if (data.task_completed && data.user_stats && data.user_stats.level_up) {
+              console.log('🎉 Level up detected!', data.user_stats);
+              const oldStage = getAvatarStage(data.user_stats.old_level);
+              const newStage = getAvatarStage(data.user_stats.level);
+
+              setLevelUpData({
+                oldLevel: data.user_stats.old_level,
+                newLevel: data.user_stats.level,
+                newExp: data.user_stats.exp,
+                oldStage,
+                newStage
+              });
+              setShowLevelUpModal(true);
+            }
+
+            // Update user stats with level and EXP data
+            if (data.user_stats) {
+              updateUserStats({
+                currentStreak: data.streak,
+                level: data.user_stats.level,
+                exp: data.user_stats.exp
+              });
+            } else {
+              updateUserStats({ currentStreak: data.streak });
+            }
 
             console.log('✅ Task toggle successful, refreshing weekly stats');
 
@@ -597,6 +662,17 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
             variant="confirmation"
           />
         )}
+
+        {/* Level Up Modal */}
+        <LevelUpModal
+          isOpen={showLevelUpModal}
+          onClose={() => setShowLevelUpModal(false)}
+          oldLevel={levelUpData.oldLevel}
+          newLevel={levelUpData.newLevel}
+          newExp={levelUpData.newExp}
+          oldStage={levelUpData.oldStage}
+          newStage={levelUpData.newStage}
+        />
       </div>
     </div>
   );
