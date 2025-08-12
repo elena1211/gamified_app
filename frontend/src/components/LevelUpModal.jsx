@@ -1,5 +1,5 @@
 import React from 'react';
-import { getAvatarStage, getAvatarSrc } from '../utils/avatar';
+import { getAvatarSrc } from '../utils/avatar';
 
 const LevelUpModal = ({
   isOpen,

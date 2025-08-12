@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { cleanTaskTitle } from '../utils/taskUtils';
 
 export default function TimeLimitedTaskPopup({ task, onAccept, onReject, onTimeUp }) {
   const [timeLeft, setTimeLeft] = useState(task.duration);
@@ -23,7 +24,7 @@ export default function TimeLimitedTaskPopup({ task, onAccept, onReject, onTimeU
   };
 
   return (
-    <div 
+    <div
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
       style={{
         position: 'fixed',
@@ -37,7 +38,7 @@ export default function TimeLimitedTaskPopup({ task, onAccept, onReject, onTimeU
         justifyContent: 'center'
       }}
     >
-      <div 
+      <div
         className="bg-white rounded-2xl p-6 max-w-sm mx-4 shadow-2xl relative"
         style={{
           zIndex: 10000,
@@ -55,9 +56,9 @@ export default function TimeLimitedTaskPopup({ task, onAccept, onReject, onTimeU
         </div>
 
         <div className="bg-yellow-50 rounded-xl p-4 mb-4">
-          <h3 className="font-semibold text-gray-800 mb-2 text-center">{task.title}</h3>
+          <h3 className="font-semibold text-gray-800 mb-2 text-center">{cleanTaskTitle(task.title)}</h3>
           <p className="text-sm text-gray-600 mb-3">{task.description}</p>
-          
+
           <div className="text-center">
             <div className="text-2xl font-bold text-red-600 mb-1">
               {formatTime(timeLeft)}

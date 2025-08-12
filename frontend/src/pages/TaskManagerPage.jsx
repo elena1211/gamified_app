@@ -5,9 +5,10 @@ import BottomNav from '../components/BottomNav';
 import RewardPopup from '../components/RewardPopup';
 import WeeklyTaskStats from '../components/WeeklyTaskStats';
 import LevelUpModal from '../components/LevelUpModal';
-import { useAppContext } from '../context/AppContext';
+import { useAppContext } from '../context/hooks';
 import { getAvatarStage } from '../utils/avatar';
 import { debugLog } from '../utils/logger';
+import { cleanTaskTitle } from '../utils/taskUtils';
 
 // Move TaskCard outside the main component to prevent re-creation
 const TaskCard = ({
@@ -132,7 +133,7 @@ const TaskCard = ({
     >
       <div className="h-full flex flex-col">
         <div className="flex justify-between items-start mb-2">
-          <h3 className="font-medium text-gray-800 flex-1 pr-2 leading-tight">{task.title}</h3>
+          <h3 className="font-medium text-gray-800 flex-1 pr-2 leading-tight">{cleanTaskTitle(task.title)}</h3>
           {!isHistory && (
             <div className="flex gap-1 flex-shrink-0">
               <button
@@ -340,7 +341,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
   useEffect(() => {
     fetchAllTasks();
     fetchCompletedHistory();
-  }, [currentUser]);
+  }, [currentUser]); // Remove function dependencies to prevent infinite re-renders
 
   const handleAddTask = async (e) => {
     if (e) {
@@ -389,7 +390,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
       e.stopPropagation();
     }
 
-    if (!confirm(`Complete "${task.title}"?`)) return;
+    if (!confirm(`Complete "${cleanTaskTitle(task.title)}"?`)) return;
 
     try {
       debugLog('🎯 Attempting to complete task:', task.id, task.title);

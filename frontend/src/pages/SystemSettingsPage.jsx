@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { User, LogOut, Bell } from 'lucide-react';
 import Modal from '../components/Modal.jsx';
 import BottomNav from '../components/BottomNav.jsx';
@@ -10,7 +10,7 @@ import BottomNav from '../components/BottomNav.jsx';
 export default function SystemSettingsPage({ currentUser, onLogout, onNavigateToHome, onNavigateToTaskManager }) {
   const [activeSection, setActiveSection] = useState('account');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  
+
   const [preferences, setPreferences] = useState({
     notifications: localStorage.getItem('notifications') !== 'false',
     soundEffects: localStorage.getItem('soundEffects') !== 'false',
@@ -122,7 +122,7 @@ export default function SystemSettingsPage({ currentUser, onLogout, onNavigateTo
                   {section.title}
                 </button>
               ))}
-              
+
               <div className="border-t pt-2 mt-4">
                 <button
                   onClick={handleLogoutClick}
@@ -156,8 +156,8 @@ export default function SystemSettingsPage({ currentUser, onLogout, onNavigateTo
         type="warning"
         variant="confirmation"
       />
-      
-      <BottomNav 
+
+      <BottomNav
         onSettingsClick={() => {}} // Empty function since we're already on settings page
         onHomeClick={onNavigateToHome}
         onTaskManagerClick={onNavigateToTaskManager}

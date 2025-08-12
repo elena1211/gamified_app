@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Calendar, TrendingUp, Target, Clock } from 'lucide-react';
 import { API_ENDPOINTS, apiRequest } from '../config/api.js';
 import ProgressBar from './ProgressBar.jsx';
@@ -9,7 +9,7 @@ export default function ProgressPanel({ currentUser, onRefresh = null }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const fetchProgressStats = async () => {
+  const fetchProgressStats = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -44,18 +44,18 @@ export default function ProgressPanel({ currentUser, onRefresh = null }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentUser]);
 
   useEffect(() => {
     fetchProgressStats();
-  }, [currentUser]);
+  }, [currentUser]); // Remove fetchProgressStats to prevent infinite re-renders
 
   // Refresh function for external calls (when tasks are completed)
   useEffect(() => {
     if (onRefresh) {
       onRefresh.current = fetchProgressStats;
     }
-  }, [onRefresh]);
+  }, [onRefresh]); // Remove fetchProgressStats dependency
 
   const getProgressColor = (rate) => {
     if (rate >= 0.8) return 'green';
