@@ -64,9 +64,8 @@ export const AppProvider = ({ children }) => {
       // This prevents data from being reset on page navigation
       console.log('Loading user data for:', username);
 
-      // You can fetch this data from API here
-      // For now, we'll keep the data in context to prevent resets
-
+      // Data is loaded individually by each component as needed
+      // This function serves as a placeholder for future centralized data loading
     } catch (error) {
       console.error('Error loading user data:', error);
     }

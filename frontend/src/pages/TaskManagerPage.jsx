@@ -1,25 +1,27 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Edit, Trash2, Clock, CheckCircle, XCircle, Save, X } from 'lucide-react';
+import { Plus, Edit, Trash2, CheckCircle, Save, X } from 'lucide-react';
 import { API_ENDPOINTS, apiRequest } from '../config/api.js';
 import BottomNav from '../components/BottomNav';
 import RewardPopup from '../components/RewardPopup';
 import WeeklyTaskStats from '../components/WeeklyTaskStats';
+import LevelUpModal from '../components/LevelUpModal';
 import { useAppContext } from '../context/AppContext';
+import { getAvatarStage } from '../utils/avatar';
 
 // Move TaskCard outside the main component to prevent re-creation
-const TaskCard = ({ 
-  task, 
-  isHistory = false, 
-  isEditing, 
-  editData, 
-  onStartEdit, 
-  onCancelEdit, 
-  onSaveEdit, 
-  onComplete, 
-  onDelete, 
+const TaskCard = ({
+  task,
+  isHistory = false,
+  isEditing,
+  editData,
+  onStartEdit,
+  onCancelEdit,
+  onSaveEdit,
+  onComplete,
+  onDelete,
   onEditDataChange,
   difficultyOptions,
-  attributeOptions 
+  attributeOptions
 }) => {
   const difficulty = difficultyOptions.find(d => d.value === task.difficulty);
   const attribute = attributeOptions.find(a => a.value === task.attribute);
@@ -32,7 +34,7 @@ const TaskCard = ({
 
   if (isEditing && editData) {
     return (
-      <div 
+      <div
         className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-3"
         style={{ minHeight: '200px' }}
       >
@@ -123,7 +125,7 @@ const TaskCard = ({
   }
 
   return (
-    <div 
+    <div
       className="bg-white border border-gray-200 rounded-lg p-4 mb-3 shadow-sm"
       style={{ minHeight: '120px' }}
     >
@@ -171,11 +173,11 @@ const TaskCard = ({
             </div>
           )}
         </div>
-        
+
         {task.description && (
           <p className="text-gray-600 text-sm mb-3 flex-1">{task.description}</p>
         )}
-        
+
         <div className="flex items-center gap-3 mt-auto">
           <span className={`text-xs px-2 py-1 rounded-full ${difficulty?.colour} bg-opacity-10`}>
             {difficulty?.label}
@@ -187,7 +189,7 @@ const TaskCard = ({
             +{task.reward_point} {attribute?.label}
           </span>
         </div>
-        
+
         {isHistory && task.completedAt && (
           <div className="mt-2 text-xs text-gray-500 flex justify-between">
             <span>Completed: {task.completedAt}</span>
@@ -201,10 +203,10 @@ const TaskCard = ({
 
 export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavigateToSettings }) {
   // Use global state from context
-  const { 
-    tasks, 
-    completedTasks, 
-    updateTasksState, 
+  const {
+    tasks,
+    completedTasks,
+    updateTasksState,
     updateCompletedTasksState,
     getAttributePoints,
     applyStatChanges,
@@ -218,7 +220,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
   const [editData, setEditData] = useState(null);
   const [activeTab, setActiveTab] = useState('active');
   const [refreshTrigger, setRefreshTrigger] = useState(0); // Add refresh trigger for weekly stats
-  
+
   // RewardPopup state
   const [showRewardPopup, setShowRewardPopup] = useState(false);
   const [rewardData, setRewardData] = useState({
@@ -227,9 +229,19 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
     attribute: 'discipline',
     totalPoints: 0
   });
-  
+
+  // Level up modal states
+  const [showLevelUpModal, setShowLevelUpModal] = useState(false);
+  const [levelUpData, setLevelUpData] = useState({
+    oldLevel: 0,
+    newLevel: 0,
+    newExp: 0,
+    oldStage: 1,
+    newStage: 1
+  });
+
   const addFormRef = useRef(null);
-  
+
   const [newTask, setNewTask] = useState({
     title: '',
     description: '',
@@ -264,7 +276,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
     try {
       // Fetch tasks from backend
       const { data } = await apiRequest(`${API_ENDPOINTS.tasks}?user=${currentUser}`);
-      
+
       // Transform backend data to match our component structure
       const transformedTasks = data
         .filter(task => !task.completed) // Only get uncompleted tasks for active tab
@@ -276,9 +288,9 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
           difficulty: task.difficulty || 1,
           attribute: task.attribute || 'discipline'
         }));
-      
+
       updateTasksState(transformedTasks);
-      
+
     } catch (error) {
       console.error('Error fetching tasks:', error);
       // Fallback to static data if API fails
@@ -298,7 +310,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
     try {
       console.log('🔍 Fetching completed tasks history from API...');
       const { data } = await apiRequest(`${API_ENDPOINTS.completedHistory}?user=${currentUser}&limit=50`);
-      
+
       if (data.success && data.completed_tasks) {
         const transformedHistory = data.completed_tasks.map(task => ({
           id: task.id,
@@ -310,7 +322,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
           completedAt: task.completed_at,
           completedTime: task.completed_time
         }));
-        
+
         updateCompletedTasksState(transformedHistory);
         console.log('✅ Loaded', transformedHistory.length, 'completed tasks from API');
       } else {
@@ -334,7 +346,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
       e.preventDefault();
       e.stopPropagation();
     }
-    
+
     if (!newTask.title.trim()) return;
 
     try {
@@ -348,17 +360,11 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
 
       const newId = Math.max(...tasks.map(t => t.id || 0)) + 1000; // Use high ID to avoid conflicts
       const createdTask = { ...taskData, id: newId };
-      
+
       updateTasksState([...tasks, createdTask]);
       setNewTask({ title: '', description: '', reward_point: '', difficulty: 1, attribute: 'discipline' });
       setShowAddForm(false);
-      
-      // TODO: Implement actual API call to create task in backend
-      // await apiRequest(API_ENDPOINTS.tasks, {
-      //   method: 'POST',
-      //   body: JSON.stringify(taskData)
-      // });
-      
+
     } catch (error) {
       console.error('Error adding task:', error);
     }
@@ -366,7 +372,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
 
   const handleEditTask = async (taskId, updatedData) => {
     try {
-      updateTasksState(tasks.map(task => 
+      updateTasksState(tasks.map(task =>
         task.id === taskId ? { ...task, ...updatedData } : task
       ));
       setEditingTask(null);
@@ -381,12 +387,12 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
       e.preventDefault();
       e.stopPropagation();
     }
-    
+
     if (!confirm(`Complete "${task.title}"?`)) return;
-    
+
     try {
       console.log('🎯 Attempting to complete task:', task.id, task.title);
-      
+
       // Call backend API to mark task as complete - use fetch instead of apiRequest for better error handling
       const response = await fetch(API_ENDPOINTS.taskComplete, {
         method: 'POST',
@@ -405,25 +411,49 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
 
       const data = await response.json();
       console.log('📡 Backend response:', data);
-      
+
       if (data.success) {
         const completedTask = {
           ...task,
           completedAt: new Date().toISOString().split('T')[0]
         };
-        
+
         // Create reward string based on task attributes
         const rewardString = `+${task.reward_point} ${task.attribute}`;
-        
+
         // Apply stat changes to global context
         applyStatChanges(rewardString);
-        
-        // Update streak in global context
-        updateUserStats({ currentStreak: data.streak || 0 });
-        
+
+        // Check for level up from API response
+        if (data.user_stats && data.user_stats.level_up) {
+          console.log('🎉 Level up detected in TaskManager!', data.user_stats);
+          const oldStage = getAvatarStage(data.user_stats.old_level);
+          const newStage = getAvatarStage(data.user_stats.level);
+
+          setLevelUpData({
+            oldLevel: data.user_stats.old_level,
+            newLevel: data.user_stats.level,
+            newExp: data.user_stats.exp,
+            oldStage,
+            newStage
+          });
+          setShowLevelUpModal(true);
+        }
+
+        // Update user stats with level and EXP data
+        if (data.user_stats) {
+          updateUserStats({
+            currentStreak: data.streak,
+            level: data.user_stats.level,
+            exp: data.user_stats.exp
+          });
+        } else {
+          updateUserStats({ currentStreak: data.streak || 0 });
+        }
+
         // Use context function to get current points for attribute
         const newTotalPoints = getAttributePoints(task.attribute) + parseInt(task.reward_point || 0);
-        
+
         // Show reward popup with updated stats
         setRewardData({
           taskTitle: task.title,
@@ -433,22 +463,22 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
           currentStreak: data.streak || 0
         });
         setShowRewardPopup(true);
-        
+
         // Update task lists - move task from active to completed
         const updatedActiveTasks = tasks.filter(t => t.id !== task.id);
         const updatedCompletedTasks = [completedTask, ...completedTasks];
-        
+
         updateTasksState(updatedActiveTasks);
         updateCompletedTasksState(updatedCompletedTasks);
-        
+
         console.log('✅ Task completed successfully, refreshing weekly stats in 0.5s');
-        
+
         // Delay refresh to ensure backend has processed the completion
         setTimeout(() => {
           setRefreshTrigger(prev => prev + 1);
           console.log('🔄 Weekly stats refresh triggered');
         }, 500);
-        
+
         console.log('📈 Applied stat changes:', rewardString);
         console.log('📋 Updated task lists - Active:', updatedActiveTasks.length, 'Completed:', updatedCompletedTasks.length);
       } else {
@@ -465,9 +495,9 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
       e.preventDefault();
       e.stopPropagation();
     }
-    
+
     if (!confirm('Are you sure you want to delete this task?')) return;
-    
+
     try {
       updateTasksState(tasks.filter(task => task.id !== taskId));
     } catch (error) {
@@ -480,7 +510,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
       e.preventDefault();
       e.stopPropagation();
     }
-    
+
     setEditingTask(task.id);
     setEditData({
       title: task.title || '',
@@ -568,9 +598,9 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
             </button>
 
             {showAddForm && (
-              <form 
+              <form
                 onSubmit={handleAddTask}
-                ref={addFormRef} 
+                ref={addFormRef}
                 className="bg-white border border-gray-200 rounded-lg p-6 mb-6 shadow-sm"
               >
                 <h3 className="text-lg font-medium mb-4">Create New Task</h3>
@@ -653,9 +683,9 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
                 </div>
               ) : (
                 tasks.map(task => (
-                  <TaskCard 
-                    key={task.id} 
-                    task={task} 
+                  <TaskCard
+                    key={task.id}
+                    task={task}
                     isEditing={editingTask === task.id}
                     editData={editData}
                     onStartEdit={startEditingTask}
@@ -683,10 +713,10 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
               </div>
             ) : (
               completedTasks.map(task => (
-                <TaskCard 
-                  key={task.id} 
-                  task={task} 
-                  isHistory={true} 
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  isHistory={true}
                   difficultyOptions={difficultyOptions}
                   attributeOptions={attributeOptions}
                 />
@@ -696,9 +726,9 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
         )}
       </div>
 
-      <BottomNav 
-        onSettingsClick={onNavigateToSettings} 
-        onHomeClick={onNavigateToHome} 
+      <BottomNav
+        onSettingsClick={onNavigateToSettings}
+        onHomeClick={onNavigateToHome}
         onTaskManagerClick={() => {}}
         currentPage="tasks"
       />
@@ -710,6 +740,17 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
         rewardPoints={rewardData.rewardPoints}
         attribute={rewardData.attribute}
         totalPoints={rewardData.totalPoints}
+      />
+
+      {/* Level Up Modal */}
+      <LevelUpModal
+        isOpen={showLevelUpModal}
+        onClose={() => setShowLevelUpModal(false)}
+        oldLevel={levelUpData.oldLevel}
+        newLevel={levelUpData.newLevel}
+        newExp={levelUpData.newExp}
+        oldStage={levelUpData.oldStage}
+        newStage={levelUpData.newStage}
       />
     </div>
   );
