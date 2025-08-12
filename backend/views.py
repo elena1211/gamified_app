@@ -547,6 +547,81 @@ class WeeklyStatsView(APIView):
             })
 
 
+class DynamicTaskCompleteView(APIView):
+    """API view for completing dynamic tasks (daily tasks, time-limited tasks)"""
+    def post(self, request):
+        username = request.data.get('user', 'elena')
+        task_title = request.data.get('task_title', '')
+        task_type = request.data.get('task_type', 'daily')  # 'daily' or 'time_limited'
+        reward_points = request.data.get('reward_points', 1)
+        attribute = request.data.get('attribute', 'discipline')
+        
+        try:
+            user = User.objects.get(username=username)
+            
+            # Create or get a generic task record for this dynamic task
+            task, created = Task.objects.get_or_create(
+                title=task_title,
+                user=user,
+                defaults={
+                    'description': f'Dynamic {task_type} task',
+                    'reward_point': reward_points,
+                    'attribute': attribute,
+                    'difficulty': 1 if task_type == 'daily' else 2,
+                    'deadline': timezone.now() + timedelta(days=1),  # Set deadline to tomorrow
+                    'is_random': True,  # Mark as random/dynamic task
+                    'created_by_ai': True  # Mark as AI/system generated
+                }
+            )
+            
+            # Check if already completed today
+            today = date.today()
+            existing_log = UserTaskLog.objects.filter(
+                user=user,
+                task=task,
+                status='completed',
+                completed_at__date=today
+            ).first()
+            
+            if not existing_log:
+                # Create completion log
+                UserTaskLog.objects.create(
+                    user=user,
+                    task=task,
+                    status='completed',
+                    completed_at=timezone.now(),
+                    earned_points=reward_points
+                )
+                
+                # Update user streak
+                user.update_streak()
+                
+                return Response({
+                    'success': True,
+                    'message': f'{task_type.title()} task completed successfully',
+                    'task_completed': True,
+                    'streak': user.current_streak
+                })
+            else:
+                return Response({
+                    'success': True,
+                    'message': 'Task already completed today',
+                    'task_completed': True,
+                    'streak': user.current_streak
+                })
+                
+        except User.DoesNotExist:
+            return Response({
+                'success': False,
+                'error': 'User not found'
+            }, status=404)
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+
+
 class CompletedTasksHistoryView(APIView):
     """API view to get user's completed tasks history"""
     def get(self, request):
