@@ -21,15 +21,15 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    
+
     if (!formData.username.trim() || !formData.password.trim()) {
       setError('All fields are required');
       return;
     }
-    
+
     setLoading(true);
     setError('');
-    
+
     try {
       const { data } = await apiRequest(API_ENDPOINTS.login, {
         method: 'POST',
@@ -38,7 +38,7 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
           password: formData.password
         })
       });
-      
+
       onLoginSuccess(data.username);
     } catch (err) {
       setError(err.message || 'Invalid username or password');
@@ -67,13 +67,14 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
                 <p className="text-sm text-gray-600">Define your path to success</p>
               </div>
             </div>
-            <div className="flex items-center gap-3 text-left">
+                        <div className="flex items-center gap-3 text-left">
               <span className="text-2xl">📋</span>
               <div>
-                <h3 className="font-semibold text-gray-800">Daily Tasks</h3>
-                <p className="text-sm text-gray-600">Turn tasks into exciting challenges</p>
+                <h3 className="font-semibold text-gray-800">Daily Random Tasks</h3>
+                <p className="text-sm text-gray-600">Complete daily challenges to level up</p>
               </div>
             </div>
+
             <div className="flex items-center gap-3 text-left">
               <span className="text-2xl">🔥</span>
               <div>
@@ -98,7 +99,7 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
             >
               {EMOJIS.rocket} Get Started
             </button>
-            
+
             <button
               onClick={() => setIsLoginMode(true)}
               className={`w-full ${COLORS.button.secondary} ${COLORS.text.primary} py-4 rounded-xl text-lg font-medium ${ANIMATION_CLASSES.button}`}

@@ -24,7 +24,7 @@ export default function TaskList({ tasks: initialTasks, onTaskComplete }) {
 
   return (
     <div>
-      <h3 className="font-bold text-lg mb-4 text-gray-800">📋 Daily Tasks</h3>
+      <h3 className="font-bold text-lg mb-4 text-gray-800">📋 Daily Random Tasks</h3>
       <div className="space-y-3">
         {tasks.map((task) => (
           <div
