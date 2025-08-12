@@ -398,6 +398,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
       // Call backend API to mark task as complete - use fetch instead of apiRequest for better error handling
       const response = await fetch(API_ENDPOINTS.taskComplete, {
         method: 'POST',
+        credentials: 'include',  // Include cookies for authentication
         headers: {
           'Content-Type': 'application/json',
         },

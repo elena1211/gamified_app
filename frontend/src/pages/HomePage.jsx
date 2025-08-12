@@ -87,6 +87,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
         // Call dynamic task completion API for time-limited tasks
         const response = await fetch(API_ENDPOINTS.dynamicTaskComplete, {
           method: 'POST',
+          credentials: 'include',  // Include cookies for authentication
           headers: {
             'Content-Type': 'application/json',
           },
@@ -232,6 +233,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
         if (!task.completed) {
           const response = await fetch(API_ENDPOINTS.dynamicTaskComplete, {
             method: 'POST',
+            credentials: 'include',  // Include cookies for authentication
             headers: {
               'Content-Type': 'application/json',
             },
@@ -317,6 +319,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
           debugLog('🔄 Uncompleting daily task via API');
           const response = await fetch(API_ENDPOINTS.dynamicTaskUncomplete, {
             method: 'POST',
+            credentials: 'include',  // Include cookies for authentication
             headers: {
               'Content-Type': 'application/json',
             },
@@ -378,6 +381,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
         // Use regular task completion API for database tasks
         const response = await fetch(API_ENDPOINTS.taskComplete, {
           method: 'POST',
+          credentials: 'include',  // Include cookies for authentication
           headers: {
             'Content-Type': 'application/json',
           },
