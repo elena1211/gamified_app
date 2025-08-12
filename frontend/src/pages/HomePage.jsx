@@ -87,12 +87,50 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
 
   const [localUserStats, setLocalUserStats] = useState(null);
 
-  const handleAcceptTask = () => {
+  const handleAcceptTask = async () => {
     if (currentTimeLimitedTask) {
-      applyStatChanges(currentTimeLimitedTask.reward);
-      
-      // Refresh weekly stats after time-limited task completion
-      setRefreshTrigger(prev => prev + 1);
+      try {
+        // Call dynamic task completion API for time-limited tasks
+        const response = await fetch(API_ENDPOINTS.dynamicTaskComplete, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            task_title: currentTimeLimitedTask.title,
+            task_type: 'time_limited',
+            reward_points: parseInt(currentTimeLimitedTask.reward.match(/\+(\d+)/)?.[1] || '1'),
+            attribute: 'discipline', // Default attribute for time-limited tasks
+            user: currentUser || 'elena'
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('📡 Time-limited task completion response:', data);
+          
+          if (data.success) {
+            // Apply stat changes
+            applyStatChanges(currentTimeLimitedTask.reward);
+            
+            // Update streak
+            updateUserStats({ currentStreak: data.streak });
+            
+            console.log('✅ Time-limited task completed, refreshing weekly stats in 0.3s');
+            
+            // Refresh weekly stats after time-limited task completion
+            setTimeout(() => {
+              setRefreshTrigger(prev => prev + 1);
+              console.log('🔄 Weekly stats refresh triggered for time-limited task');
+            }, 300);
+          }
+        }
+      } catch (error) {
+        console.error('Error completing time-limited task:', error);
+        // Fallback to local changes
+        applyStatChanges(currentTimeLimitedTask.reward);
+        setRefreshTrigger(prev => prev + 1);
+      }
     }
     
     setShowTimeLimitedTask(false);
@@ -154,62 +192,118 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
     try {
       console.log('🎯 Toggling task completion:', task.id, task.title, 'Current status:', task.completed);
       
-      // Call backend API to toggle task completion status
-      const response = await fetch(API_ENDPOINTS.taskComplete, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          task_id: task.id,
-          user: currentUser || 'elena'
-        })
-      });
+      // For daily tasks, use the dynamic task completion API
+      const isDynamicTask = task.id < 100; // Assume dynamic tasks have ID < 100
+      
+      if (isDynamicTask) {
+        // Use dynamic task completion API for daily tasks
+        const response = await fetch(API_ENDPOINTS.dynamicTaskComplete, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            task_title: task.title,
+            task_type: 'daily',
+            reward_points: parseInt(task.reward?.match(/\+(\d+)/)?.[1] || '1'),
+            attribute: task.attribute || 'discipline',
+            user: currentUser || 'elena'
+          })
+        });
 
-      if (response.ok) {
-        const data = await response.json();
-        console.log('📡 Backend response:', data);
-        
-        if (data.success) {
-          // Update local task state to reflect the change
-          setTasks(prevTasks => prevTasks.map(t => 
-            t.id === task.id 
-              ? { ...t, completed: data.task_completed }
-              : t
-          ));
+        if (response.ok) {
+          const data = await response.json();
+          console.log('📡 Dynamic task completion response:', data);
+          
+          if (data.success) {
+            // Update local task state to reflect the change
+            setTasks(prevTasks => prevTasks.map(t => 
+              t.id === task.id 
+                ? { ...t, completed: true }
+                : t
+            ));
 
-          // Apply stat changes based on task completion status using context function
-          if (data.task_completed && task.reward) {
-            // Task completed: apply positive stat changes
-            applyStatChanges(task.reward);
-            console.log('📈 Applied stat changes:', task.reward);
-          } else if (!data.task_completed && task.reward) {
-            // Task uncompleted: reverse the stat changes
-            const reverseReward = task.reward.replace(/\+/g, '-');
-            applyStatChanges(reverseReward);
-            console.log('📉 Reversed stat changes:', reverseReward);
+            // Apply stat changes based on task completion
+            if (task.reward) {
+              applyStatChanges(task.reward);
+              console.log('📈 Applied stat changes:', task.reward);
+            }
+
+            // Update streak based on API response
+            updateUserStats({ currentStreak: data.streak });
+            setUser(prevUser => {
+              const newUser = { ...prevUser, streak: data.streak };
+              console.log(`👤 Updating streak from ${prevUser.streak} to ${data.streak}`);
+              return newUser;
+            });
+            
+            console.log('✅ Dynamic task completion successful, refreshing weekly stats in 0.3s');
+            
+            // Refresh weekly stats after task completion
+            setTimeout(() => {
+              setRefreshTrigger(prev => prev + 1);
+              console.log('🔄 Weekly stats refresh triggered');
+            }, 300);
           }
-
-          // Update streak based on API response using context
-          updateUserStats({ currentStreak: data.streak });
-          setUser(prevUser => {
-            const newUser = { ...prevUser, streak: data.streak };
-            console.log(`👤 Updating streak from ${prevUser.streak} to ${data.streak}`);
-            return newUser;
-          });
-          
-          console.log('✅ Task toggle successful, refreshing weekly stats in 0.3s');
-          
-          // Refresh weekly stats after task completion/uncompletion
-          setTimeout(() => {
-            setRefreshTrigger(prev => prev + 1);
-            console.log('🔄 Weekly stats refresh triggered');
-          }, 300);
-        } else {
-          console.error('Task completion failed');
         }
       } else {
-        console.error('Failed to complete task');
+        // Use regular task completion API for database tasks
+        const response = await fetch(API_ENDPOINTS.taskComplete, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            task_id: task.id,
+            user: currentUser || 'elena'
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('📡 Backend response:', data);
+          
+          if (data.success) {
+            // Update local task state to reflect the change
+            setTasks(prevTasks => prevTasks.map(t => 
+              t.id === task.id 
+                ? { ...t, completed: data.task_completed }
+                : t
+            ));
+
+            // Apply stat changes based on task completion status using context function
+            if (data.task_completed && task.reward) {
+              // Task completed: apply positive stat changes
+              applyStatChanges(task.reward);
+              console.log('📈 Applied stat changes:', task.reward);
+            } else if (!data.task_completed && task.reward) {
+              // Task uncompleted: reverse the stat changes
+              const reverseReward = task.reward.replace(/\+/g, '-');
+              applyStatChanges(reverseReward);
+              console.log('📉 Reversed stat changes:', reverseReward);
+            }
+
+            // Update streak based on API response using context
+            updateUserStats({ currentStreak: data.streak });
+            setUser(prevUser => {
+              const newUser = { ...prevUser, streak: data.streak };
+              console.log(`👤 Updating streak from ${prevUser.streak} to ${data.streak}`);
+              return newUser;
+            });
+            
+            console.log('✅ Task toggle successful, refreshing weekly stats in 0.3s');
+            
+            // Refresh weekly stats after task completion/uncompletion
+            setTimeout(() => {
+              setRefreshTrigger(prev => prev + 1);
+              console.log('🔄 Weekly stats refresh triggered');
+            }, 300);
+          } else {
+            console.error('Task completion failed');
+          }
+        } else {
+          console.error('Failed to complete task');
+        }
       }
     } catch (err) {
       console.error('Error completing task:', err);
