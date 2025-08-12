@@ -74,10 +74,10 @@ if os.environ.get('DATABASE_URL') and not RAILWAY_BUILD_STAGE:
     # Production database (PostgreSQL) - only when not in build stage
     import urllib.parse as urlparse
     database_url = os.environ.get('DATABASE_URL')
-    
+
     # Parse the URL manually to avoid DNS issues
     url = urlparse.urlparse(database_url)
-    
+
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
@@ -161,10 +161,15 @@ if DEBUG:
         "http://127.0.0.1:5173",
     ]
 else:
-    # Production CORS settings
+    # Production CORS settings - Allow Vercel deployments
     CORS_ALLOWED_ORIGINS = [
-        "https://your-frontend-domain.vercel.app",  # Update with your actual frontend domain
-        "https://your-frontend-domain.netlify.app",  # Alternative frontend domain
+        "https://gamified-app.vercel.app",  # Main Vercel domain
+        "https://gamified-app-git-main-elena1211s-projects.vercel.app",  # Git branch domain
+    ]
+    # Also allow any *.vercel.app domain for preview deployments
+    CORS_ALLOW_ALL_ORIGINS = False
+    CORS_ALLOWED_ORIGIN_REGEXES = [
+        r"^https://.*\.vercel\.app$",  # Allow all Vercel deployments
     ]
     # For testing, temporarily allow Railway domain
     railway_domain = os.environ.get('RAILWAY_PUBLIC_DOMAIN')
