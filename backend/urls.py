@@ -15,8 +15,17 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
+from . import views
 
 urlpatterns = [
+    path('', views.RootView.as_view(), name='root'),  # Root endpoint
+    path('health/', views.HealthView.as_view(), name='health'),  # Health check
     path('admin/', admin.site.urls),
     path('api/', include('backend.urls_api')),  # API endpoints for React
 ]
+
+# Serve static files in production (handled by whitenoise)
+if settings.DEBUG:
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

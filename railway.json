@@ -7,7 +7,7 @@
     "numReplicas": 1,
     "sleepApplication": false,
     "restartPolicyType": "ON_FAILURE",
-    "healthcheckPath": "/admin/",
+    "healthcheckPath": "/health/",
     "healthcheckTimeout": 300
   }
 }
