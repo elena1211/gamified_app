@@ -169,6 +169,39 @@ class GoalView(APIView):
             return Response(default_goal)
 
 
+from django.db import models
+from django.contrib.auth.models import AbstractUser
+from django.utils import timezone
+from datetime import date, timedelta
+import math
+
+
+def calculate_task_exp(task):
+    """Calculate EXP gained from completing a task"""
+    base_exp = 10 + (task.difficulty or 1) * 5
+
+    if task.is_random:
+        # Time-limited tasks give 50% more EXP
+        return math.floor(base_exp * 1.5)
+
+    return base_exp
+
+
+def calculate_level_from_exp(total_exp):
+    """Calculate current level from total EXP"""
+    level = 1
+    while level < 100 and total_exp >= get_exp_for_level(level + 1):
+        level += 1
+    return level
+
+
+def get_exp_for_level(level):
+    """Calculate EXP required for a specific level"""
+    if level <= 1:
+        return 0
+    return math.floor(100 * math.pow(1.3, level - 1))
+
+
 class TaskCompleteView(APIView):
     """API view for marking tasks as complete or uncomplete"""
     def post(self, request):
@@ -188,13 +221,20 @@ class TaskCompleteView(APIView):
                 completed_at__date=today
             ).first()
 
+            # Store old level and exp for level-up detection
+            old_level = user.level
+            old_exp = user.exp
+
             if existing_log:
                 # Task already completed today - TOGGLE to uncomplete
+                # Subtract EXP when uncompleting
+                exp_lost = calculate_task_exp(task)
+                user.exp = max(0, user.exp - exp_lost)
                 existing_log.delete()
                 message = "Task marked as incomplete"
                 success = True
             else:
-                # Mark task as completed
+                # Mark task as completed and add EXP
                 task_log, created = UserTaskLog.objects.get_or_create(
                     user=user,
                     task=task,
@@ -211,11 +251,24 @@ class TaskCompleteView(APIView):
                     task_log.earned_points = task.reward_point
                     task_log.save()
 
+                # Add EXP when completing
+                exp_gained = calculate_task_exp(task)
+                user.exp += exp_gained
                 message = "Task completed successfully"
                 success = True
 
+            # Update level based on new EXP
+            new_level = calculate_level_from_exp(user.exp)
+            user.level = new_level
+
+            # Check for level up
+            leveled_up = new_level > old_level
+
             # Update streak after task completion/uncompletion
             user.update_streak()
+
+            # Save user changes
+            user.save()
 
             # Get current completion status
             completed_today_count = UserTaskLog.objects.filter(
@@ -232,7 +285,17 @@ class TaskCompleteView(APIView):
                 "streak": user.current_streak,
                 "completed_tasks": completed_today_count,
                 "total_tasks": total_tasks,
-                "task_completed": not existing_log  # True if we just completed it, False if we uncompleted it
+                "task_completed": not existing_log,  # True if we just completed it, False if we uncompleted it
+                "user_stats": {
+                    "level": user.level,
+                    "exp": user.exp,
+                    "level_up": leveled_up,
+                    "old_level": old_level,
+                    "next_level_exp": get_exp_for_level(user.level + 1),
+                    "current_level_exp": get_exp_for_level(user.level),
+                    "exp_progress": user.exp - get_exp_for_level(user.level),
+                    "exp_needed": get_exp_for_level(user.level + 1) - get_exp_for_level(user.level)
+                }
             })
 
         except (Task.DoesNotExist, User.DoesNotExist):
@@ -251,10 +314,18 @@ class UserStatsView(APIView):
 
             stats = {
                 "level": user.level,
+                "exp": user.exp,
                 "current_streak": user.current_streak,
                 "max_streak": user.max_streak,
                 "last_activity_date": user.last_activity_date.strftime("%Y-%m-%d") if user.last_activity_date else None,
-                "total_completed_tasks": UserTaskLog.objects.filter(user=user, status='completed').count()
+                "total_completed_tasks": UserTaskLog.objects.filter(user=user, status='completed').count(),
+                "level_progress": {
+                    "current_level_exp": get_exp_for_level(user.level),
+                    "next_level_exp": get_exp_for_level(user.level + 1),
+                    "exp_progress": user.exp - get_exp_for_level(user.level),
+                    "exp_needed": get_exp_for_level(user.level + 1) - get_exp_for_level(user.level),
+                    "progress_percentage": int(((user.exp - get_exp_for_level(user.level)) / (get_exp_for_level(user.level + 1) - get_exp_for_level(user.level))) * 100)
+                }
             }
 
             return Response(stats)

@@ -8,12 +8,16 @@ const StatsPanel = ({ stats = {} }) => {
     { key: "stress", label: "Stress", emoji: "😰", color: "#ef4444" }
   ];
 
+  const MAX_STAT_VALUE = 1000;
+
   return (
     <div>
       <h3 className="font-bold text-lg mb-6 text-gray-800">📊 Statistics</h3>
       <div className="space-y-5">
         {statNames.map(({ key, label, emoji, color }) => {
           const value = stats?.[key] || 0;
+          const percentage = Math.min((value / MAX_STAT_VALUE) * 100, 100);
+
           return (
             <div key={key}>
               <div className="flex justify-between items-center mb-2">
@@ -21,10 +25,10 @@ const StatsPanel = ({ stats = {} }) => {
                   <span className="text-base">{emoji}</span>
                   <span>{label}</span>
                 </span>
-                <span className="text-sm text-gray-600 font-semibold">{value}%</span>
+                <span className="text-sm text-gray-600 font-semibold">{value}/{MAX_STAT_VALUE}</span>
               </div>
               <div className="relative">
-                <div 
+                <div
                   className="w-full bg-gray-200 rounded-full overflow-hidden"
                   style={{
                     height: '10px',
@@ -32,8 +36,8 @@ const StatsPanel = ({ stats = {} }) => {
                 >
                   <div
                     className="h-full rounded-full transition-all duration-1000 ease-out"
-                    style={{ 
-                      width: `${value}%`,
+                    style={{
+                      width: `${percentage}%`,
                       backgroundColor: color,
                       minWidth: value > 0 ? '4px' : '0px',
                       boxShadow: value > 0 ? `0 0 8px ${color}40` : 'none'
