@@ -1,16 +1,17 @@
 import os
+import dj_database_url
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-fallback-key-change-in-production')
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-your-secret-key-here-change-in-production')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
-ALLOWED_HOSTS = ['*']  # Allow all hosts for now
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '.railway.app', '.vercel.app', '.netlify.app']
 
 # Application definition
 DJANGO_APPS = [
@@ -67,30 +68,14 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 
 # Database
 if os.environ.get('DATABASE_URL'):
-    # Production database (PostgreSQL) - using dj-database-url for better parsing
-    try:
-        import dj_database_url
-        DATABASES = {
-            'default': dj_database_url.config(
-                default=os.environ.get('DATABASE_URL'),
-                conn_max_age=600,
-                conn_health_checks=True,
-            )
-        }
-    except ImportError:
-        # Fallback to manual parsing if dj-database-url is not available
-        import urllib.parse as urlparse
-        url = urlparse.urlparse(os.environ.get('DATABASE_URL'))
-        DATABASES = {
-            'default': {
-                'ENGINE': 'django.db.backends.postgresql',
-                'NAME': url.path[1:],
-                'USER': url.username,
-                'PASSWORD': url.password,
-                'HOST': url.hostname,
-                'PORT': url.port,
-            }
-        }
+    # Production database (PostgreSQL)
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=os.environ.get('DATABASE_URL'),
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
+    }
 else:
     # Development database (SQLite)
     DATABASES = {
@@ -127,7 +112,7 @@ STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # Simplified static files storage for Railway
-STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -158,7 +143,7 @@ if DEBUG:
         "http://127.0.0.1:5173",
     ]
 else:
-    # Production CORS settings - Railway backend only
+    # Production CORS settings
     CORS_ALLOWED_ORIGINS = [
         "https://your-frontend-domain.vercel.app",  # Update with your actual frontend domain
         "https://your-frontend-domain.netlify.app",  # Alternative frontend domain

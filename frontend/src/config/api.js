@@ -1,8 +1,8 @@
-// API Configuration
 // API configuration and helper functions
 import { debugLog } from '../utils/logger';
 
-const API_BASE = 'http://127.0.0.1:8000/api';
+// Environment-based API configuration
+const API_BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
 
 export const API_ENDPOINTS = {
   // Authentication

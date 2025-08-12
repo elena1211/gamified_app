@@ -313,7 +313,7 @@ We welcome contributions! Please follow these steps:
 - [ ] **Team Challenges**: Collaborative goal achievement
 - [ ] **Integration**: Connect with fitness trackers and productivity tools
 
-## � License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
