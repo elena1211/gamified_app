@@ -8,11 +8,13 @@ export default function WeeklyTaskStats({ currentUser, refreshTrigger }) {
   const [error, setError] = useState(null);
 
   const fetchWeeklyStats = async () => {
+    console.log('🔄 WeeklyTaskStats: Fetching weekly stats for user:', currentUser, 'refreshTrigger:', refreshTrigger);
     setLoading(true);
     setError(null);
     
     try {
       const { data } = await apiRequest(`${API_ENDPOINTS.weeklyStats}?user=${currentUser || 'elena'}`);
+      console.log('📊 WeeklyTaskStats: Received data:', data);
       setWeeklyStats(data);
     } catch (error) {
       console.error('Error fetching weekly stats:', error);
@@ -40,6 +42,7 @@ export default function WeeklyTaskStats({ currentUser, refreshTrigger }) {
   };
 
   useEffect(() => {
+    console.log('🔄 WeeklyTaskStats: useEffect triggered with currentUser:', currentUser, 'refreshTrigger:', refreshTrigger);
     fetchWeeklyStats();
   }, [currentUser, refreshTrigger]); // Add refreshTrigger dependency
 
