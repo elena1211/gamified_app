@@ -13,7 +13,7 @@ export default function WeeklyTaskStats({ currentUser, refreshTrigger }) {
     setError(null);
     
     try {
-      const { data } = await apiRequest(`${API_ENDPOINTS.weeklyStats}?user=${currentUser || 'elena'}`);
+      const { data } = await apiRequest(`${API_ENDPOINTS.weeklyStats}?user=${currentUser || 'tester'}`);
       console.log('📊 WeeklyTaskStats: Received data:', data);
       setWeeklyStats(data);
     } catch (error) {

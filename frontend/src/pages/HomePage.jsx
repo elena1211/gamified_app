@@ -10,25 +10,6 @@ import Modal from '../components/Modal';
 import WeeklyTaskStats from '../components/WeeklyTaskStats';
 import { useAppContext } from '../context/AppContext';
 
-// Local constants for this component
-const COLORS = {
-  intelligence: 'bg-blue-500',
-  discipline: 'bg-purple-500', 
-  energy: 'bg-green-500',
-  social: 'bg-pink-500',
-  wellness: 'bg-yellow-500',
-  stress: 'bg-red-500'
-};
-
-const EMOJIS = {
-  intelligence: '🧠',
-  discipline: '🎯',
-  energy: '⚡',
-  social: '👥',
-  wellness: '🌟',
-  stress: '😰'
-};
-
 // Time-limited task data - Enhanced rewards (1-10 points)
 const TIME_LIMITED_TASKS = [
   {
@@ -56,15 +37,15 @@ const TIME_LIMITED_TASKS = [
 
 export default function HomePage({ currentUser, onNavigateToSettings, onNavigateToTaskManager }) {
   console.log('HomePage component starting to render, currentUser:', currentUser);
-  
+
   // Use global state from context
-  const { 
-    attributeStats, 
+  const {
+    attributeStats,
     applyStatChanges,
     userStats,
-    updateUserStats 
+    updateUserStats
   } = useAppContext();
-  
+
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -79,7 +60,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
   const [lastDismissedTask, setLastDismissedTask] = useState(null);
 
   const [user, setUser] = useState({
-    name: currentUser || "Elena",
+    name: currentUser || "tester",
     level: 5,
     streak: 0,
     avatar: "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjAwIiB2aWV3Qm94PSIwIDAgMjAwIDIwMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIHJ4PSIxMDAiIGZpbGw9IiNmYzkxYmYiLz4KPGNpcmNsZSBjeD0iMTAwIiBjeT0iODAiIHI9IjMwIiBmaWxsPSIjZmZmZmZmIi8+CjxlbGxpcHNlIGN4PSIxMDAiIGN5PSIxNTAiIHJ4PSI0MCIgcnk9IjMwIiBmaWxsPSIjZmZmZmZmIi8+Cjwvc3ZnPgo="
@@ -96,28 +77,28 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             task_title: currentTimeLimitedTask.title,
             task_type: 'time_limited',
             reward_points: parseInt(currentTimeLimitedTask.reward.match(/\+(\d+)/)?.[1] || '1'),
             attribute: 'discipline', // Default attribute for time-limited tasks
-            user: currentUser || 'elena'
+            user: currentUser || 'tester'
           })
         });
 
         if (response.ok) {
           const data = await response.json();
           console.log('📡 Time-limited task completion response:', data);
-          
+
           if (data.success) {
             // Apply stat changes
             applyStatChanges(currentTimeLimitedTask.reward);
-            
+
             // Update streak
             updateUserStats({ currentStreak: data.streak });
-            
+
             console.log('✅ Time-limited task completed, refreshing weekly stats in 0.3s');
-            
+
             // Refresh weekly stats after time-limited task completion
             setTimeout(() => {
               setRefreshTrigger(prev => prev + 1);
@@ -132,7 +113,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
         setRefreshTrigger(prev => prev + 1);
       }
     }
-    
+
     setShowTimeLimitedTask(false);
     setCurrentTimeLimitedTask(null);
   };
@@ -147,7 +128,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
       applyStatChanges(currentTimeLimitedTask.penalty);
       setLastDismissedTask(currentTimeLimitedTask); // Save for warning dialog
     }
-    
+
     setShowTimeLimitedTask(false);
     setCurrentTimeLimitedTask(null);
     setShowDismissConfirm(false);
@@ -164,7 +145,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
       applyStatChanges(currentTimeLimitedTask.penalty);
       setLastDismissedTask(currentTimeLimitedTask); // Save for warning dialog
     }
-    
+
     setShowTimeLimitedTask(false);
     setCurrentTimeLimitedTask(null);
     setWarningType('timeout');
@@ -188,13 +169,13 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
     }
   };
 
-  const handleTaskComplete = async (task) => {    
+  const handleTaskComplete = async (task) => {
     try {
       console.log('🎯 Toggling task completion:', task.id, task.title, 'Current status:', task.completed);
-      
-      // For daily tasks, use the dynamic task completion API
-      const isDynamicTask = task.id < 100; // Assume dynamic tasks have ID < 100
-      
+
+      // Check if it's a dynamic task (random daily tasks) or regular database task
+      const isDynamicTask = task.is_random || task.id < 25; // Use dynamic API for random tasks or fallback tasks
+
       if (isDynamicTask) {
         // For daily tasks that are not completed yet, complete them
         if (!task.completed) {
@@ -203,23 +184,23 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ 
+            body: JSON.stringify({
               task_title: task.title,
               task_type: 'daily',
               reward_points: parseInt(task.reward?.match(/\+(\d+)/)?.[1] || '1'),
               attribute: task.attribute || 'discipline',
-              user: currentUser || 'elena'
+              user: currentUser || 'tester'
             })
           });
 
           if (response.ok) {
             const data = await response.json();
             console.log('📡 Dynamic task completion response:', data);
-            
+
             if (data.success) {
               // Update local task state to reflect the change
-              setTasks(prevTasks => prevTasks.map(t => 
-                t.id === task.id 
+              setTasks(prevTasks => prevTasks.map(t =>
+                t.id === task.id
                   ? { ...t, completed: true }
                   : t
               ));
@@ -232,14 +213,9 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
 
               // Update streak based on API response
               updateUserStats({ currentStreak: data.streak });
-              setUser(prevUser => {
-                const newUser = { ...prevUser, streak: data.streak };
-                console.log(`👤 Updating streak from ${prevUser.streak} to ${data.streak}`);
-                return newUser;
-              });
-              
+
               console.log('✅ Dynamic task completion successful, refreshing weekly stats in 0.3s');
-              
+
               // Refresh weekly stats after task completion
               setTimeout(() => {
                 setRefreshTrigger(prev => prev + 1);
@@ -255,20 +231,20 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ 
+            body: JSON.stringify({
               task_title: task.title,
-              user: currentUser || 'elena'
+              user: currentUser || 'tester'
             })
           });
 
           if (response.ok) {
             const data = await response.json();
             console.log('📡 Dynamic task uncomplete response:', data);
-            
+
             if (data.success) {
               // Update local task state to reflect the change
-              setTasks(prevTasks => prevTasks.map(t => 
-                t.id === task.id 
+              setTasks(prevTasks => prevTasks.map(t =>
+                t.id === task.id
                   ? { ...t, completed: false }
                   : t
               ));
@@ -282,29 +258,25 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
 
               // Update streak based on API response
               updateUserStats({ currentStreak: data.streak });
-              setUser(prevUser => {
-                const newUser = { ...prevUser, streak: data.streak };
-                console.log(`👤 Updating streak from ${prevUser.streak} to ${data.streak}`);
-                return newUser;
+
+              console.log('✅ Dynamic task uncomplete successful, refreshing weekly stats');
+
+              // Immediately refresh weekly stats after task uncompletion
+              setRefreshTrigger(prev => {
+                const newValue = prev + 1;
+                console.log('🔄 Weekly stats refresh: incrementing from', prev, 'to', newValue);
+                return newValue;
               });
-              
-              console.log('✅ Dynamic task uncomplete successful, refreshing weekly stats in 0.3s');
-              
-              // Refresh weekly stats after task uncompletion
-              setTimeout(() => {
-                setRefreshTrigger(prev => prev + 1);
-                console.log('🔄 Weekly stats refresh triggered for uncomplete');
-              }, 300);
             }
           } else {
             console.log('⚠️ Failed to uncomplete via API, falling back to local toggle');
             // Fallback to local toggle if API fails
-            setTasks(prevTasks => prevTasks.map(t => 
-              t.id === task.id 
+            setTasks(prevTasks => prevTasks.map(t =>
+              t.id === task.id
                 ? { ...t, completed: false }
                 : t
             ));
-            
+
             // Reverse stat changes for local toggle
             if (task.reward) {
               const reverseReward = task.reward.replace(/\+/g, '-');
@@ -320,20 +292,20 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             task_id: task.id,
-            user: currentUser || 'elena'
+            user: currentUser || 'tester'
           })
         });
 
         if (response.ok) {
           const data = await response.json();
           console.log('📡 Backend response:', data);
-          
+
           if (data.success) {
             // Update local task state to reflect the change
-            setTasks(prevTasks => prevTasks.map(t => 
-              t.id === task.id 
+            setTasks(prevTasks => prevTasks.map(t =>
+              t.id === task.id
                 ? { ...t, completed: data.task_completed }
                 : t
             ));
@@ -352,19 +324,15 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
 
             // Update streak based on API response using context
             updateUserStats({ currentStreak: data.streak });
-            setUser(prevUser => {
-              const newUser = { ...prevUser, streak: data.streak };
-              console.log(`👤 Updating streak from ${prevUser.streak} to ${data.streak}`);
-              return newUser;
+
+            console.log('✅ Task toggle successful, refreshing weekly stats');
+
+            // Immediately refresh weekly stats after task completion/uncompletion
+            setRefreshTrigger(prev => {
+              const newValue = prev + 1;
+              console.log('🔄 Weekly stats refresh: incrementing from', prev, 'to', newValue);
+              return newValue;
             });
-            
-            console.log('✅ Task toggle successful, refreshing weekly stats in 0.3s');
-            
-            // Refresh weekly stats after task completion/uncompletion
-            setTimeout(() => {
-              setRefreshTrigger(prev => prev + 1);
-              console.log('🔄 Weekly stats refresh triggered');
-            }, 300);
           } else {
             console.error('Task completion failed');
           }
@@ -374,12 +342,12 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
       }
     } catch (err) {
       console.error('Error completing task:', err);
-      
+
       // Fallback to local stat changes if API fails
       if (task.reward) {
         applyStatChanges(task.reward);
         console.log('📈 Applied fallback stat changes:', task.reward);
-        
+
         // Still refresh weekly stats on fallback
         setRefreshTrigger(prev => prev + 1);
       }
@@ -400,7 +368,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
     };
 
     const selectedTasks = [];
-    
+
     // Try to get one task from each difficulty level
     for (let difficulty = 1; difficulty <= 3; difficulty++) {
       const tasksInDifficulty = tasksByDifficulty[difficulty];
@@ -412,10 +380,10 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
 
     // If we still need more tasks, randomly pick from remaining tasks
     while (selectedTasks.length < 3 && selectedTasks.length < allTasks.length) {
-      const remainingTasks = allTasks.filter(task => 
+      const remainingTasks = allTasks.filter(task =>
         !selectedTasks.some(selected => selected.id === task.id)
       );
-      
+
       if (remainingTasks.length > 0) {
         const randomIndex = Math.floor(Math.random() * remainingTasks.length);
         selectedTasks.push(remainingTasks[randomIndex]);
@@ -434,12 +402,12 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
       if (!preventScroll) {
         setLoading(true);
       }
-      
-      const url = `${API_ENDPOINTS.tasks}?user=${currentUser || 'elena'}`;
+
+      const url = `${API_ENDPOINTS.tasks}?user=${currentUser || 'tester'}`;
       console.log('Fetching tasks from:', url);
       const { data } = await apiRequest(url);
       console.log('All tasks fetched:', data);
-      
+
       // Select 3 random daily tasks from the full list
       const selectedTasks = selectDailyTasks(data);
       setTasks(selectedTasks);
@@ -468,23 +436,15 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
   const fetchUserStats = useCallback(async () => {
     console.log('fetchUserStats called, currentUser:', currentUser);
     try {
-      const url = `${API_ENDPOINTS.userStats}?user=${currentUser || 'elena'}`;
+      const url = `${API_ENDPOINTS.userStats}?user=${currentUser || 'tester'}`;
       console.log('Fetching user stats from:', url);
       const { data } = await apiRequest(url);
       console.log('User stats fetched successfully:', data);
-      
+
       setLocalUserStats(data);
       updateUserStats({
         level: data.level,
         currentStreak: data.current_streak
-      });
-      setUser(prevUser => {
-        const newUser = {
-          ...prevUser,
-          level: data.level,
-          streak: data.current_streak
-        };
-        return newUser;
       });
     } catch (err) {
       console.error('Failed to fetch user stats:', err);
@@ -534,7 +494,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
         <div className="bg-red-100 border border-red-400 text-red-700 px-6 py-4 rounded-lg max-w-md">
           <h2 className="font-bold mb-2">❌ Connection Error</h2>
           <p className="mb-4">{error}</p>
-          <button 
+          <button
             onClick={() => fetchTasks(false)}
             className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded text-sm"
           >
@@ -558,22 +518,22 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
         <div className="bg-white rounded-2xl p-8 shadow-md">
           <WeeklyTaskStats currentUser={currentUser} refreshTrigger={refreshTrigger} />
         </div>
-        
+
         {/* Stats Panel */}
         <div className="bg-white rounded-2xl p-8 shadow-md">
           <StatsPanel stats={attributeStats} />
         </div>
         {/* Task List */}
         <div className="bg-white rounded-2xl p-8 shadow-md">
-          <TaskList 
-            tasks={tasks} 
+          <TaskList
+            tasks={tasks}
             onTaskComplete={handleTaskComplete}
           />
         </div>
         {/* Control Buttons */}
         <div className="text-center">
           <div className="flex justify-center gap-3 mb-4">
-            <button 
+            <button
               onClick={(e) => {
                 e.preventDefault();
                 fetchTasks(true);
@@ -582,7 +542,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
             >
               🎲 New Daily Tasks
             </button>
-            <button 
+            <button
               onClick={() => {
                 const randomTask = TIME_LIMITED_TASKS[Math.floor(Math.random() * TIME_LIMITED_TASKS.length)];
                 setCurrentTimeLimitedTask(randomTask);
@@ -594,11 +554,11 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
             </button>
           </div>
         </div>
-        <BottomNav 
-          onSettingsClick={handleSettingsClick} 
+        <BottomNav
+          onSettingsClick={handleSettingsClick}
           onTaskManagerClick={handleTaskManagerClick}
         />
-        
+
         {/* Popups */}
         {showTimeLimitedTask && currentTimeLimitedTask && (
           <div style={{ position: 'relative', zIndex: 9999 }}>
@@ -622,7 +582,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
             showCloseButton={false}
           />
         )}
-        
+
         {/* Dismiss Confirmation Dialog */}
         {showDismissConfirm && currentTimeLimitedTask && (
           <Modal
