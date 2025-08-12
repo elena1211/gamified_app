@@ -1,1 +1,1 @@
-web: ./railway_start.sh && gunicorn --env DJANGO_SETTINGS_MODULE=backend.settings_prod backend.wsgi:application --bind 0.0.0.0:$PORT
+web: python manage.py migrate --settings=backend.settings_prod && python manage.py collectstatic --noinput --settings=backend.settings_prod && gunicorn --env DJANGO_SETTINGS_MODULE=backend.settings_prod backend.wsgi:application --bind 0.0.0.0:$PORT
