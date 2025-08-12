@@ -1043,6 +1043,8 @@ class ProgressStatsView(APIView):
 
 class RootView(APIView):
     """Root endpoint to verify the API is running"""
+    permission_classes = []  # Allow anonymous access
+    
     def get(self, request):
         return Response({
             "message": "LevelUp API is running!",
@@ -1058,6 +1060,8 @@ class RootView(APIView):
 
 class HealthView(APIView):
     """Health check endpoint for Railway"""
+    permission_classes = []  # Allow anonymous access for health checks
+    
     def get(self, request):
         return Response({
             "status": "healthy",
