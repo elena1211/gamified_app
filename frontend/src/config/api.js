@@ -10,6 +10,7 @@ export const API_ENDPOINTS = {
   tasks: `${API_BASE_URL}/tasks/`,
   taskComplete: `${API_BASE_URL}/tasks/complete/`,
   dynamicTaskComplete: `${API_BASE_URL}/tasks/complete-dynamic/`,
+  dynamicTaskUncomplete: `${API_BASE_URL}/tasks/uncomplete-dynamic/`,
   completedHistory: `${API_BASE_URL}/tasks/completed-history/`,
   weeklyStats: `${API_BASE_URL}/tasks/weekly-stats/`,
   

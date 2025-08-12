@@ -8,6 +8,7 @@ urlpatterns = [
     path('tasks/<int:pk>/', views.TaskDetailView.as_view(), name='task-detail'),
     path('tasks/complete/', views.TaskCompleteView.as_view(), name='task-complete'),
     path('tasks/complete-dynamic/', views.DynamicTaskCompleteView.as_view(), name='dynamic-task-complete'),
+    path('tasks/uncomplete-dynamic/', views.DynamicTaskUncompleteView.as_view(), name='dynamic-task-uncomplete'),
     path('tasks/completed-history/', views.CompletedTasksHistoryView.as_view(), name='completed-tasks-history'),
     path('tasks/weekly-stats/', views.WeeklyStatsView.as_view(), name='weekly-stats'),
     path('goal/', views.GoalView.as_view(), name='user-goal'),
