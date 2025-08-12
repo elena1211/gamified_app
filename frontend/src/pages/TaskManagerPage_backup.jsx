@@ -436,6 +436,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
       alert(`Failed to complete task: ${error.message}. Please try again.`);
     }
   };
+  };
 
   const handleDeleteTask = async (taskId, e) => {
     if (e) {
