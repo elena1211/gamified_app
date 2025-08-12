@@ -1039,3 +1039,28 @@ class ProgressStatsView(APIView):
             return Response({
                 "error": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class RootView(APIView):
+    """Root endpoint to verify the API is running"""
+    def get(self, request):
+        return Response({
+            "message": "LevelUp API is running!",
+            "status": "OK",
+            "version": "1.0.0",
+            "endpoints": {
+                "admin": "/admin/",
+                "api": "/api/",
+                "health": "/health/"
+            }
+        })
+
+
+class HealthView(APIView):
+    """Health check endpoint for Railway"""
+    def get(self, request):
+        return Response({
+            "status": "healthy",
+            "timestamp": timezone.now().isoformat(),
+            "database": "connected"
+        })
