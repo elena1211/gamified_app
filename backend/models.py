@@ -19,11 +19,11 @@ class User(AbstractUser):
 
     def __str__(self):
         return self.username
-    
+
     def update_streak(self):
         """Update user's streak based on completing all tasks"""
         today = date.today()
-        
+
         # Check if all tasks are completed today
         total_tasks = Task.objects.filter(user=self).count()
         completed_today = UserTaskLog.objects.filter(
@@ -31,9 +31,9 @@ class User(AbstractUser):
             status='completed',
             completed_at__date=today
         ).count()
-        
+
         all_completed = completed_today >= total_tasks and total_tasks > 0
-        
+
         # Update streak logic
         if all_completed and not self.all_tasks_completed_today:
             # First time completing all tasks today
@@ -43,23 +43,23 @@ class User(AbstractUser):
             else:
                 # Streak starts fresh
                 self.current_streak = 1
-            
+
             # Update max streak if current streak is higher
             if self.current_streak > self.max_streak:
                 self.max_streak = self.current_streak
-            
+
             self.all_tasks_completed_today = True
             self.last_all_tasks_completed_date = today
             self.last_activity_date = today
             self.save()
-            
+
         elif not all_completed and self.all_tasks_completed_today:
             # Tasks were uncompleted, decrease streak
             if self.current_streak > 0:
                 self.current_streak -= 1
             self.all_tasks_completed_today = False
             self.save()
-    
+
     def check_and_reset_streak(self):
         """Check if streak should be reset due to inactivity"""
         today = date.today()
@@ -83,6 +83,14 @@ class UserAttribute(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='attributes')
     name = models.CharField(max_length=20, choices=ATTRIBUTE_CHOICES)
     value = models.IntegerField(default=0)
+
+    def save(self, *args, **kwargs):
+        # Apply max limit for stress attribute (100), others (1000)
+        if self.name == 'stress':
+            self.value = max(0, min(100, self.value))
+        else:
+            self.value = max(0, min(1000, self.value))
+        super().save(*args, **kwargs)
 
     class Meta:
         # Ensures each user has only one entry per attribute

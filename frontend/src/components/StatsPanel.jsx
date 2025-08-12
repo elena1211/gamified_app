@@ -9,6 +9,10 @@ const StatsPanel = ({ stats = {} }) => {
   ];
 
   const MAX_STAT_VALUE = 1000;
+  // Set stress max value to 100, others to 1000
+  const getMaxValue = (statKey) => {
+    return statKey === 'stress' ? 100 : 1000;
+  };
 
   return (
     <div>
@@ -16,7 +20,8 @@ const StatsPanel = ({ stats = {} }) => {
       <div className="space-y-5">
         {statNames.map(({ key, label, emoji, color }) => {
           const value = stats?.[key] || 0;
-          const percentage = Math.min((value / MAX_STAT_VALUE) * 100, 100);
+          const maxValue = getMaxValue(key);
+          const percentage = Math.min((value / maxValue) * 100, 100);
 
           return (
             <div key={key}>
@@ -25,7 +30,7 @@ const StatsPanel = ({ stats = {} }) => {
                   <span className="text-base">{emoji}</span>
                   <span>{label}</span>
                 </span>
-                <span className="text-sm text-gray-600 font-semibold">{value}/{MAX_STAT_VALUE}</span>
+                <span className="text-sm text-gray-600 font-semibold">{value}/{maxValue}</span>
               </div>
               <div className="relative">
                 <div

@@ -69,12 +69,12 @@ export const getLevelProgress = (totalExp) => {
 
 // Calculate EXP gained from completing a task
 export const getTaskExp = (task) => {
-  // Base EXP: 基礎分數 + 難度加成
+  // Base EXP: base points + difficulty bonus
   const baseExp = 10 + (task.difficulty || 1) * 5;
 
-  // 不同任務類型的加成
+  // Different task type bonuses
   if (task.is_random) {
-    // Time-limited 任務給予 50% 更多 EXP
+    // Time-limited tasks give 50% more EXP
     return Math.floor(baseExp * 1.5);
   }
 
