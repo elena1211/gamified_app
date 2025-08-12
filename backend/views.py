@@ -3,7 +3,7 @@ from rest_framework.views import APIView
 from rest_framework import status
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.hashers import make_password, check_password
-from .models import Task, User, Goal, UserTaskLog
+from .models import Task, User, Goal, UserTaskLog, UserAttribute
 from django.utils import timezone
 from datetime import date, timedelta, datetime
 import random
@@ -11,98 +11,122 @@ import math
 from django.db.models import Count, Q
 
 
+def get_or_create_user(username):
+    """Helper function to get or create a user with default attributes"""
+    try:
+        user = User.objects.get(username=username)
+        return user
+    except User.DoesNotExist:
+        # Create new user with default settings
+        user = User.objects.create(
+            username=username,
+            password=make_password('defaultpassword'),  # Default password
+            level=1,
+            exp=0,
+            current_streak=0,
+            max_streak=0
+        )
+
+        # Create default user attributes
+        default_attributes = [
+            ('intelligence', 0),
+            ('discipline', 0),
+            ('energy', 0),
+            ('social', 0),
+            ('wellness', 0),
+            ('stress', 0)
+        ]
+
+        for attr_name, attr_value in default_attributes:
+            UserAttribute.objects.create(
+                user=user,
+                name=attr_name,
+                value=attr_value
+            )
+
+        # Create default goal
+        Goal.objects.create(
+            user=user,
+            title="Getting Started",
+            description="Learn how to use the gamified productivity system"
+        )
+
+        print(f"✅ Auto-created new user: {username}")
+        return user
+
+
 class TaskListView(APIView):
     """API view that returns task data from database"""
     def get(self, request):
         username = request.GET.get('user', 'elena')  # Default to 'elena' for backward compatibility
 
-        try:
-            user = User.objects.get(username=username)
+        # Get or create user automatically
+        user = get_or_create_user(username)
 
-            # Get today's date for checking completion status
-            today = date.today()
+        # Get today's date for checking completion status
+        today = date.today()
 
-            # Get completed task IDs for today
-            completed_task_ids = UserTaskLog.objects.filter(
-                user=user,
-                status='completed',
-                completed_at__date=today
-            ).values_list('task_id', flat=True)
+        # Get completed task IDs for today
+        completed_task_ids = UserTaskLog.objects.filter(
+            user=user,
+            status='completed',
+            completed_at__date=today
+        ).values_list('task_id', flat=True)
 
-            # Get all tasks and separate completed/uncompleted
-            # Exclude time-limited tasks from daily task selection
-            all_tasks = list(Task.objects.filter(
-                user=user
-            ).exclude(
-                title__contains='Start Reading Now'
-            ).exclude(
-                title__contains='Get Ready for Library'
-            ).exclude(
-                title__contains='Clean Your Desk Now'
-            ).exclude(
-                description__contains='Time-limited task completed'
-            ))
+        # Get all tasks and separate completed/uncompleted
+        # Exclude time-limited tasks from daily task selection
+        all_tasks = list(Task.objects.filter(
+            user=user
+        ).exclude(
+            title__contains='Start Reading Now'
+        ).exclude(
+            title__contains='Get Ready for Library'
+        ).exclude(
+            title__contains='Clean Your Desk Now'
+        ).exclude(
+            description__contains='Time-limited task completed'
+        ))
 
-            uncompleted_tasks = [task for task in all_tasks if task.id not in completed_task_ids]
-            completed_tasks = [task for task in all_tasks if task.id in completed_task_ids]
+        uncompleted_tasks = [task for task in all_tasks if task.id not in completed_task_ids]
+        completed_tasks = [task for task in all_tasks if task.id in completed_task_ids]
 
-            # Prioritize uncompleted tasks
-            num_tasks = min(random.randint(3, 6), len(all_tasks))
+        # Prioritize uncompleted tasks
+        num_tasks = min(random.randint(3, 6), len(all_tasks))
 
-            if len(uncompleted_tasks) >= num_tasks:
-                # If we have enough uncompleted tasks, use only those
-                selected_tasks = random.sample(uncompleted_tasks, num_tasks)
-            elif len(uncompleted_tasks) > 0:
-                # Mix uncompleted and some completed tasks
-                remaining_slots = num_tasks - len(uncompleted_tasks)
-                selected_completed = random.sample(completed_tasks, min(remaining_slots, len(completed_tasks)))
-                selected_tasks = uncompleted_tasks + selected_completed
-            else:
-                # All tasks are completed, show some completed ones
-                selected_tasks = random.sample(all_tasks, min(num_tasks, len(all_tasks)))
+        if len(uncompleted_tasks) >= num_tasks:
+            # If we have enough uncompleted tasks, use only those
+            selected_tasks = random.sample(uncompleted_tasks, num_tasks)
+        elif len(uncompleted_tasks) > 0:
+            # Mix uncompleted and some completed tasks
+            remaining_slots = num_tasks - len(uncompleted_tasks)
+            selected_completed = random.sample(completed_tasks, min(remaining_slots, len(completed_tasks)))
+            selected_tasks = uncompleted_tasks + selected_completed
+        else:
+            # All tasks are completed, show some completed ones
+            selected_tasks = random.sample(all_tasks, min(num_tasks, len(all_tasks)))
 
-            tasks = []
-            for task in selected_tasks:
-                # Calculate reward string
-                reward_attr = task.attribute.title()
-                reward_str = f"+{task.reward_point//2} {reward_attr}"
-                if task.difficulty > 1:
-                    reward_str += f", +{task.difficulty-1} Discipline"
+        tasks = []
+        for task in selected_tasks:
+            # Calculate reward string
+            reward_attr = task.attribute.title()
+            reward_str = f"+{task.reward_point//2} {reward_attr}"
+            if task.difficulty > 1:
+                reward_str += f", +{task.difficulty-1} Discipline"
 
-                # Check if this task is completed today
-                is_completed = task.id in completed_task_ids
+            # Check if this task is completed today
+            is_completed = task.id in completed_task_ids
 
-                tasks.append({
-                    "id": task.id,
-                    "title": task.title,
-                    "tip": task.description,
-                    "reward": reward_str,
-                    "completed": is_completed,
-                    "difficulty": task.difficulty,
-                    "attribute": task.attribute
-                })
+            tasks.append({
+                "id": task.id,
+                "title": task.title,
+                "tip": task.description,
+                "reward": reward_str,
+                "completed": is_completed,
+                "difficulty": task.difficulty,
+                "attribute": task.attribute
+            })
 
-            return Response(tasks)
-
-        except User.DoesNotExist:
-            # If the user does not exist, return an empty list
-            default_tasks = [
-                {
-                    "id": 1,
-                    "title": "🧠 Practice Leetcode Problem",
-                    "tip": "Complete within 25 minutes + Document your thought process",
-                    "reward": "+8 Intelligence, +5 Discipline, +2 Wellness",
-                    "completed": False
-                },
-                {
-                    "id": 2,
-                    "title": "📚 Read 30 pages",
-                    "tip": "Focus on key concepts and take notes",
-                    "reward": "+7 Intelligence, +4 Discipline, +3 Wellness",
-                    "completed": False
-                }
-            ]
-            return Response(default_tasks)
+        return Response(tasks)
 
 
 class TaskDetailView(APIView):
@@ -204,7 +228,7 @@ class TaskCompleteView(APIView):
 
         try:
             task_id = request.data.get('task_id')
-            user = User.objects.get(username=username)
+            user = get_or_create_user(username)
             task = Task.objects.get(id=task_id)
 
             # Check if task is already completed today
@@ -635,7 +659,7 @@ class DynamicTaskCompleteView(APIView):
         attribute = request.data.get('attribute', 'discipline')
 
         try:
-            user = User.objects.get(username=username)
+            user = get_or_create_user(username)
 
             # Store old level and exp for level-up detection
             old_level = user.level

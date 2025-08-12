@@ -131,7 +131,9 @@ export const AppProvider = ({ children }) => {
           const statKey = statName.toLowerCase();
 
           if (Object.prototype.hasOwnProperty.call(newStats, statKey)) {
-            newStats[statKey] = Math.max(0, Math.min(1000, newStats[statKey] + value));
+            // Set max limit for stress to 100, others to 1000
+            const maxLimit = statKey === 'stress' ? 100 : 1000;
+            newStats[statKey] = Math.max(0, Math.min(maxLimit, newStats[statKey] + value));
             console.log(`📊 Updated ${statKey}: ${prevStats[statKey]} → ${newStats[statKey]} (${value > 0 ? '+' : ''}${value})`);
           }
         }
