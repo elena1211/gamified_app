@@ -547,6 +547,50 @@ class WeeklyStatsView(APIView):
             })
 
 
+class CompletedTasksHistoryView(APIView):
+    """API view to get user's completed tasks history"""
+    def get(self, request):
+        username = request.GET.get('user', 'elena')
+        limit = int(request.GET.get('limit', 50))  # Default to 50 recent completed tasks
+        
+        try:
+            user = User.objects.get(username=username)
+            
+            # Get completed task logs with task details
+            completed_logs = UserTaskLog.objects.filter(
+                user=user, 
+                status='completed'
+            ).select_related('task').order_by('-completed_at')[:limit]
+            
+            completed_tasks = []
+            for log in completed_logs:
+                task = log.task
+                completed_tasks.append({
+                    'id': task.id,
+                    'title': task.title,
+                    'description': task.description,
+                    'reward_point': task.reward_point,
+                    'difficulty': task.difficulty,
+                    'attribute': task.attribute,
+                    'completed_at': log.completed_at.strftime('%Y-%m-%d'),
+                    'completed_time': log.completed_at.strftime('%H:%M')
+                })
+            
+            return Response({
+                'success': True,
+                'completed_tasks': completed_tasks,
+                'total_count': len(completed_tasks)
+            })
+            
+        except User.DoesNotExist:
+            return Response({
+                'success': False,
+                'error': 'User not found',
+                'completed_tasks': [],
+                'total_count': 0
+            })
+
+
 class DeleteAccountView(APIView):
     """API view for deleting user account"""
     def post(self, request):
