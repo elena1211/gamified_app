@@ -33,7 +33,7 @@ const LevelUpModal = ({
             <div className="flex justify-center items-center space-x-4">
               <div className="text-center">
                 <img
-                  src={getAvatarSrc(oldStage)}
+                  src={getAvatarSrc(oldLevel)}
                   alt={`Stage ${oldStage}`}
                   className="w-20 h-20 rounded-full border-4 border-gray-300 mx-auto mb-2 object-contain bg-gray-50"
                 />
@@ -44,7 +44,7 @@ const LevelUpModal = ({
 
               <div className="text-center">
                 <img
-                  src={getAvatarSrc(newStage)}
+                  src={getAvatarSrc(newLevel)}
                   alt={`Stage ${newStage}`}
                   className="w-20 h-20 rounded-full border-4 border-yellow-400 mx-auto mb-2 animate-pulse object-contain bg-yellow-50"
                 />
@@ -54,7 +54,7 @@ const LevelUpModal = ({
           ) : (
             <div className="text-center">
               <img
-                src={getAvatarSrc(newStage)}
+                src={getAvatarSrc(newLevel)}
                 alt={`Stage ${newStage}`}
                 className="w-24 h-24 rounded-full border-4 border-blue-400 mx-auto mb-2 object-contain bg-blue-50"
               />
