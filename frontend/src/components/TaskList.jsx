@@ -10,11 +10,16 @@ export default function TaskList({ tasks: initialTasks, onTaskComplete }) {
 
   const toggleTask = (id) => {
     const task = tasks.find(t => t.id === id);
-    
+
     // Call the completion handler which handles both complete and uncomplete
     if (onTaskComplete) {
       onTaskComplete(task);
     }
+  };
+
+  // Helper function to clean task title (remove timestamp)
+  const cleanTaskTitle = (title) => {
+    return title.replace(/ - \d{2}:\d{2}:\d{2}$/, '');
   };
 
   return (
@@ -25,8 +30,8 @@ export default function TaskList({ tasks: initialTasks, onTaskComplete }) {
           <div
             key={task.id}
             className={`p-3 rounded-xl border-2 transition-all cursor-pointer hover:shadow-md ${
-              task.completed 
-                ? 'bg-green-50 border-green-200 hover:bg-green-100' 
+              task.completed
+                ? 'bg-green-50 border-green-200 hover:bg-green-100'
                 : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
             }`}
             onClick={() => toggleTask(task.id)}
@@ -44,7 +49,7 @@ export default function TaskList({ tasks: initialTasks, onTaskComplete }) {
                     task.completed ? "line-through text-gray-400" : "text-gray-800"
                   }`}
                 >
-                  {task.title}
+                  {cleanTaskTitle(task.title)}
                 </span>
                 {task.tip && (
                   <p className="text-xs text-gray-500 mt-1">💡 {task.tip}</p>

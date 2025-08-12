@@ -14,28 +14,40 @@ class TaskListView(APIView):
     """API view that returns task data from database"""
     def get(self, request):
         username = request.GET.get('user', 'elena')  # Default to 'elena' for backward compatibility
-        
+
         try:
             user = User.objects.get(username=username)
-            
+
             # Get today's date for checking completion status
             today = date.today()
-            
+
             # Get completed task IDs for today
             completed_task_ids = UserTaskLog.objects.filter(
                 user=user,
                 status='completed',
                 completed_at__date=today
             ).values_list('task_id', flat=True)
-            
+
             # Get all tasks and separate completed/uncompleted
-            all_tasks = list(Task.objects.filter(user=user))
+            # Exclude time-limited tasks from daily task selection
+            all_tasks = list(Task.objects.filter(
+                user=user
+            ).exclude(
+                title__contains='Start Reading Now'
+            ).exclude(
+                title__contains='Get Ready for Library'
+            ).exclude(
+                title__contains='Clean Your Desk Now'
+            ).exclude(
+                description__contains='Time-limited task completed'
+            ))
+
             uncompleted_tasks = [task for task in all_tasks if task.id not in completed_task_ids]
             completed_tasks = [task for task in all_tasks if task.id in completed_task_ids]
-            
+
             # Prioritize uncompleted tasks
             num_tasks = min(random.randint(3, 6), len(all_tasks))
-            
+
             if len(uncompleted_tasks) >= num_tasks:
                 # If we have enough uncompleted tasks, use only those
                 selected_tasks = random.sample(uncompleted_tasks, num_tasks)
@@ -47,7 +59,7 @@ class TaskListView(APIView):
             else:
                 # All tasks are completed, show some completed ones
                 selected_tasks = random.sample(all_tasks, min(num_tasks, len(all_tasks)))
-            
+
             tasks = []
             for task in selected_tasks:
                 # Calculate reward string
@@ -55,10 +67,10 @@ class TaskListView(APIView):
                 reward_str = f"+{task.reward_point//2} {reward_attr}"
                 if task.difficulty > 1:
                     reward_str += f", +{task.difficulty-1} Discipline"
-                
+
                 # Check if this task is completed today
                 is_completed = task.id in completed_task_ids
-                
+
                 tasks.append({
                     "id": task.id,
                     "title": task.title,
@@ -68,9 +80,9 @@ class TaskListView(APIView):
                     "difficulty": task.difficulty,
                     "attribute": task.attribute
                 })
-            
+
             return Response(tasks)
-            
+
         except User.DoesNotExist:
             # If the user does not exist, return an empty list
             default_tasks = [
@@ -99,7 +111,7 @@ class TaskDetailView(APIView):
             task = Task.objects.get(pk=pk)
             reward_attr = task.attribute.title()
             reward_str = f"+{task.reward_point//2} {reward_attr}"
-            
+
             task_data = {
                 "id": task.id,
                 "title": task.title,
@@ -118,13 +130,13 @@ class GoalView(APIView):
     """API view for user's main goal"""
     def get(self, request):
         username = request.GET.get('user', 'elena')  # Default to 'elena'
-        
+
         try:
             user = User.objects.get(username=username)
-            
+
             # Get user's main goal (first active goal)
             goal = Goal.objects.filter(user=user, is_completed=False).first()
-            
+
             if goal:
                 goal_data = {
                     "id": goal.id,
@@ -144,7 +156,7 @@ class GoalView(APIView):
                     "created_at": "2024-01-01"
                 }
                 return Response(default_goal)
-                
+
         except User.DoesNotExist:
             # Return default goal if user doesn't exist
             default_goal = {
@@ -161,12 +173,12 @@ class TaskCompleteView(APIView):
     """API view for marking tasks as complete or uncomplete"""
     def post(self, request):
         username = request.data.get('user', 'elena')  # Default to 'elena'
-        
+
         try:
             task_id = request.data.get('task_id')
             user = User.objects.get(username=username)
             task = Task.objects.get(id=task_id)
-            
+
             # Check if task is already completed today
             today = date.today()
             existing_log = UserTaskLog.objects.filter(
@@ -175,7 +187,7 @@ class TaskCompleteView(APIView):
                 status='completed',
                 completed_at__date=today
             ).first()
-            
+
             if existing_log:
                 # Task already completed today - TOGGLE to uncomplete
                 existing_log.delete()
@@ -192,28 +204,28 @@ class TaskCompleteView(APIView):
                         'earned_points': task.reward_point
                     }
                 )
-                
+
                 if not created and task_log.status != 'completed':
                     task_log.status = 'completed'
                     task_log.completed_at = timezone.now()
                     task_log.earned_points = task.reward_point
                     task_log.save()
-                
+
                 message = "Task completed successfully"
                 success = True
-            
+
             # Update streak after task completion/uncompletion
             user.update_streak()
-            
+
             # Get current completion status
             completed_today_count = UserTaskLog.objects.filter(
                 user=user,
                 status='completed',
                 completed_at__date=today
             ).count()
-            
+
             total_tasks = Task.objects.filter(user=user).count()
-            
+
             return Response({
                 "success": success,
                 "message": message,
@@ -222,7 +234,7 @@ class TaskCompleteView(APIView):
                 "total_tasks": total_tasks,
                 "task_completed": not existing_log  # True if we just completed it, False if we uncompleted it
             })
-            
+
         except (Task.DoesNotExist, User.DoesNotExist):
             return Response({"error": "Task or user not found"}, status=404)
         except Exception as e:
@@ -233,10 +245,10 @@ class UserStatsView(APIView):
     """API view for user statistics including streak"""
     def get(self, request):
         username = request.GET.get('user', 'elena')  # Default to 'elena'
-        
+
         try:
             user = User.objects.get(username=username)
-            
+
             stats = {
                 "level": user.level,
                 "current_streak": user.current_streak,
@@ -244,9 +256,9 @@ class UserStatsView(APIView):
                 "last_activity_date": user.last_activity_date.strftime("%Y-%m-%d") if user.last_activity_date else None,
                 "total_completed_tasks": UserTaskLog.objects.filter(user=user, status='completed').count()
             }
-            
+
             return Response(stats)
-            
+
         except User.DoesNotExist:
             return Response({
                 "level": 5,
@@ -266,19 +278,19 @@ class RegisterView(APIView):
             email = request.data.get('email', '')
             goal_title = request.data.get('goal_title')
             goal_description = request.data.get('goal_description', '')
-            
+
             # Validation
             if not username or not password or not goal_title:
                 return Response({
                     "error": "Username, password, and goal title are required"
                 }, status=status.HTTP_400_BAD_REQUEST)
-            
+
             # Check if username already exists
             if User.objects.filter(username=username).exists():
                 return Response({
                     "error": "Username already exists"
                 }, status=status.HTTP_400_BAD_REQUEST)
-            
+
             # Create user
             user = User.objects.create(
                 username=username,
@@ -288,14 +300,14 @@ class RegisterView(APIView):
                 current_streak=0,
                 max_streak=0
             )
-            
+
             # Create user's main goal
             Goal.objects.create(
                 user=user,
                 title=goal_title,
                 description=goal_description
             )
-            
+
             # Create default tasks for the user
             default_tasks = [
                 {
@@ -355,7 +367,7 @@ class RegisterView(APIView):
                     'reward_point': 12
                 }
             ]
-            
+
             for task_data in default_tasks:
                 Task.objects.create(
                     user=user,
@@ -366,14 +378,14 @@ class RegisterView(APIView):
                     reward_point=task_data['reward_point'],
                     deadline=timezone.now() + timedelta(days=365)  # 1 year deadline
                 )
-            
+
             return Response({
                 "success": True,
                 "message": "User registered successfully",
                 "username": username,
                 "goal": goal_title
             }, status=status.HTTP_201_CREATED)
-            
+
         except Exception as e:
             return Response({
                 "error": str(e)
@@ -386,19 +398,19 @@ class LoginView(APIView):
         try:
             username = request.data.get('username')
             password = request.data.get('password')
-            
+
             if not username or not password:
                 return Response({
                     "error": "Username and password are required"
                 }, status=status.HTTP_400_BAD_REQUEST)
-            
+
             # Authenticate user
             user = authenticate(username=username, password=password)
-            
+
             if user:
                 # Update streak for login
                 user.update_streak()
-                
+
                 return Response({
                     "success": True,
                     "message": "Login successful",
@@ -410,7 +422,7 @@ class LoginView(APIView):
                 return Response({
                     "error": "Invalid username or password"
                 }, status=status.HTTP_401_UNAUTHORIZED)
-                
+
         except Exception as e:
             return Response({
                 "error": str(e)
@@ -424,12 +436,12 @@ class ChangePasswordView(APIView):
             username = request.data.get('username')
             current_password = request.data.get('current_password')
             new_password = request.data.get('new_password')
-            
+
             if not username or not current_password or not new_password:
                 return Response({
                     "error": "Username, current password, and new password are required"
                 }, status=status.HTTP_400_BAD_REQUEST)
-            
+
             # Get user
             try:
                 user = User.objects.get(username=username)
@@ -437,28 +449,28 @@ class ChangePasswordView(APIView):
                 return Response({
                     "error": "User not found"
                 }, status=status.HTTP_404_NOT_FOUND)
-            
+
             # Check current password
             if not check_password(current_password, user.password):
                 return Response({
                     "error": "Current password is incorrect"
                 }, status=status.HTTP_400_BAD_REQUEST)
-            
+
             # Validate new password (basic validation)
             if len(new_password) < 6:
                 return Response({
                     "error": "New password must be at least 6 characters long"
                 }, status=status.HTTP_400_BAD_REQUEST)
-            
+
             # Update password
             user.password = make_password(new_password)
             user.save()
-            
+
             return Response({
                 "success": True,
                 "message": "Password changed successfully"
             })
-            
+
         except Exception as e:
             return Response({
                 "error": str(e)
@@ -469,15 +481,15 @@ class WeeklyStatsView(APIView):
     """API view for weekly task completion statistics"""
     def get(self, request):
         username = request.GET.get('user', 'elena')
-        
+
         try:
             user = User.objects.get(username=username)
-            
+
             # Calculate date range for current week (Monday to Sunday)
             today = date.today()
             monday = today - timedelta(days=today.weekday())
             sunday = monday + timedelta(days=6)
-            
+
             # Get completed tasks for this week
             completed_this_week = UserTaskLog.objects.filter(
                 user=user,
@@ -485,7 +497,7 @@ class WeeklyStatsView(APIView):
                 completed_at__date__gte=monday,
                 completed_at__date__lte=sunday
             ).count()
-            
+
             # Get daily breakdown for the week
             daily_stats = []
             for i in range(7):
@@ -496,21 +508,21 @@ class WeeklyStatsView(APIView):
                     status='completed',
                     completed_at__date=day
                 ).count()
-                
+
                 daily_stats.append({
                     'date': day.strftime('%Y-%m-%d'),
                     'day_name': day_name,
                     'completed_tasks': completed_count,
                     'is_today': day == today
                 })
-            
+
             # Get total tasks available (for completion percentage)
             total_tasks = Task.objects.filter(user=user).count()
-            
+
             # Calculate weekly completion percentage
             max_possible_completions = total_tasks * 7  # 7 days
             completion_percentage = (completed_this_week / max_possible_completions * 100) if max_possible_completions > 0 else 0
-            
+
             return Response({
                 'week_start': monday.strftime('%Y-%m-%d'),
                 'week_end': sunday.strftime('%Y-%m-%d'),
@@ -519,13 +531,13 @@ class WeeklyStatsView(APIView):
                 'completion_percentage': round(completion_percentage, 1),
                 'daily_breakdown': daily_stats
             })
-            
+
         except User.DoesNotExist:
             # Return default stats if user doesn't exist
             today = date.today()
             monday = today - timedelta(days=today.weekday())
             sunday = monday + timedelta(days=6)
-            
+
             daily_stats = []
             for i in range(7):
                 day = monday + timedelta(days=i)
@@ -536,7 +548,7 @@ class WeeklyStatsView(APIView):
                     'completed_tasks': 0,
                     'is_today': day == today
                 })
-            
+
             return Response({
                 'week_start': monday.strftime('%Y-%m-%d'),
                 'week_end': sunday.strftime('%Y-%m-%d'),
@@ -555,15 +567,15 @@ class DynamicTaskCompleteView(APIView):
         task_type = request.data.get('task_type', 'daily')  # 'daily' or 'time_limited'
         reward_points = request.data.get('reward_points', 1)
         attribute = request.data.get('attribute', 'discipline')
-        
+
         try:
             user = User.objects.get(username=username)
-            
+
             # For time-limited tasks, create unique task each time to allow multiple completions
             if task_type == 'time_limited':
-                # Add timestamp to make each time-limited task unique
+                # Add timestamp to make each time-limited task unique (for database uniqueness)
                 unique_title = f"{task_title} - {timezone.now().strftime('%H:%M:%S')}"
-                
+
                 # Create a new task record for each time-limited task completion
                 task = Task.objects.create(
                     title=unique_title,
@@ -576,7 +588,7 @@ class DynamicTaskCompleteView(APIView):
                     is_random=True,
                     created_by_ai=True
                 )
-                
+
                 # Create completion log immediately
                 UserTaskLog.objects.create(
                     user=user,
@@ -585,17 +597,17 @@ class DynamicTaskCompleteView(APIView):
                     completed_at=timezone.now(),
                     earned_points=reward_points
                 )
-                
+
                 # Update user streak
                 user.update_streak()
-                
+
                 return Response({
                     'success': True,
                     'message': f'Time-limited task completed successfully',
                     'task_completed': True,
                     'streak': user.current_streak
                 })
-            
+
             else:
                 # For daily tasks, use existing logic (prevent duplicates per day)
                 task, created = Task.objects.get_or_create(
@@ -611,7 +623,7 @@ class DynamicTaskCompleteView(APIView):
                         'created_by_ai': True
                     }
                 )
-                
+
                 # Check if already completed today
                 today = date.today()
                 existing_log = UserTaskLog.objects.filter(
@@ -620,7 +632,7 @@ class DynamicTaskCompleteView(APIView):
                     status='completed',
                     completed_at__date=today
                 ).first()
-                
+
                 if not existing_log:
                     # Create completion log
                     UserTaskLog.objects.create(
@@ -630,10 +642,10 @@ class DynamicTaskCompleteView(APIView):
                         completed_at=timezone.now(),
                         earned_points=reward_points
                     )
-                    
+
                     # Update user streak
                     user.update_streak()
-                    
+
                     return Response({
                         'success': True,
                         'message': f'Daily task completed successfully',
@@ -647,7 +659,7 @@ class DynamicTaskCompleteView(APIView):
                         'task_completed': True,
                         'streak': user.current_streak
                     })
-                
+
         except User.DoesNotExist:
             return Response({
                 'success': False,
@@ -665,39 +677,48 @@ class DynamicTaskUncompleteView(APIView):
     def post(self, request):
         username = request.data.get('user', 'elena')
         task_title = request.data.get('task_title', '')
-        
+
+        print(f"🔄 DynamicTaskUncompleteView: Uncompleting task '{task_title}' for user '{username}'")
+
         try:
             user = User.objects.get(username=username)
-            
-            # Find the task by title for this user
+
+            # Find the task by title for this user (both random and regular tasks)
             task = Task.objects.filter(
                 title=task_title,
-                user=user,
-                is_random=True
+                user=user
             ).first()
-            
+
             if not task:
+                print(f"❌ Task '{task_title}' not found for user '{username}'")
                 return Response({
                     'success': False,
                     'error': 'Dynamic task not found'
                 }, status=404)
-            
+
             # Find today's completion log for this task
             today = date.today()
-            completion_log = UserTaskLog.objects.filter(
+            completion_logs = UserTaskLog.objects.filter(
                 user=user,
                 task=task,
                 status='completed',
                 completed_at__date=today
-            ).first()
-            
+            )
+
+            print(f"📊 Found {completion_logs.count()} completion logs for task '{task_title}' on {today}")
+
+            completion_log = completion_logs.first()
+
             if completion_log:
                 # Delete the completion log
+                log_id = completion_log.id
                 completion_log.delete()
-                
+                print(f"🗑️ Deleted completion log with ID {log_id}")
+
                 # Update user streak
                 user.update_streak()
-                
+                print(f"📈 Updated user streak to {user.current_streak}")
+
                 return Response({
                     'success': True,
                     'message': 'Daily task uncompleted successfully',
@@ -711,7 +732,7 @@ class DynamicTaskUncompleteView(APIView):
                     'task_completed': False,
                     'streak': user.current_streak
                 })
-                
+
         except User.DoesNotExist:
             return Response({
                 'success': False,
@@ -729,22 +750,31 @@ class CompletedTasksHistoryView(APIView):
     def get(self, request):
         username = request.GET.get('user', 'elena')
         limit = int(request.GET.get('limit', 50))  # Default to 50 recent completed tasks
-        
+
+        print(f"📋 CompletedTasksHistoryView: Fetching completed tasks for user '{username}' (limit: {limit})")
+
         try:
             user = User.objects.get(username=username)
-            
+
             # Get completed task logs with task details
             completed_logs = UserTaskLog.objects.filter(
-                user=user, 
+                user=user,
                 status='completed'
             ).select_related('task').order_by('-completed_at')[:limit]
-            
+
+            print(f"📊 Found {completed_logs.count()} completed task logs")
+
             completed_tasks = []
             for log in completed_logs:
                 task = log.task
+                # Clean task title by removing timestamp pattern (e.g., " - 14:25:35")
+                clean_title = task.title
+                import re
+                clean_title = re.sub(r' - \d{2}:\d{2}:\d{2}$', '', clean_title)
+
                 completed_tasks.append({
                     'id': task.id,
-                    'title': task.title,
+                    'title': clean_title,  # Use cleaned title without timestamp
                     'description': task.description,
                     'reward_point': task.reward_point,
                     'difficulty': task.difficulty,
@@ -752,13 +782,13 @@ class CompletedTasksHistoryView(APIView):
                     'completed_at': log.completed_at.strftime('%Y-%m-%d'),
                     'completed_time': log.completed_at.strftime('%H:%M')
                 })
-            
+
             return Response({
                 'success': True,
                 'completed_tasks': completed_tasks,
                 'total_count': len(completed_tasks)
             })
-            
+
         except User.DoesNotExist:
             return Response({
                 'success': False,
@@ -774,12 +804,12 @@ class DeleteAccountView(APIView):
         try:
             username = request.data.get('username')
             password = request.data.get('password')
-            
+
             if not username or not password:
                 return Response({
                     "error": "Username and password are required"
                 }, status=status.HTTP_400_BAD_REQUEST)
-            
+
             # Get user
             try:
                 user = User.objects.get(username=username)
@@ -787,26 +817,26 @@ class DeleteAccountView(APIView):
                 return Response({
                     "error": "User not found"
                 }, status=status.HTTP_404_NOT_FOUND)
-            
+
             # Verify password
             if not check_password(password, user.password):
                 return Response({
                     "error": "Password is incorrect"
                 }, status=status.HTTP_400_BAD_REQUEST)
-            
+
             # Delete all related data (CASCADE will handle this, but we can be explicit)
             UserTaskLog.objects.filter(user=user).delete()
             Task.objects.filter(user=user).delete()
             Goal.objects.filter(user=user).delete()
-            
+
             # Delete the user
             user.delete()
-            
+
             return Response({
                 "success": True,
                 "message": "Account deleted successfully"
             })
-            
+
         except Exception as e:
             return Response({
                 "error": str(e)
@@ -818,11 +848,11 @@ class ProgressStatsView(APIView):
     def get(self, request):
         username = request.GET.get('user', 'elena')
         range_type = request.GET.get('range', 'today')  # today, week, month
-        
+
         try:
             user = User.objects.get(username=username)
             today = date.today()
-            
+
             if range_type == 'today':
                 start_date = today
                 end_date = today
@@ -836,22 +866,22 @@ class ProgressStatsView(APIView):
             else:
                 start_date = today
                 end_date = today
-            
+
             # Get assigned tasks in the date range
             assigned_tasks = UserTaskLog.objects.filter(
                 user=user,
                 assigned_at__date__range=[start_date, end_date]
             )
-            
+
             total_assigned = assigned_tasks.count()
             total_completed = assigned_tasks.filter(status='completed').count()
-            
+
             # Calculate completion rate
             completion_rate = total_completed / total_assigned if total_assigned > 0 else 0
-            
+
             # Get current streak
             current_streak = user.current_streak
-            
+
             return Response({
                 "range": range_type,
                 "period": {
@@ -867,7 +897,7 @@ class ProgressStatsView(APIView):
                     "missed": assigned_tasks.filter(status='missed').count()
                 }
             })
-            
+
         except User.DoesNotExist:
             return Response({
                 "error": "User not found"
