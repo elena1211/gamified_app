@@ -1,8 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { API_ENDPOINTS, apiRequest } from '../config/api.js';
 import BottomNav from '../components/BottomNav';
 import StatsPanel from '../components/StatsPanel';
-import ProgressPanel from '../components/ProgressPanel';
 import UserProfileCard from '../components/UserProfileCard';
 import TaskList from '../components/TaskList';
 import MainGoal from '../components/MainGoal';
@@ -74,9 +73,6 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
   const [warningType, setWarningType] = useState('');
   const [showDismissConfirm, setShowDismissConfirm] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0); // Add refresh trigger for weekly stats
-
-  // Reference for progress panel refresh function
-  const progressRefresh = useRef(null);
 
   // Time-limited task data
   const [currentTimeLimitedTask, setCurrentTimeLimitedTask] = useState(null);
@@ -201,11 +197,6 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
             console.log(`👤 Updating streak from ${prevUser.streak} to ${data.streak}`);
             return newUser;
           });
-
-          // Refresh progress panel when task completion changes
-          if (progressRefresh.current) {
-            progressRefresh.current();
-          }
           
           console.log('✅ Task toggle successful, refreshing weekly stats in 0.3s');
           
@@ -411,11 +402,6 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
         <div className="bg-white rounded-2xl p-8 shadow-md">
           <StatsPanel stats={attributeStats} />
         </div>
-        {/* Progress Panel */}
-        <ProgressPanel 
-          currentUser={currentUser} 
-          onRefresh={progressRefresh}
-        />
         {/* Task List */}
         <div className="bg-white rounded-2xl p-8 shadow-md">
           <TaskList 

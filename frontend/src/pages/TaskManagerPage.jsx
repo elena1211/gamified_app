@@ -189,8 +189,9 @@ const TaskCard = ({
         </div>
         
         {isHistory && task.completedAt && (
-          <div className="mt-2 text-xs text-gray-500">
-            Completed: {task.completedAt}
+          <div className="mt-2 text-xs text-gray-500 flex justify-between">
+            <span>Completed: {task.completedAt}</span>
+            {task.completedTime && <span>Time: {task.completedTime}</span>}
           </div>
         )}
       </div>
@@ -278,15 +279,6 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
       
       updateTasksState(transformedTasks);
       
-      // Initialize completed tasks if empty
-      if (completedTasks.length === 0) {
-        updateCompletedTasksState([
-          {id: 101, title: "💻 Practice coding", description: "Completed Leetcode problem", reward_point: "5", difficulty: 2, attribute: "intelligence", completedAt: "2025-08-10"},
-          {id: 102, title: "🚶‍♀️ Morning walk", description: "30-minute walk in the park", reward_point: "3", difficulty: 1, attribute: "energy", completedAt: "2025-08-09"},
-          {id: 103, title: "📖 Read chapter", description: "Read one chapter of productivity book", reward_point: "4", difficulty: 1, attribute: "intelligence", completedAt: "2025-08-08"}
-        ]);
-      }
-      
     } catch (error) {
       console.error('Error fetching tasks:', error);
       // Fallback to static data if API fails
@@ -302,8 +294,39 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
     }
   };
 
+  const fetchCompletedHistory = async () => {
+    try {
+      console.log('🔍 Fetching completed tasks history from API...');
+      const { data } = await apiRequest(`${API_ENDPOINTS.completedHistory}?user=${currentUser}&limit=50`);
+      
+      if (data.success && data.completed_tasks) {
+        const transformedHistory = data.completed_tasks.map(task => ({
+          id: task.id,
+          title: task.title,
+          description: task.description || '',
+          reward_point: task.reward_point?.toString() || '0',
+          difficulty: task.difficulty || 1,
+          attribute: task.attribute || 'discipline',
+          completedAt: task.completed_at,
+          completedTime: task.completed_time
+        }));
+        
+        updateCompletedTasksState(transformedHistory);
+        console.log('✅ Loaded', transformedHistory.length, 'completed tasks from API');
+      } else {
+        console.log('⚠️ No completed tasks found in API response');
+        updateCompletedTasksState([]);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching completed tasks history:', error);
+      // Don't show fallback data for completed history
+      updateCompletedTasksState([]);
+    }
+  };
+
   useEffect(() => {
     fetchAllTasks();
+    fetchCompletedHistory();
   }, [currentUser]);
 
   const handleAddTask = async (e) => {
@@ -516,7 +539,13 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab('history')}
+            onClick={() => {
+              setActiveTab('history');
+              // Load completed history when switching to history tab
+              if (completedTasks.length === 0) {
+                fetchCompletedHistory();
+              }
+            }}
             className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
               activeTab === 'history'
                 ? 'bg-purple-500 text-white'
