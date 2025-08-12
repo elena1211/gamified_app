@@ -69,13 +69,45 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 # Database
 if os.environ.get('DATABASE_URL'):
     # Production database (PostgreSQL)
-    DATABASES = {
-        'default': dj_database_url.config(
-            default=os.environ.get('DATABASE_URL'),
-            conn_max_age=600,
-            conn_health_checks=True,
-        )
-    }
+    try:
+        DATABASES = {
+            'default': dj_database_url.config(
+                default=os.environ.get('DATABASE_URL'),
+                conn_max_age=600,
+                conn_health_checks=True,
+                options={
+                    'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+                    'charset': 'utf8mb4',
+                },
+            )
+        }
+        # Add additional database options for Railway
+        DATABASES['default'].update({
+            'OPTIONS': {
+                'connect_timeout': 60,
+                'options': '-c default_transaction_isolation=serializable'
+            },
+            'CONN_MAX_AGE': 0,  # Disable persistent connections for Railway
+        })
+    except Exception as e:
+        # Fallback to manual parsing if dj-database-url fails
+        import urllib.parse as urlparse
+        url = urlparse.urlparse(os.environ.get('DATABASE_URL'))
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.postgresql',
+                'NAME': url.path[1:],
+                'USER': url.username,
+                'PASSWORD': url.password,
+                'HOST': url.hostname,
+                'PORT': url.port or 5432,
+                'OPTIONS': {
+                    'connect_timeout': 60,
+                    'options': '-c default_transaction_isolation=serializable'
+                },
+                'CONN_MAX_AGE': 0,  # Disable persistent connections
+            }
+        }
 else:
     # Development database (SQLite)
     DATABASES = {
@@ -162,3 +194,41 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = 31536000
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+
+# Logging configuration for Railway
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django.db.backends': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}
