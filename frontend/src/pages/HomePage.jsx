@@ -656,8 +656,10 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
         <div className="bg-white rounded-2xl p-8 shadow-md flex flex-col items-center">
           <UserProfileCard user={user} userStats={localUserStats} />
         </div>
+
         {/* Main Goal */}
         <MainGoal currentUser={currentUser} />
+
         {/* Weekly Stats Component */}
         <div className="bg-white rounded-2xl p-8 shadow-md">
           <WeeklyTaskStats currentUser={currentUser} refreshTrigger={refreshTrigger} />
@@ -684,7 +686,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
               }}
               className="bg-purple-500 hover:bg-purple-600 text-white px-6 py-3 rounded-xl shadow-md transition-all duration-300 hover:scale-105"
             >
-              🎲 New Daily Tasks
+              🎲 New Daily Random Tasks
             </button>
             <button
               onClick={() => {

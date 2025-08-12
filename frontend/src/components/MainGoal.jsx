@@ -67,17 +67,6 @@ export default function MainGoal({ currentUser }) {
           </div>
         </div>
       </div>
-      
-      {/* Progress indicator - placeholder for future implementation */}
-      <div className="mt-6">
-        <div className="flex justify-between items-center mb-2">
-          <span className="text-sm font-medium">Progress</span>
-          <span className="text-sm">0%</span>
-        </div>
-        <div className="w-full bg-white/20 rounded-full h-2">
-          <div className="bg-white h-2 rounded-full w-0 transition-all duration-300"></div>
-        </div>
-      </div>
     </div>
   );
 }
