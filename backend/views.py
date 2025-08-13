@@ -1,6 +1,7 @@
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.hashers import make_password, check_password
 from django.views.decorators.csrf import csrf_exempt
@@ -57,6 +58,8 @@ def get_or_create_user(username):
 
 class TaskListView(APIView):
     """API view that returns task data from database"""
+    permission_classes = [IsAuthenticated]
+    
     def get(self, request):
         username = request.GET.get('user', 'elena')  # Default to 'elena' for backward compatibility
 
@@ -319,6 +322,8 @@ class TaskCompleteView(APIView):
 
 class UserStatsView(APIView):
     """API view for user statistics including streak"""
+    permission_classes = [IsAuthenticated]
+    
     def get(self, request):
         username = request.GET.get('user', 'elena')  # Default to 'elena'
 
