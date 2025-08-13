@@ -5,8 +5,7 @@ import RegisterPage from './pages/RegisterPage';
 import WelcomePage from './pages/WelcomePage';
 import SystemSettingsPage from './pages/SystemSettingsPage';
 import ErrorBoundary from './components/ErrorBoundary';
-import { AppProvider } from './context/AppContext';
-import { useAppContext } from './context/hooks';
+import { AppProvider, useAppContext } from './context/AppContext';
 import { debugLog } from './utils/logger';
 
 function AppRoutes() {

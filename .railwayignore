@@ -6,10 +6,10 @@
 .env.local
 .env.development
 .env.production
-**pycache**/
-_.pyc
-_.pyo
-_.pyd
+**__pycache__**/
+*.pyc
+*.pyo
+*.pyd
 .Python
 .venv/
 venv/
@@ -18,21 +18,16 @@ frontend/dist/
 frontend/node_modules/
 .DS_Store
 Thumbs.db
-_.log
+*.log
 db.sqlite3
-_.sqlite3
+*.sqlite3
 .coverage
 .pytest_cache/
 .idea/
 .vscode/
-_.swp
-_.swo
-_~
+*.swp
+*.swo
+*~
 
-# Local development files
-
-CLEANUP_FINAL_REPORT.md
-CODE_CLEANUP_REPORT.md
-fix_user_exp.py
-RAILWAY_DEPLOY.md
+# Development files to ignore
 README.md
