@@ -6,10 +6,10 @@
 .env.local
 .env.development
 .env.production
-**__pycache__**/
-*.pyc
-*.pyo
-*.pyd
+****pycache****/
+_.pyc
+_.pyo
+_.pyd
 .Python
 .venv/
 venv/
@@ -18,16 +18,17 @@ frontend/dist/
 frontend/node_modules/
 .DS_Store
 Thumbs.db
-*.log
+_.log
 db.sqlite3
-*.sqlite3
+_.sqlite3
 .coverage
 .pytest_cache/
 .idea/
 .vscode/
-*.swp
-*.swo
-*~
+_.swp
+_.swo
+_~
 
 # Development files to ignore
+
 README.md
