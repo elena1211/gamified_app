@@ -1,0 +1,15 @@
+# Railway ignore file - prevent frontend from interfering with Python detection
+
+# Ignore frontend directory to prevent Node.js detection
+frontend/
+node_modules/
+
+# Ignore development files
+.venv/
+.git/
+.vscode/
+.DS_Store
+*.log
+
+# Ignore database files
+db.sqlite3
