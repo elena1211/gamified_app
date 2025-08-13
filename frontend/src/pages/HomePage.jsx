@@ -9,7 +9,7 @@ import TimeLimitedTaskPopup from '../components/TimeLimitedTaskPopup';
 import Modal from '../components/Modal';
 import WeeklyTaskStats from '../components/WeeklyTaskStats';
 import LevelUpModal from '../components/LevelUpModal';
-import { useAppContext } from '../context/hooks';
+import { useAppContext } from '../context/AppContext';
 import { getAvatarStage } from '../utils/avatar';
 import { debugLog } from '../utils/logger';
 
