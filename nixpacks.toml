@@ -1,8 +1,7 @@
 # Nixpacks configuration for Railway
 # Force Python detection and prevent Node.js misidentification
 
-[providers]
-python = "*"
+providers = ["python"]
 
 [variables]
 NIXPACKS_PYTHON_VERSION = "3.11"
