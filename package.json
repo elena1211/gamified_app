@@ -2,6 +2,6 @@
   "name": "levelup-app",
   "version": "1.0.0",
   "scripts": {
-    "vercel-build": "cd frontend && npm install && npm run build"
+    "vercel-build": "cd frontend && npm install && VITE_API_URL=https://web-production-39765.up.railway.app/api npm run build"
   }
 }
