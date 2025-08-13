@@ -25,7 +25,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-your-secret-key-here-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',') if os.environ.get('ALLOWED_HOSTS') else ['*']
 
 # Application definition
 
@@ -146,9 +146,19 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5174",
     "http://127.0.0.1:5175",
     "http://127.0.0.1:5176",
+    "https://levelup-jet.vercel.app",  # Production frontend
 ]
 
+# Allow all origins in development (temporary fix)
+CORS_ALLOW_ALL_ORIGINS = True
+
 CORS_ALLOW_CREDENTIALS = True
+
+# CSRF settings for cross-origin requests
+CSRF_TRUSTED_ORIGINS = [
+    "https://web-production-d27fa.up.railway.app",
+    "https://levelup-jet.vercel.app",
+]
 
 # Django REST Framework settings
 REST_FRAMEWORK = {
