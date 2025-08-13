@@ -11,7 +11,10 @@ from django.utils import timezone
 from datetime import date, timedelta, datetime
 import random
 import math
+import logging
 from django.db.models import Count, Q
+
+logger = logging.getLogger(__name__)
 
 def get_or_create_user(username):
     """Helper function to get or create a user with default attributes"""
@@ -53,7 +56,7 @@ def get_or_create_user(username):
             description="Learn how to use the gamified productivity system"
         )
 
-        print(f"✅ Auto-created new user: {username}")
+        logger.info(f"Auto-created new user: {username}")
         return user
 
 class TaskListView(APIView):
@@ -827,7 +830,7 @@ class DynamicTaskUncompleteView(APIView):
         username = request.data.get('user', 'elena')
         task_title = request.data.get('task_title', '')
 
-        print(f"🔄 DynamicTaskUncompleteView: Uncompleting task '{task_title}' for user '{username}'")
+        logger.info(f"DynamicTaskUncompleteView: Uncompleting task '{task_title}' for user '{username}'")
 
         try:
             user = User.objects.get(username=username)
@@ -839,7 +842,7 @@ class DynamicTaskUncompleteView(APIView):
             ).first()
 
             if not task:
-                print(f"❌ Task '{task_title}' not found for user '{username}'")
+                logger.warning(f"Task '{task_title}' not found for user '{username}'")
                 return Response({
                     'success': False,
                     'error': 'Dynamic task not found'
@@ -854,7 +857,7 @@ class DynamicTaskUncompleteView(APIView):
                 completed_at__date=today
             )
 
-            print(f"📊 Found {completion_logs.count()} completion logs for task '{task_title}' on {today}")
+            logger.info(f"Found {completion_logs.count()} completion logs for task '{task_title}' on {today}")
 
             completion_log = completion_logs.first()
 
@@ -862,11 +865,11 @@ class DynamicTaskUncompleteView(APIView):
                 # Delete the completion log
                 log_id = completion_log.id
                 completion_log.delete()
-                print(f"🗑️ Deleted completion log with ID {log_id}")
+                logger.info(f"Deleted completion log with ID {log_id}")
 
                 # Update user streak
                 user.update_streak()
-                print(f"📈 Updated user streak to {user.current_streak}")
+                logger.info(f"Updated user streak to {user.current_streak}")
 
                 return Response({
                     'success': True,
@@ -900,7 +903,7 @@ class CompletedTasksHistoryView(APIView):
         username = request.GET.get('user', 'elena')
         limit = int(request.GET.get('limit', 50))  # Default to 50 recent completed tasks
 
-        print(f"📋 CompletedTasksHistoryView: Fetching completed tasks for user '{username}' (limit: {limit})")
+        logger.info(f"CompletedTasksHistoryView: Fetching completed tasks for user '{username}' (limit: {limit})")
 
         try:
             user = User.objects.get(username=username)
@@ -911,7 +914,7 @@ class CompletedTasksHistoryView(APIView):
                 status='completed'
             ).select_related('task').order_by('-completed_at')[:limit]
 
-            print(f"📊 Found {completed_logs.count()} completed task logs")
+            logger.info(f"Found {completed_logs.count()} completed task logs")
 
             completed_tasks = []
             for log in completed_logs:
