@@ -1,0 +1,8 @@
+# Railway ignore file
+
+.git/
+.venv/
+frontend/
+node_modules/
+.DS_Store
+\*.log

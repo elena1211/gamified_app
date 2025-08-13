@@ -1,0 +1,8 @@
+[phases.setup]
+nixPkgs = ['python311', 'python311Packages.django', 'python311Packages.gunicorn']
+
+[phases.install]
+cmds = ['echo "Using nixpkgs, no pip install needed"']
+
+[start]
+cmd = 'python3 -m gunicorn backend.wsgi:application --bind 0.0.0.0:$PORT'
