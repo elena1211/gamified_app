@@ -1199,38 +1199,112 @@ class RootView(APIView):
         accept_header = request.META.get('HTTP_ACCEPT', '')
         if 'text/html' in accept_header:
             from django.http import HttpResponse
-            html_content = f"""
+            html_content = """
             <!DOCTYPE html>
-            <html>
+            <html lang="en">
             <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>LevelUp API</title>
                 <style>
-                    body {{ font-family: Arial, sans-serif; margin: 40px; }}
-                    .container {{ max-width: 600px; }}
-                    .status {{ color: green; font-weight: bold; }}
-                    .endpoint {{ margin: 10px 0; }}
-                    a {{ color: #007cba; text-decoration: none; }}
-                    a:hover {{ text-decoration: underline; }}
+                    body { 
+                        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+                        max-width: 800px; 
+                        margin: 50px auto; 
+                        padding: 20px; 
+                        background-color: #f5f5f5;
+                        line-height: 1.6;
+                    }
+                    .container {
+                        background: white;
+                        padding: 30px;
+                        border-radius: 10px;
+                        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                    }
+                    .header { 
+                        text-align: center; 
+                        color: #2196F3; 
+                        margin-bottom: 20px;
+                        font-size: 2.5em;
+                    }
+                    .status { 
+                        color: #4CAF50; 
+                        font-weight: bold; 
+                        font-size: 20px;
+                        text-align: center;
+                        margin: 20px 0;
+                    }
+                    .endpoints { 
+                        margin-top: 30px; 
+                        background: #f8f9fa;
+                        padding: 20px;
+                        border-radius: 8px;
+                    }
+                    .endpoint { 
+                        margin: 15px 0; 
+                        padding: 15px;
+                        background: white;
+                        border-radius: 5px;
+                        border-left: 4px solid #2196F3;
+                        font-size: 16px;
+                    }
+                    a { 
+                        color: #2196F3; 
+                        text-decoration: none; 
+                        font-weight: 500;
+                    }
+                    a:hover { 
+                        text-decoration: underline; 
+                        color: #1976D2;
+                    }
+                    .version {
+                        text-align: center;
+                        color: #666;
+                        margin: 15px 0;
+                        font-size: 18px;
+                    }
+                    .description {
+                        text-align: center;
+                        color: #333;
+                        font-size: 18px;
+                        margin: 20px 0;
+                    }
+                    .footer {
+                        text-align: center;
+                        color: #888;
+                        margin-top: 30px;
+                        font-style: italic;
+                    }
+                    .emoji {
+                        font-size: 1.2em;
+                        margin-right: 8px;
+                    }
                 </style>
             </head>
             <body>
                 <div class="container">
-                    <h1>🎮 LevelUp API</h1>
-                    <p class="status">✅ Status: {data['status']}</p>
-                    <p>Version: {data['version']}</p>
-                    <p>{data['message']}</p>
+                    <h1 class="header"><span class="emoji">🎮</span>LevelUp API</h1>
+                    <p class="status"><span class="emoji">✅</span>Status: OK</p>
+                    <p class="version"><strong>Version:</strong> 1.0.0</p>
+                    <p class="description">LevelUp API is running successfully!</p>
                     
-                    <h2>Available Endpoints:</h2>
-                    <div class="endpoint">🔧 <a href="/admin/">Admin Panel</a></div>
-                    <div class="endpoint">🚀 <a href="/api/">API Endpoints</a></div>
-                    <div class="endpoint">💚 <a href="/health/">Health Check</a></div>
+                    <div class="endpoints">
+                        <h2 style="color: #333; margin-bottom: 20px;"><span class="emoji">🔗</span>Available Endpoints:</h2>
+                        <div class="endpoint"><span class="emoji">🔧</span><a href="/admin/">Admin Panel</a> - Django administration interface</div>
+                        <div class="endpoint"><span class="emoji">🚀</span><a href="/api/">API Endpoints</a> - RESTful API documentation</div>
+                        <div class="endpoint"><span class="emoji">💚</span><a href="/api/health/">Health Check</a> - System status endpoint</div>
+                        <div class="endpoint"><span class="emoji">📊</span><a href="/api/tasks/">Tasks API</a> - Task management endpoints</div>
+                    </div>
                     
-                    <p><small>Backend deployed on Railway</small></p>
+                    <div class="footer">
+                        <p><span class="emoji">🚀</span>Backend deployed on Railway</p>
+                        <p>Built with Django REST Framework</p>
+                    </div>
                 </div>
             </body>
             </html>
             """
-            return HttpResponse(html_content, content_type='text/html')
+            return HttpResponse(html_content, content_type='text/html; charset=utf-8')
         
         # Return JSON for API clients
         return Response(data)
