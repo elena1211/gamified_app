@@ -11,7 +11,6 @@ import os
 
 from django.core.wsgi import get_wsgi_application
 
-# Use production settings for Railway deployment
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend.settings_prod')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend.settings')
 
 application = get_wsgi_application()
