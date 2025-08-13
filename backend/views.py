@@ -1184,7 +1184,7 @@ class RootView(APIView):
     permission_classes = []  # Allow anonymous access
 
     def get(self, request):
-        return Response({
+        data = {
             "message": "LevelUp API is running!",
             "status": "OK",
             "version": "1.0.0",
@@ -1193,7 +1193,47 @@ class RootView(APIView):
                 "api": "/api/",
                 "health": "/health/"
             }
-        })
+        }
+        
+        # Check if browser requests HTML
+        accept_header = request.META.get('HTTP_ACCEPT', '')
+        if 'text/html' in accept_header:
+            from django.http import HttpResponse
+            html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>LevelUp API</title>
+                <style>
+                    body {{ font-family: Arial, sans-serif; margin: 40px; }}
+                    .container {{ max-width: 600px; }}
+                    .status {{ color: green; font-weight: bold; }}
+                    .endpoint {{ margin: 10px 0; }}
+                    a {{ color: #007cba; text-decoration: none; }}
+                    a:hover {{ text-decoration: underline; }}
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>🎮 LevelUp API</h1>
+                    <p class="status">✅ Status: {data['status']}</p>
+                    <p>Version: {data['version']}</p>
+                    <p>{data['message']}</p>
+                    
+                    <h2>Available Endpoints:</h2>
+                    <div class="endpoint">🔧 <a href="/admin/">Admin Panel</a></div>
+                    <div class="endpoint">🚀 <a href="/api/">API Endpoints</a></div>
+                    <div class="endpoint">💚 <a href="/health/">Health Check</a></div>
+                    
+                    <p><small>Backend deployed on Railway</small></p>
+                </div>
+            </body>
+            </html>
+            """
+            return HttpResponse(html_content, content_type='text/html')
+        
+        # Return JSON for API clients
+        return Response(data)
 
 
 class HealthView(APIView):
