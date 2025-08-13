@@ -2,6 +2,10 @@
 
 > Transform your daily tasks into an RPG-style adventure with character progression, skill building, and reward systems.
 
+## 🌐 Live Demo
+
+**Try the app now:** [https://levelup-jet.vercel.app/home](https://levelup-jet.vercel.app/home)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Django](https://img.shields.io/badge/Django-5.2.5-green.svg)](https://www.djangoproject.com/)
 [![React](https://img.shields.io/badge/React-19.1.0-blue.svg)](https://reactjs.org/)
@@ -9,6 +13,7 @@
 
 ## 📋 Table of Contents
 
+- [Live Demo](#-live-demo)
 - [Overview](#-overview)
 - [Features](#-features)
 - [Tech Stack](#-tech-stack)
