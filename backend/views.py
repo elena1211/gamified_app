@@ -1178,6 +1178,7 @@ class ProgressStatsView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@method_decorator(csrf_exempt, name='dispatch')
 class RootView(APIView):
     """Root endpoint to verify the API is running"""
     permission_classes = []  # Allow anonymous access
