@@ -355,6 +355,8 @@ class UserStatsView(APIView):
 @method_decorator(csrf_exempt, name='dispatch')
 class RegisterView(APIView):
     """API view for user registration"""
+    permission_classes = []  # Allow anonymous access for registration
+    
     def post(self, request):
         try:
             username = request.data.get('username')
@@ -479,6 +481,8 @@ class RegisterView(APIView):
 @method_decorator(csrf_exempt, name='dispatch')
 class LoginView(APIView):
     """API view for user login"""
+    permission_classes = []  # Allow anonymous access for login
+    
     def post(self, request):
         try:
             username = request.data.get('username')
