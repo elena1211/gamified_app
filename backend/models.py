@@ -20,44 +20,37 @@ class User(AbstractUser):
         return self.username
 
     def update_streak(self):
-        """Update user's streak based on completing all tasks"""
+        """Update user's streak based on daily activity (completing at least one task)"""
         today = date.today()
 
-        # Check if all tasks are completed today
-        total_tasks = Task.objects.filter(user=self).count()
+        # Check if any task was completed today
         completed_today = UserTaskLog.objects.filter(
             user=self,
             status='completed',
             completed_at__date=today
         ).count()
 
-        all_completed = completed_today >= total_tasks and total_tasks > 0
+        has_activity_today = completed_today > 0
 
-        # Update streak logic
-        if all_completed and not self.all_tasks_completed_today:
-            # First time completing all tasks today
-            if self.last_all_tasks_completed_date == today - timedelta(days=1):
-                # Consecutive day
+        # Update streak logic based on daily activity
+        if has_activity_today:
+            # User has activity today
+            if self.last_activity_date == today - timedelta(days=1):
+                # Consecutive day - increment streak
                 self.current_streak += 1
-            else:
-                # Streak starts fresh
+            elif self.last_activity_date != today:
+                # Either first day or gap in activity - reset streak to 1
                 self.current_streak = 1
 
             # Update max streak if current streak is higher
             if self.current_streak > self.max_streak:
                 self.max_streak = self.current_streak
 
-            self.all_tasks_completed_today = True
-            self.last_all_tasks_completed_date = today
             self.last_activity_date = today
             self.save()
 
-        elif not all_completed and self.all_tasks_completed_today:
-            # Tasks were uncompleted, decrease streak
-            if self.current_streak > 0:
-                self.current_streak -= 1
-            self.all_tasks_completed_today = False
-            self.save()
+        # Note: We don't decrement streak here because missing a day will naturally break the streak
+        # when the user next completes a task (if it's not consecutive)
 
     def check_and_reset_streak(self):
         """Check if streak should be reset due to inactivity"""

@@ -59,12 +59,94 @@ def get_or_create_user(username):
         logger.info(f"Auto-created new user: {username}")
         return user
 
+def apply_attribute_changes(user, reward_string):
+    """Helper function to parse reward string and apply attribute changes"""
+    if not reward_string:
+        return
+
+    try:
+        # Parse change strings like "+3 Intelligence, +2 Discipline, -1 Stress"
+        changes = reward_string.split(',')
+
+        for change in changes:
+            change = change.strip()
+            # Match pattern like "+3 Intelligence" or "-1 Stress"
+            import re
+            match = re.match(r'([+-]\d+)\s+(\w+)', change)
+            if match:
+                value_str, attr_name = match.groups()
+                value = int(value_str)
+                attr_name_lower = attr_name.lower()
+
+                # Get or create user attribute
+                user_attr, created = UserAttribute.objects.get_or_create(
+                    user=user,
+                    name=attr_name_lower,
+                    defaults={'value': 0}
+                )
+
+                # Apply change with limits
+                if attr_name_lower == 'stress':
+                    # Stress has max limit of 100
+                    user_attr.value = max(0, min(100, user_attr.value + value))
+                else:
+                    # Other attributes have max limit of 1000
+                    user_attr.value = max(0, min(1000, user_attr.value + value))
+
+                user_attr.save()
+                logger.info(f"Applied attribute change: {attr_name_lower} {value:+d} (new value: {user_attr.value})")
+
+    except Exception as e:
+        logger.error(f"Error applying attribute changes: {e}")
+
+def reverse_attribute_changes(user, reward_string):
+    """Helper function to reverse attribute changes by parsing reward string and applying opposite changes"""
+    if not reward_string:
+        return
+
+    try:
+        # Parse change strings like "+3 Intelligence, +2 Discipline, -1 Stress"
+        # and reverse them: "-3 Intelligence, -2 Discipline, +1 Stress"
+        changes = reward_string.split(',')
+
+        for change in changes:
+            change = change.strip()
+            # Match pattern like "+3 Intelligence" or "-1 Stress"
+            import re
+            match = re.match(r'([+-]\d+)\s+(\w+)', change)
+            if match:
+                value_str, attr_name = match.groups()
+                value = -int(value_str)  # Reverse the sign
+                attr_name_lower = attr_name.lower()
+
+                # Get or create user attribute
+                user_attr, created = UserAttribute.objects.get_or_create(
+                    user=user,
+                    name=attr_name_lower,
+                    defaults={'value': 0}
+                )
+
+                # Apply reverse change with limits
+                if attr_name_lower == 'stress':
+                    # Stress has max limit of 100
+                    user_attr.value = max(0, min(100, user_attr.value + value))
+                else:
+                    # Other attributes have max limit of 1000
+                    user_attr.value = max(0, min(1000, user_attr.value + value))
+
+                user_attr.save()
+                logger.info(f"Reversed attribute change: {attr_name_lower} {value:+d} (new value: {user_attr.value})")
+
+    except Exception as e:
+        logger.error(f"Error reversing attribute changes: {e}")
+
 class TaskListView(APIView):
     """API view that returns task data from database"""
-    permission_classes = [IsAuthenticated]
+    # Temporarily remove authentication for development
+    # permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        username = request.GET.get('user', 'elena')  # Default to 'elena' for backward compatibility
+        username = request.GET.get('user', 'tester')  # Default to 'tester' for backward compatibility
 
         # Get or create user automatically
         user = get_or_create_user(username)
@@ -158,7 +240,7 @@ class TaskDetailView(APIView):
 class GoalView(APIView):
     """API view for user's main goal"""
     def get(self, request):
-        username = request.GET.get('user', 'elena')  # Default to 'elena'
+        username = request.GET.get('user', 'tester')  # Default to 'tester'
 
         try:
             user = User.objects.get(username=username)
@@ -224,7 +306,7 @@ def get_exp_for_level(level):
 class TaskCompleteView(APIView):
     """API view for marking tasks as complete or uncomplete"""
     def post(self, request):
-        username = request.data.get('user', 'elena')  # Default to 'elena'
+        username = request.data.get('user', 'tester')  # Default to 'tester'
 
         try:
             task_id = request.data.get('task_id')
@@ -325,10 +407,11 @@ class TaskCompleteView(APIView):
 
 class UserStatsView(APIView):
     """API view for user statistics including streak"""
-    permission_classes = [IsAuthenticated]
+    # Temporarily remove authentication for development
+    # permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        username = request.GET.get('user', 'elena')  # Default to 'elena'
+        username = request.GET.get('user', 'tester')  # Default to 'tester'
 
         try:
             user = User.objects.get(username=username)
@@ -580,7 +663,7 @@ class ChangePasswordView(APIView):
 class WeeklyStatsView(APIView):
     """API view for weekly task completion statistics"""
     def get(self, request):
-        username = request.GET.get('user', 'elena')
+        username = request.GET.get('user', 'tester')
 
         try:
             user = User.objects.get(username=username)
@@ -662,10 +745,11 @@ class WeeklyStatsView(APIView):
 class DynamicTaskCompleteView(APIView):
     """API view for completing dynamic tasks (daily tasks, time-limited tasks)"""
     def post(self, request):
-        username = request.data.get('user', 'elena')
+        username = request.data.get('user', 'tester')
         task_title = request.data.get('task_title', '')
         task_type = request.data.get('task_type', 'daily')  # 'daily' or 'time_limited'
         reward_points = request.data.get('reward_points', 1)
+        reward_string = request.data.get('reward_string', '')  # Full reward string for attribute processing
         attribute = request.data.get('attribute', 'discipline')
 
         try:
@@ -775,6 +859,10 @@ class DynamicTaskCompleteView(APIView):
                     exp_gained = calculate_task_exp(task)
                     user.exp += exp_gained
 
+                    # Apply attribute changes from reward string
+                    if reward_string:
+                        apply_attribute_changes(user, reward_string)
+
                     # Update level based on new EXP
                     new_level = calculate_level_from_exp(user.exp)
                     user.level = new_level
@@ -827,8 +915,9 @@ class DynamicTaskCompleteView(APIView):
 class DynamicTaskUncompleteView(APIView):
     """API view for uncompleting dynamic daily tasks"""
     def post(self, request):
-        username = request.data.get('user', 'elena')
+        username = request.data.get('user', 'tester')
         task_title = request.data.get('task_title', '')
+        reward_string = request.data.get('reward_string', '')  # For reversing attribute changes
 
         logger.info(f"DynamicTaskUncompleteView: Uncompleting task '{task_title}' for user '{username}'")
 
@@ -862,6 +951,22 @@ class DynamicTaskUncompleteView(APIView):
             completion_log = completion_logs.first()
 
             if completion_log:
+                # Store old level and exp for level-up detection
+                old_level = user.level
+                old_exp = user.exp
+
+                # Subtract EXP when uncompleting
+                exp_lost = calculate_task_exp(task)
+                user.exp = max(0, user.exp - exp_lost)
+
+                # Reverse attribute changes
+                if reward_string:
+                    reverse_attribute_changes(user, reward_string)
+
+                # Update level based on new EXP
+                new_level = calculate_level_from_exp(user.exp)
+                user.level = new_level
+
                 # Delete the completion log
                 log_id = completion_log.id
                 completion_log.delete()
@@ -871,11 +976,24 @@ class DynamicTaskUncompleteView(APIView):
                 user.update_streak()
                 logger.info(f"Updated user streak to {user.current_streak}")
 
+                # Save user changes
+                user.save()
+
                 return Response({
                     'success': True,
                     'message': 'Daily task uncompleted successfully',
                     'task_completed': False,
-                    'streak': user.current_streak
+                    'streak': user.current_streak,
+                    'user_stats': {
+                        'level': user.level,
+                        'exp': user.exp,
+                        'level_up': False,
+                        'old_level': old_level,
+                        'next_level_exp': get_exp_for_level(user.level + 1),
+                        'current_level_exp': get_exp_for_level(user.level),
+                        'exp_progress': user.exp - get_exp_for_level(user.level),
+                        'exp_needed': get_exp_for_level(user.level + 1) - get_exp_for_level(user.level)
+                    }
                 })
             else:
                 return Response({
@@ -900,7 +1018,7 @@ class DynamicTaskUncompleteView(APIView):
 class CompletedTasksHistoryView(APIView):
     """API view to get user's completed tasks history"""
     def get(self, request):
-        username = request.GET.get('user', 'elena')
+        username = request.GET.get('user', 'tester')
         limit = int(request.GET.get('limit', 50))  # Default to 50 recent completed tasks
 
         logger.info(f"CompletedTasksHistoryView: Fetching completed tasks for user '{username}' (limit: {limit})")
@@ -998,7 +1116,7 @@ class DeleteAccountView(APIView):
 class ProgressStatsView(APIView):
     """API view to get user's progress statistics"""
     def get(self, request):
-        username = request.GET.get('user', 'elena')
+        username = request.GET.get('user', 'tester')
         range_type = request.GET.get('range', 'today')  # today, week, month
 
         try:
