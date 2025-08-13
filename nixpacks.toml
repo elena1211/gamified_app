@@ -1,0 +1,14 @@
+[phases.setup]
+nixPkgs = ['python311', 'python311Packages.pip', 'postgresql']
+
+[phases.install]
+cmds = ['python -m pip install --upgrade pip', 'python -m pip install -r requirements.txt']
+
+[phases.build]
+cmds = [
+  'python manage.py collectstatic --noinput --settings=backend.settings',
+  'echo "Build completed - skipping migrations until runtime"'
+]
+
+[start]
+cmd = 'python manage.py migrate --settings=backend.settings_prod && gunicorn --env DJANGO_SETTINGS_MODULE=backend.settings_prod backend.wsgi:application --bind 0.0.0.0:$PORT'

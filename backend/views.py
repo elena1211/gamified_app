@@ -59,7 +59,7 @@ def get_or_create_user(username):
 class TaskListView(APIView):
     """API view that returns task data from database"""
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
         username = request.GET.get('user', 'elena')  # Default to 'elena' for backward compatibility
 
@@ -323,7 +323,7 @@ class TaskCompleteView(APIView):
 class UserStatsView(APIView):
     """API view for user statistics including streak"""
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
         username = request.GET.get('user', 'elena')  # Default to 'elena'
 
@@ -361,7 +361,7 @@ class UserStatsView(APIView):
 class RegisterView(APIView):
     """API view for user registration"""
     permission_classes = []  # Allow anonymous access for registration
-    
+
     def post(self, request):
         try:
             username = request.data.get('username')
@@ -487,7 +487,7 @@ class RegisterView(APIView):
 class LoginView(APIView):
     """API view for user login"""
     permission_classes = []  # Allow anonymous access for login
-    
+
     def post(self, request):
         try:
             username = request.data.get('username')
@@ -504,7 +504,7 @@ class LoginView(APIView):
             if user:
                 # Log the user in (creates session)
                 login(request, user)
-                
+
                 # Update streak for login
                 user.update_streak()
 
