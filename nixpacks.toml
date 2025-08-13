@@ -1,9 +1,12 @@
 [phases.setup]
 nixPkgs = ['python311', 'python311Packages.pip', 'python311Packages.setuptools']
-aptPkgs = []
 
 [phases.install]
-cmds = ['pip install -r requirements.txt --break-system-packages']
+cmds = [
+  'pip install -r requirements.txt --break-system-packages',
+  'python3 -c "import sys; print(\"Python path:\", sys.path)"',
+  'python3 -c "import gunicorn; print(\"Gunicorn found\")" || echo "Gunicorn import failed"'
+]
 
 [variables]
 DJANGO_SETTINGS_MODULE = 'backend.settings_prod'
