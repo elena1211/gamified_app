@@ -67,35 +67,13 @@ TEMPLATES = [
 WSGI_APPLICATION = 'backend.wsgi.application'
 
 # Database
-# Check if we're in Railway build stage (no access to internal network yet)
-RAILWAY_BUILD_STAGE = os.environ.get('NIXPACKS_PHASE') == 'build' or not os.environ.get('DATABASE_URL')
-
-if os.environ.get('DATABASE_URL') and not RAILWAY_BUILD_STAGE:
-    # Production database (PostgreSQL) - only when not in build stage
-    import urllib.parse as urlparse
-    database_url = os.environ.get('DATABASE_URL')
-
-    # Parse the URL manually to avoid DNS issues
-    url = urlparse.urlparse(database_url)
-
+if os.environ.get('DATABASE_URL'):
+    # Production database (PostgreSQL)
     DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': url.path[1:],
-            'USER': url.username,
-            'PASSWORD': url.password,
-            'HOST': url.hostname,
-            'PORT': url.port or 5432,
-            'OPTIONS': {
-                'connect_timeout': 30,
-                'application_name': 'levelup_django',
-            },
-            'CONN_MAX_AGE': 0,  # Disable persistent connections for Railway
-            'ATOMIC_REQUESTS': True,
-        }
+        'default': dj_database_url.parse(os.environ.get('DATABASE_URL'))
     }
 else:
-    # Development database (SQLite) or build stage fallback
+    # Development database (SQLite)
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
