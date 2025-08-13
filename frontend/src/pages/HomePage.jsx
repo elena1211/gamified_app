@@ -73,9 +73,9 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
 
   const [user, setUser] = useState({
     name: currentUser || "tester",
-    level: 5,
-    exp: 0,
-    streak: 0,
+    level: 1,  // Will be updated from API
+    exp: 0,    // Will be updated from API
+    streak: 0, // Will be updated from API
     avatar: "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjAwIiB2aWV3Qm94PSIwIDAgMjAwIDIwMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIHJ4PSIxMDAiIGZpbGw9IiNmYzkxYmYiLz4KPGNpcmNsZSBjeD0iMTAwIiBjeT0iODAiIHI9IjMwIiBmaWxsPSIjZmZmZmZmIi8+CjxlbGxpcHNlIGN4PSIxMDAiIGN5PSIxNTAiIHJ4PSI0MCIgcnk9IjMwIiBmaWxsPSIjZmZmZmZmIi8+Cjwvc3ZnPgo="
   });
 
@@ -241,6 +241,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
               task_title: task.title,
               task_type: 'daily',
               reward_points: parseInt(task.reward?.match(/\+(\d+)/)?.[1] || '1'),
+              reward_string: task.reward || '',  // Pass full reward string for attribute processing
               attribute: task.attribute || 'discipline',
               user: currentUser || 'tester'
             })
@@ -258,10 +259,11 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
                   : t
               ));
 
-              // Apply stat changes based on task completion
-              if (task.reward) {
+              // Don't apply stat changes here for Dynamic Tasks - backend handles it
+              // Apply stat changes based on task completion only for fallback tasks
+              if (task.reward && task.id < 25) {
                 applyStatChanges(task.reward);
-                debugLog('📈 Applied stat changes:', task.reward);
+                debugLog('📈 Applied stat changes for fallback task:', task.reward);
               }
 
               // Check for level up from API response
@@ -325,6 +327,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
             },
             body: JSON.stringify({
               task_title: task.title,
+              reward_string: task.reward || '',  // Pass reward string for attribute reversal
               user: currentUser || 'tester'
             })
           });
@@ -341,15 +344,30 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
                   : t
               ));
 
-              // Reverse stat changes for uncompleting task
-              if (task.reward) {
-                const reverseReward = task.reward.replace(/\+/g, '-');
-                applyStatChanges(reverseReward);
-                debugLog('📉 Reversed stat changes:', reverseReward);
-              }
+              // For Daily Random Tasks, don't reverse stat changes manually - backend handles it
+              // Only reverse if this is a fallback task (not from database)
+              // Actually, since we're using Dynamic API, backend should handle all attribute changes
+              // So we don't need to apply any stat changes here
 
-              // Update streak based on API response
-              updateUserStats({ currentStreak: data.streak });
+              // Update user stats with EXP and level data from API response
+              if (data.user_stats) {
+                updateUserStats({
+                  currentStreak: data.streak,
+                  level: data.user_stats.level,
+                  exp: data.user_stats.exp
+                });
+
+                // Update user state for display
+                setUser(prev => ({
+                  ...prev,
+                  level: data.user_stats.level,
+                  exp: data.user_stats.exp,
+                  streak: data.streak
+                }));
+              } else {
+                // Update streak based on API response
+                updateUserStats({ currentStreak: data.streak });
+              }
 
               debugLog('✅ Dynamic task uncomplete successful, refreshing weekly stats');
 
@@ -614,18 +632,17 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
   }, [currentUser]); // Only depend on currentUser, not the functions
 
   // Show random time-limited task after 3 seconds for testing
-  // Temporarily disabled to reduce flicker
-  // useEffect(() => {
-  //   const timer = setTimeout(() => {
-  //     const randomTask = TIME_LIMITED_TASKS[Math.floor(Math.random() * TIME_LIMITED_TASKS.length)];
-  //     setCurrentTimeLimitedTask(randomTask);
-  //     setShowTimeLimitedTask(true);
-  //   }, 3000);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const randomTask = TIME_LIMITED_TASKS[Math.floor(Math.random() * TIME_LIMITED_TASKS.length)];
+      setCurrentTimeLimitedTask(randomTask);
+      setShowTimeLimitedTask(true);
+    }, 3000);
 
-  //   return () => {
-  //     clearTimeout(timer);
-  //   };
-  // }, []);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, []);
 
   debugLog('Homepage about to render, loading:', loading, 'error:', error);
 
