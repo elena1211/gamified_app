@@ -229,14 +229,14 @@ class TaskListView(APIView):
     def post(self, request):
         """Create a new task"""
         username = request.data.get('user', 'tester')  # Default to 'tester'
-        
+
         try:
             from datetime import datetime, timedelta
             user = get_or_create_user(username)
-            
+
             # Set default deadline to 24 hours from now
             default_deadline = datetime.now() + timedelta(days=1)
-            
+
             # Create new task
             task = Task.objects.create(
                 title=request.data.get('title', ''),
@@ -247,13 +247,13 @@ class TaskListView(APIView):
                 deadline=request.data.get('deadline', default_deadline),
                 user=user
             )
-            
+
             # Return the created task in the same format as GET
             reward_attr = task.attribute.title()
             reward_str = f"+{task.reward_point//2} {reward_attr}"
             if task.difficulty > 1:
                 reward_str += f", +{task.difficulty-1} Discipline"
-            
+
             task_data = {
                 "id": task.id,
                 "title": task.title,
@@ -263,9 +263,9 @@ class TaskListView(APIView):
                 "difficulty": task.difficulty,
                 "attribute": task.attribute
             }
-            
+
             return Response(task_data, status=201)
-            
+
         except Exception as e:
             return Response({"error": str(e)}, status=400)
 
@@ -1247,7 +1247,7 @@ class RootView(APIView):
                 "health": "/health/"
             }
         }
-        
+
         # Check if browser requests HTML
         accept_header = request.META.get('HTTP_ACCEPT', '')
         if 'text/html' in accept_header:
@@ -1260,11 +1260,11 @@ class RootView(APIView):
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>LevelUp API</title>
                 <style>
-                    body { 
-                        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-                        max-width: 800px; 
-                        margin: 50px auto; 
-                        padding: 20px; 
+                    body {
+                        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                        max-width: 800px;
+                        margin: 50px auto;
+                        padding: 20px;
                         background-color: #f5f5f5;
                         line-height: 1.6;
                     }
@@ -1274,40 +1274,40 @@ class RootView(APIView):
                         border-radius: 10px;
                         box-shadow: 0 2px 10px rgba(0,0,0,0.1);
                     }
-                    .header { 
-                        text-align: center; 
-                        color: #2196F3; 
+                    .header {
+                        text-align: center;
+                        color: #2196F3;
                         margin-bottom: 20px;
                         font-size: 2.5em;
                     }
-                    .status { 
-                        color: #4CAF50; 
-                        font-weight: bold; 
+                    .status {
+                        color: #4CAF50;
+                        font-weight: bold;
                         font-size: 20px;
                         text-align: center;
                         margin: 20px 0;
                     }
-                    .endpoints { 
-                        margin-top: 30px; 
+                    .endpoints {
+                        margin-top: 30px;
                         background: #f8f9fa;
                         padding: 20px;
                         border-radius: 8px;
                     }
-                    .endpoint { 
-                        margin: 15px 0; 
+                    .endpoint {
+                        margin: 15px 0;
                         padding: 15px;
                         background: white;
                         border-radius: 5px;
                         border-left: 4px solid #2196F3;
                         font-size: 16px;
                     }
-                    a { 
-                        color: #2196F3; 
-                        text-decoration: none; 
+                    a {
+                        color: #2196F3;
+                        text-decoration: none;
                         font-weight: 500;
                     }
-                    a:hover { 
-                        text-decoration: underline; 
+                    a:hover {
+                        text-decoration: underline;
                         color: #1976D2;
                     }
                     .version {
@@ -1340,7 +1340,7 @@ class RootView(APIView):
                     <p class="status"><span class="emoji">✅</span>Status: OK</p>
                     <p class="version"><strong>Version:</strong> 1.0.0</p>
                     <p class="description">LevelUp API is running successfully!</p>
-                    
+
                     <div class="endpoints">
                         <h2 style="color: #333; margin-bottom: 20px;"><span class="emoji">🔗</span>Available Endpoints:</h2>
                         <div class="endpoint"><span class="emoji">🔧</span><a href="/admin/">Admin Panel</a> - Django administration interface</div>
@@ -1348,7 +1348,7 @@ class RootView(APIView):
                         <div class="endpoint"><span class="emoji">💚</span><a href="/api/health/">Health Check</a> - System status endpoint</div>
                         <div class="endpoint"><span class="emoji">📊</span><a href="/api/tasks/">Tasks API</a> - Task management endpoints</div>
                     </div>
-                    
+
                     <div class="footer">
                         <p><span class="emoji">🚀</span>Backend deployed on Railway</p>
                         <p>Built with Django REST Framework</p>
@@ -1358,7 +1358,7 @@ class RootView(APIView):
             </html>
             """
             return HttpResponse(html_content, content_type='text/html; charset=utf-8')
-        
+
         # Return JSON for API clients
         return Response(data)
 
