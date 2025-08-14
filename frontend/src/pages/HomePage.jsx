@@ -675,8 +675,8 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
     setQuestSchedulerActive(true);
 
     const scheduleNextTimeLimitedTask = () => {
-      // Random interval between 1-3 minutes (60000-180000ms) for better UX
-      const randomDelay = Math.random() * (180000 - 60000) + 60000;
+      // Random interval between 30 seconds - 2 minutes (30000-120000ms) for better UX
+      const randomDelay = Math.random() * (120000 - 30000) + 30000;
 
       debugLog(`⏰ Next time-limited quest scheduled in ${Math.round(randomDelay/1000)} seconds`);
 
@@ -697,8 +697,8 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
       return timer;
     };
 
-    // Start the first scheduled task with initial delay (30-120 seconds after page load)
-    const initialDelay = Math.random() * (120000 - 30000) + 30000;
+    // Start the first scheduled task with initial delay (5-15 seconds after page load)
+    const initialDelay = Math.random() * (15000 - 5000) + 5000;
     debugLog(`🎮 Time-limited quest system starting, first quest in ${Math.round(initialDelay/1000)} seconds`);
 
     const initialTimer = setTimeout(() => {
