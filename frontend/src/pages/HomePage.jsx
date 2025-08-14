@@ -13,28 +13,63 @@ import { useAppContext } from '../context/AppContext';
 import { getAvatarStage } from '../utils/avatar';
 import { debugLog } from '../utils/logger';
 
-// Time-limited task data - Enhanced rewards (1-10 points)
+// Time-limited ultra-micro engineering actions - Atomic habit style (5-10 seconds)
 const TIME_LIMITED_TASKS = [
   {
-    title: "Start Reading Now",
-    description: "Pick up a book or open an e-book and start reading for 5 minutes",
-    duration: 300,
-    reward: "+8 Intelligence, +5 Discipline, +2 Wellness",
-    penalty: "-3 Energy, -2 Intelligence"
+    title: "Click VS Code Tab",
+    description: "Simply click on your VS Code tab or open VS Code if not running",
+    duration: 10,
+    reward: "+3 Intelligence, +2 Discipline",
+    penalty: "-1 Intelligence"
   },
   {
-    title: "Get Ready for Library",
-    description: "Pack your bag, get dressed, and prepare to go to the library in 1 minute",
-    duration: 60,
-    reward: "+6 Energy, +4 Discipline, +3 Social",
-    penalty: "-5 Energy, -3 Discipline"
+    title: "Press Ctrl+S",
+    description: "Save any file you have open with Ctrl+S (or Cmd+S on Mac)",
+    duration: 5,
+    reward: "+2 Discipline, +1 Intelligence",
+    penalty: "-1 Discipline"
   },
   {
-    title: "Clean Your Desk Now",
-    description: "Clear your desk and organise all the clutter",
-    duration: 180,
-    reward: "+7 Discipline, +6 Wellness, +2 Energy",
-    penalty: "-4 Discipline, +3 Stress"
+    title: "Check Git Status",
+    description: "Type 'git status' in terminal and press Enter",
+    duration: 8,
+    reward: "+4 Intelligence, +3 Discipline",
+    penalty: "-2 Intelligence"
+  },
+  {
+    title: "Open Terminal",
+    description: "Open your terminal or command prompt application",
+    duration: 7,
+    reward: "+3 Intelligence, +2 Discipline",
+    penalty: "-1 Intelligence"
+  },
+  {
+    title: "Create New File",
+    description: "Press Ctrl+N (or Cmd+N) to create a new file in your editor",
+    duration: 6,
+    reward: "+2 Intelligence, +3 Discipline",
+    penalty: "-1 Discipline"
+  },
+  {
+    title: "Type 'console.log'",
+    description: "Type the letters 'console.log' anywhere in your editor",
+    duration: 9,
+    reward: "+4 Intelligence, +2 Discipline",
+    penalty: "-2 Intelligence"
+  },
+  {
+    title: "Open Browser Dev Tools",
+    description: "Press F12 or right-click and select 'Inspect' in your browser",
+    duration: 8,
+    reward: "+5 Intelligence, +2 Discipline",
+    penalty: "-2 Intelligence"
+  },
+  {
+    title: "Navigate to GitHub",
+    description: "Type 'github.com' in your browser address bar",
+    duration: 7,
+    reward: "+3 Intelligence, +2 Social",
+    penalty: "-1 Intelligence"
   }
 ];
 

@@ -162,15 +162,25 @@ class TaskListView(APIView):
         ).values_list('task_id', flat=True)
 
         # Get all tasks and separate completed/uncompleted
-        # Exclude time-limited tasks from daily task selection
+        # Exclude time-limited ultra-micro engineering tasks from daily task selection
         all_tasks = list(Task.objects.filter(
             user=user
         ).exclude(
-            title__contains='Start Reading Now'
+            title__contains='Click VS Code Tab'
         ).exclude(
-            title__contains='Get Ready for Library'
+            title__contains='Press Ctrl+S'
         ).exclude(
-            title__contains='Clean Your Desk Now'
+            title__contains='Check Git Status'
+        ).exclude(
+            title__contains='Open Terminal'
+        ).exclude(
+            title__contains='Create New File'
+        ).exclude(
+            title__contains='Type \'console.log\''
+        ).exclude(
+            title__contains='Open Browser Dev Tools'
+        ).exclude(
+            title__contains='Navigate to GitHub'
         ).exclude(
             description__contains='Time-limited task completed'
         ))
