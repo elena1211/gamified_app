@@ -671,25 +671,25 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
   useEffect(() => {
     // Don't start multiple schedulers
     if (questSchedulerActive) return;
-    
+
     setQuestSchedulerActive(true);
-    
+
     const scheduleNextTimeLimitedTask = () => {
       // Random interval between 1-3 minutes (60000-180000ms) for better UX
       const randomDelay = Math.random() * (180000 - 60000) + 60000;
-      
+
       debugLog(`⏰ Next time-limited quest scheduled in ${Math.round(randomDelay/1000)} seconds`);
-      
+
       const timer = setTimeout(() => {
         // Only show if no task is currently active
         if (!showTimeLimitedTask && !currentTimeLimitedTask) {
           const randomTask = TIME_LIMITED_TASKS[Math.floor(Math.random() * TIME_LIMITED_TASKS.length)];
           debugLog('⚡ Triggering random time-limited quest:', randomTask.title);
-          
+
           setCurrentTimeLimitedTask(randomTask);
           setShowTimeLimitedTask(true);
         }
-        
+
         // Schedule the next task
         scheduleNextTimeLimitedTask();
       }, randomDelay);
@@ -700,16 +700,16 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
     // Start the first scheduled task with initial delay (30-120 seconds after page load)
     const initialDelay = Math.random() * (120000 - 30000) + 30000;
     debugLog(`🎮 Time-limited quest system starting, first quest in ${Math.round(initialDelay/1000)} seconds`);
-    
+
     const initialTimer = setTimeout(() => {
       if (!showTimeLimitedTask && !currentTimeLimitedTask) {
         const randomTask = TIME_LIMITED_TASKS[Math.floor(Math.random() * TIME_LIMITED_TASKS.length)];
         debugLog('⚡ Triggering initial time-limited quest:', randomTask.title);
-        
+
         setCurrentTimeLimitedTask(randomTask);
         setShowTimeLimitedTask(true);
       }
-      
+
       // Start the recurring schedule
       scheduleNextTimeLimitedTask();
     }, initialDelay);
