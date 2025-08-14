@@ -216,6 +216,49 @@ class TaskListView(APIView):
 
         return Response(tasks)
 
+    def post(self, request):
+        """Create a new task"""
+        username = request.data.get('user', 'tester')  # Default to 'tester'
+        
+        try:
+            from datetime import datetime, timedelta
+            user = get_or_create_user(username)
+            
+            # Set default deadline to 24 hours from now
+            default_deadline = datetime.now() + timedelta(days=1)
+            
+            # Create new task
+            task = Task.objects.create(
+                title=request.data.get('title', ''),
+                description=request.data.get('description', ''),
+                reward_point=int(request.data.get('reward_point', 3)),
+                difficulty=int(request.data.get('difficulty', 1)),
+                attribute=request.data.get('attribute', 'discipline'),
+                deadline=request.data.get('deadline', default_deadline),
+                user=user
+            )
+            
+            # Return the created task in the same format as GET
+            reward_attr = task.attribute.title()
+            reward_str = f"+{task.reward_point//2} {reward_attr}"
+            if task.difficulty > 1:
+                reward_str += f", +{task.difficulty-1} Discipline"
+            
+            task_data = {
+                "id": task.id,
+                "title": task.title,
+                "tip": task.description,
+                "reward": reward_str,
+                "completed": False,
+                "difficulty": task.difficulty,
+                "attribute": task.attribute
+            }
+            
+            return Response(task_data, status=201)
+            
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
+
 class TaskDetailView(APIView):
     """API view for individual task details"""
     def get(self, request, pk):

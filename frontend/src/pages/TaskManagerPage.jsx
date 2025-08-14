@@ -277,7 +277,9 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
     setLoading(true);
     try {
       // Fetch tasks from backend
+      console.log('🔍 Fetching tasks from:', `${API_ENDPOINTS.tasks}?user=${currentUser}`);
       const { data } = await apiRequest(`${API_ENDPOINTS.tasks}?user=${currentUser}`);
+      console.log('✅ Successfully fetched', data.length, 'tasks from backend:', data);
 
       // Transform backend data to match our component structure
       const transformedTasks = data
@@ -294,7 +296,8 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
       updateTasksState(transformedTasks);
 
     } catch (error) {
-      console.error('Error fetching tasks:', error);
+      console.error('❌ Error fetching tasks:', error);
+      console.log('🔄 Falling back to static task data');
       // Fallback to static data if API fails
       updateTasksState([
         {id: 1, title: "🧹 Organise workspace", description: "Clean and organise your desk", reward_point: "4", difficulty: 1, attribute: "discipline"},
@@ -344,31 +347,60 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
   }, [currentUser]); // Remove function dependencies to prevent infinite re-renders
 
   const handleAddTask = async (e) => {
+    console.log('🔘 Create Task button clicked!');
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
 
-    if (!newTask.title.trim()) return;
+    if (!newTask.title.trim()) {
+      console.log('⚠️ Task title is empty');
+      return;
+    }
 
     try {
-      // In a real app, you would POST to the backend to create a new task
-      // For now, we'll add it locally and assign a temporary ID
+      // Create task on backend
       const taskData = {
         ...newTask,
-        user: currentUser || 'tester',
-        completed: false
+        user: currentUser || 'tester'
+      };
+      
+      console.log('🆕 Creating new task:', taskData);
+      
+      const response = await fetch(API_ENDPOINTS.tasks, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(taskData)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const createdTask = await response.json();
+      console.log('✅ Task created successfully:', createdTask);
+      
+      // Transform the response to match our component structure
+      const transformedTask = {
+        id: createdTask.id,
+        title: createdTask.title,
+        description: createdTask.tip || '',
+        reward_point: createdTask.reward?.match(/\+(\d+)/)?.[1] || '0',
+        difficulty: createdTask.difficulty || 1,
+        attribute: createdTask.attribute || 'discipline'
       };
 
-      const newId = Math.max(...tasks.map(t => t.id || 0)) + 1000; // Use high ID to avoid conflicts
-      const createdTask = { ...taskData, id: newId };
-
-      updateTasksState([...tasks, createdTask]);
+      updateTasksState([...tasks, transformedTask]);
       setNewTask({ title: '', description: '', reward_point: '', difficulty: 1, attribute: 'discipline' });
       setShowAddForm(false);
 
     } catch (error) {
-      console.error('Error adding task:', error);
+      console.error('❌ Error adding task:', error);
+      // Show user-friendly error message
+      alert(`Error creating task: ${error.message}`);
+      // Don't hide the form so user can try again
     }
   };
 
@@ -394,6 +426,15 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
 
     try {
       debugLog('🎯 Attempting to complete task:', task.id, task.title);
+      console.log('🔗 API endpoint:', API_ENDPOINTS.taskComplete);
+      
+      const requestBody = {
+        task_id: task.id,
+        user: currentUser || 'tester'
+      };
+      console.log('📤 Request body:', requestBody);
+      console.log('📤 Task ID being sent:', task.id);
+      console.log('📤 Task object:', JSON.stringify(task, null, 2));
 
       // Call backend API to mark task as complete - use fetch instead of apiRequest for better error handling
       const response = await fetch(API_ENDPOINTS.taskComplete, {
@@ -402,11 +443,11 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          task_id: task.id,
-          user: currentUser || 'tester'
-        })
+        body: JSON.stringify(requestBody)
       });
+      
+      console.log('📥 Response status:', response.status);
+      console.log('📥 Response headers:', [...response.headers.entries()]);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
