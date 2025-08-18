@@ -20,8 +20,6 @@ export const API_ENDPOINTS = {
   // User
   userStats: `${API_BASE}/user/stats/`,
   userProgress: `${API_BASE}/user/progress/`,
-  changePassword: `${API_BASE}/user/change-password/`,
-  deleteAccount: `${API_BASE}/user/delete-account/`,
 
   // Goals
   goal: `${API_BASE}/goal/`
