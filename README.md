@@ -29,10 +29,12 @@
 
 ### Mobile Experience
 
-![Homepage Mobile](docs/images/Homepage_mobile.png)
+<img src="docs/images/Homepage_mobile.png" alt="Homepage Mobile" width="300">
+
 _Mobile homepage with character progression and daily tasks_
 
-![Tasks Page Mobile](docs/images/Taskspage_mobile.png)
+<img src="docs/images/Taskspage_mobile.png" alt="Tasks Page Mobile" width="300">
+
 _Mobile task management with attribute-based categorization_
 
 ### Web Experience
@@ -51,7 +53,7 @@ LevelUp is a gamified productivity application that transforms mundane daily tas
 
 - **Character Development**: Build your virtual character by completing real tasks
 - **Attribute System**: Develop Intelligence, Discipline, Energy, Social skills, Wellness, and manage Stress
-- **Dynamic Task Generation**: AI-created daily tasks based on your personal goals
+- **Dynamic Task Generation**: Daily tasks generated based on your personal goals
 - **Time-Limited Challenges**: Quick micro-tasks for instant motivation boosts
 - **Progress Tracking**: Visual progression with streaks, level-ups, and achievements
 
@@ -246,8 +248,6 @@ http://localhost:8000/api
 
 - `GET /api/user/stats/` - Get user statistics
 - `GET /api/user/progress/` - Get user progress data
-- `POST /api/user/change-password/` - Change password
-- `DELETE /api/user/delete-account/` - Delete account
 
 ### Goal Endpoints
 
