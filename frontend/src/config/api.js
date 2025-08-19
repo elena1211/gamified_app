@@ -9,7 +9,7 @@ export const API_ENDPOINTS = {
   login: `${API_BASE}/login/`,
   register: `${API_BASE}/register/`,
 
-  // Tasks
+    // Tasks
   tasks: `${API_BASE}/tasks/`,
   taskComplete: `${API_BASE}/tasks/complete/`,
   dynamicTaskComplete: `${API_BASE}/tasks/complete-dynamic/`,
