@@ -183,13 +183,21 @@ LevelUp is a gamified productivity application that transforms mundane daily tas
    npm install
    ```
 
-3. **Start development server**
+3. **Configure environment variables (optional)**
+
+   ```bash
+   # Copy the example file and modify if needed
+   cp .env.example .env.development
+   # The default settings should work for local development
+   ```
+
+4. **Start development server**
 
    ```bash
    npm run dev
    ```
 
-4. **Open application**
+5. **Open application**
    ```
    Frontend: http://localhost:5173
    Backend API: http://localhost:8000
