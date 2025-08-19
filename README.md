@@ -14,6 +14,7 @@
 ## 📋 Table of Contents
 
 - [Live Demo](#-live-demo)
+- [Screenshots](#-screenshots)
 - [Overview](#-overview)
 - [Features](#-features)
 - [Tech Stack](#-tech-stack)
@@ -23,6 +24,24 @@
 - [Project Structure](#-project-structure)
 - [Contributing](#-contributing)
 - [License](#-license)
+
+## 📸 Screenshots
+
+### Mobile Experience
+
+![Homepage Mobile](docs/images/Homepage_mobile.png)
+_Mobile homepage with character progression and daily tasks_
+
+![Tasks Page Mobile](docs/images/Taskspage_mobile.png)
+_Mobile task management with attribute-based categorization_
+
+### Web Experience
+
+![Welcome Page](docs/images/Welcomepage_web.png)
+_Web welcome page and onboarding experience_
+
+![Task Tracking & Statistics](docs/images/Tasktracking%20&%20statistics_web.png)
+_Comprehensive progress tracking and statistical analysis_
 
 ## 🎮 Overview
 
@@ -38,10 +57,10 @@ LevelUp is a gamified productivity application that transforms mundane daily tas
 
 ## ✨ Features
 
-### � Task Management
+### 💼 Task Management
 
 - **Daily Random Tasks**: 10 personalized tasks generated based on your main goal
-- **Time-Limited Quests**: Quick 1-5 minute challenges for immediate action
+- **Time-Limited Quests**: Quick challenges that appear randomly for immediate motivation boosts
 - **Task Categorization**: Tasks organized by attribute focus (Intelligence, Discipline, etc.)
 - **Progress Tracking**: Visual completion rates and streak tracking
 
@@ -127,7 +146,7 @@ LevelUp is a gamified productivity application that transforms mundane daily tas
 3. **Install Python dependencies**
 
    ```bash
-   pip install django djangorestframework django-cors-headers
+   pip install -r requirements.txt
    ```
 
 4. **Database setup**
