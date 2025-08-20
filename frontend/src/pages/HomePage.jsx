@@ -697,8 +697,8 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
       return timer;
     };
 
-    // Start the first scheduled task with initial delay (5-15 seconds after page load)
-    const initialDelay = Math.random() * (15000 - 5000) + 5000;
+    // Start the first scheduled task with initial delay (10-15 seconds after page load)
+    const initialDelay = Math.random() * (15000 - 10000) + 10000;
     debugLog(`🎮 Time-limited quest system starting, first quest in ${Math.round(initialDelay/1000)} seconds`);
 
     const initialTimer = setTimeout(() => {
