@@ -206,6 +206,7 @@ const TaskCard = ({
 export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavigateToSettings }) {
   // Use global state from context
   const {
+    isGuestMode,
     tasks,
     completedTasks,
     updateTasksState,
@@ -274,6 +275,46 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
       return;
     }
 
+    // If in guest mode, use demo data
+    if (isGuestMode) {
+      const demoTasks = [
+        {
+          id: 'demo_task_1',
+          title: "🧹 Organise workspace",
+          description: "Clean and organise your desk",
+          reward_point: '6',
+          difficulty: 1,
+          attribute: 'discipline'
+        },
+        {
+          id: 'demo_task_2',
+          title: "📝 Write journal entry",
+          description: "Reflect on today's experiences",
+          reward_point: '5',
+          difficulty: 1,
+          attribute: 'discipline'
+        },
+        {
+          id: 'demo_task_3',
+          title: "🏃‍♂️ 30-minute workout",
+          description: "Include cardio and strength training",
+          reward_point: '9',
+          difficulty: 2,
+          attribute: 'energy'
+        },
+        {
+          id: 'demo_task_4',
+          title: "💻 Practice coding",
+          description: "Solve a Leetcode problem",
+          reward_point: '8',
+          difficulty: 2,
+          attribute: 'intelligence'
+        }
+      ];
+      updateTasksState(demoTasks);
+      return;
+    }
+
     setLoading(true);
     try {
       // Fetch tasks from backend
@@ -312,6 +353,34 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
   };
 
   const fetchCompletedHistory = async () => {
+    // If in guest mode, use demo completed tasks
+    if (isGuestMode) {
+      const demoCompletedTasks = [
+        {
+          id: 'demo_completed_1',
+          title: "🧘‍♀️ Morning meditation",
+          description: "10 minutes of mindfulness",
+          reward_point: '4',
+          difficulty: 1,
+          attribute: 'wellness',
+          completedAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), // Yesterday
+          completedTime: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString()
+        },
+        {
+          id: 'demo_completed_2',
+          title: "📚 Read tech article",
+          description: "Learn about new programming concepts",
+          reward_point: '7',
+          difficulty: 1,
+          attribute: 'intelligence',
+          completedAt: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(), // 2 days ago
+          completedTime: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString()
+        }
+      ];
+      updateCompletedTasksState(demoCompletedTasks);
+      return;
+    }
+
     try {
       debugLog('🔍 Fetching completed tasks history from API...');
       const { data } = await apiRequest(`${API_ENDPOINTS.completedHistory}?user=${currentUser}&limit=50`);
@@ -364,9 +433,9 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
         ...newTask,
         user: currentUser || 'tester'
       };
-      
+
       console.log('🆕 Creating new task:', taskData);
-      
+
       const response = await fetch(API_ENDPOINTS.tasks, {
         method: 'POST',
         headers: {
@@ -374,14 +443,14 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
         },
         body: JSON.stringify(taskData)
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       const createdTask = await response.json();
       console.log('✅ Task created successfully:', createdTask);
-      
+
       // Transform the response to match our component structure
       const transformedTask = {
         id: createdTask.id,
@@ -424,10 +493,36 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
 
     if (!confirm(`Complete "${cleanTaskTitle(task.title)}"?`)) return;
 
+    // If in guest mode, just simulate task completion locally
+    if (isGuestMode) {
+      // Remove from active tasks
+      const updatedTasks = tasks.filter(t => t.id !== task.id);
+      updateTasksState(updatedTasks);
+
+      // Add to completed tasks
+      const completedTask = {
+        ...task,
+        completedAt: new Date().toISOString(),
+        completedTime: new Date().toISOString()
+      };
+      updateCompletedTasksState([completedTask, ...completedTasks]);
+
+      // Apply stat changes
+      const rewardText = `+${task.reward_point} ${task.attribute.charAt(0).toUpperCase() + task.attribute.slice(1)}`;
+      applyStatChanges(rewardText);
+
+      // Show guest mode reminder
+      setTimeout(() => {
+        alert('✨ Great job! This progress is demo data only.\n\nRegister to save your real progress and unlock the full experience!');
+      }, 1000);
+
+      return;
+    }
+
     try {
       debugLog('🎯 Attempting to complete task:', task.id, task.title);
       console.log('🔗 API endpoint:', API_ENDPOINTS.taskComplete);
-      
+
       const requestBody = {
         task_id: task.id,
         user: currentUser || 'tester'
@@ -445,7 +540,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
         },
         body: JSON.stringify(requestBody)
       });
-      
+
       console.log('📥 Response status:', response.status);
       console.log('📥 Response headers:', [...response.headers.entries()]);
 

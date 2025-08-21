@@ -78,9 +78,14 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
 
   // Use global state from context
   const {
+    isGuestMode,
     attributeStats,
     applyStatChanges,
-    updateUserStats
+    updateUserStats,
+    updateDemoUser,
+    demoUser,
+    guestTasks,
+    updateGuestTasks
   } = useAppContext();
 
   const [tasks, setTasks] = useState([]);
@@ -259,7 +264,80 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
 
   const handleTaskComplete = async (task) => {
     try {
-      debugLog('🎯 Toggling task completion:', task.id, task.title, 'Current status:', task.completed);
+      debugLog('🎯 Toggling task completion:', task.id, task.title, 'Current status:', task.completed, 'isGuestMode:', isGuestMode);
+
+      // Handle guest mode
+      if (isGuestMode) {
+        if (!task.completed) {
+          // Complete task
+          const updatedTasks = tasks.map(t =>
+            t.id === task.id
+              ? { ...t, completed: true }
+              : t
+          );
+
+          // Update both local state and AppContext
+          setTasks(updatedTasks);
+          updateGuestTasks(updatedTasks);
+
+          // Apply stat changes based on task reward
+          if (task.reward) {
+            applyStatChanges(task.reward);
+            debugLog('📈 Applied stat changes for guest mode task:', task.reward);
+          }
+
+          // Update demo user stats
+          updateDemoUser({
+            todayTasksCompleted: (demoUser?.todayTasksCompleted || 0) + 1,
+            weeklyTasksCompleted: (demoUser?.weeklyTasksCompleted || 0) + 1
+          });
+
+          // Refresh weekly stats
+          setTimeout(() => {
+            setRefreshTrigger(prev => prev + 1);
+            debugLog('🔄 Weekly stats refresh triggered for guest mode');
+          }, 300);
+
+          // Show guest mode reminder after a short delay
+          setTimeout(() => {
+            if (Math.random() < 0.3) { // 30% chance to show reminder
+              alert('✨ Great job! Remember: this is demo data.\n\nRegister to save your real progress!');
+            }
+          }, 1500);
+        } else {
+          // Uncomplete task (user wants to undo)
+          const updatedTasks = tasks.map(t =>
+            t.id === task.id
+              ? { ...t, completed: false }
+              : t
+          );
+
+          // Update both local state and AppContext
+          setTasks(updatedTasks);
+          updateGuestTasks(updatedTasks);
+
+          // Reverse stat changes based on task reward
+          if (task.reward) {
+            // Convert positive rewards to negative to reverse them
+            const reverseReward = task.reward.replace(/\+/g, '-');
+            applyStatChanges(reverseReward);
+            debugLog('📉 Reversed stat changes for guest mode task:', reverseReward);
+          }
+
+          // Update demo user stats (decrease counts)
+          updateDemoUser({
+            todayTasksCompleted: Math.max(0, (demoUser?.todayTasksCompleted || 0) - 1),
+            weeklyTasksCompleted: Math.max(0, (demoUser?.weeklyTasksCompleted || 0) - 1)
+          });
+
+          // Refresh weekly stats
+          setTimeout(() => {
+            setRefreshTrigger(prev => prev + 1);
+            debugLog('🔄 Weekly stats refresh triggered for guest mode task uncomplete');
+          }, 300);
+        }
+        return;
+      }
 
       // Check if it's a dynamic task (random daily tasks) or regular database task
       const isDynamicTask = task.is_random || task.id < 25; // Use dynamic API for random tasks or fallback tasks
@@ -582,7 +660,53 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
   };
 
     const fetchTasks = useCallback(async (preventScroll = false) => {
-    debugLog('fetchTasks called, currentUser:', currentUser);
+    debugLog('fetchTasks called, currentUser:', currentUser, 'isGuestMode:', isGuestMode);
+
+    // If in guest mode, use demo data
+    if (isGuestMode) {
+      try {
+        if (!preventScroll) {
+          setLoading(true);
+        }
+
+        // Check if we already have guest tasks, if so use them (to maintain state across navigation)
+        if (guestTasks.length > 0 && !preventScroll) {
+          debugLog('🎯 Using existing guest tasks:', guestTasks);
+          setTasks(guestTasks);
+          setError(null);
+          return;
+        }
+
+        // Demo tasks pool for guest mode
+        const demoTasksPool = [
+          {id: 'demo1', title: "🧹 Organise workspace", tip: "Clean and organise your desk", reward: "+6 Discipline, +8 Wellness, +2 Energy", completed: false, difficulty: 1, attribute: "discipline"},
+          {id: 'demo2', title: "📝 Write journal entry", tip: "Reflect on today's experiences", reward: "+5 Discipline, +7 Wellness, +3 Intelligence", completed: false, difficulty: 1, attribute: "discipline"},
+          {id: 'demo3', title: "🏃‍♂️ 30-minute workout", tip: "Include cardio and strength training", reward: "+9 Energy, +6 Discipline, +8 Wellness", completed: false, difficulty: 2, attribute: "energy"},
+          {id: 'demo4', title: "💻 Practice coding", tip: "Solve a Leetcode problem", reward: "+8 Intelligence, +5 Discipline, +2 Wellness", completed: false, difficulty: 2, attribute: "intelligence"},
+          {id: 'demo5', title: "🧘‍♀️ Meditation", tip: "10 minutes of mindfulness", reward: "+4 Energy, +6 Discipline, +10 Wellness, -3 Stress", completed: false, difficulty: 1, attribute: "energy"},
+          {id: 'demo6', title: "📚 Learn something new", tip: "Read an educational article", reward: "+7 Intelligence, +4 Discipline, +3 Wellness", completed: false, difficulty: 1, attribute: "intelligence"},
+          {id: 'demo7', title: "🎨 Creative project", tip: "Work on a personal creative project", reward: "+5 Intelligence, +3 Energy, +4 Wellness", completed: false, difficulty: 1, attribute: "intelligence"},
+          {id: 'demo8', title: "📱 Digital detox", tip: "Spend 30 minutes without devices", reward: "+8 Wellness, +5 Discipline, -2 Stress", completed: false, difficulty: 2, attribute: "wellness"},
+          {id: 'demo9', title: "🌿 Nature walk", tip: "Take a 20-minute walk outside", reward: "+6 Energy, +7 Wellness, +3 Discipline", completed: false, difficulty: 1, attribute: "energy"},
+          {id: 'demo10', title: "📞 Call a friend", tip: "Have a meaningful conversation with someone", reward: "+8 Social, +5 Wellness, +2 Energy", completed: false, difficulty: 1, attribute: "social"}
+        ];
+
+        // Select 3 random tasks from the pool
+        const shuffled = [...demoTasksPool].sort(() => 0.5 - Math.random());
+        const selectedDemoTasks = shuffled.slice(0, 3);
+
+        // Update both local state and AppContext
+        setTasks(selectedDemoTasks);
+        updateGuestTasks(selectedDemoTasks);
+        setError(null);
+        return;
+      } finally {
+        if (!preventScroll) {
+          setLoading(false);
+        }
+      }
+    }
+
     try {
       if (!preventScroll) {
         setLoading(true);
@@ -616,10 +740,37 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
         setLoading(false);
       }
     }
-  }, [currentUser]); // Include currentUser dependency
+  }, [currentUser, isGuestMode, guestTasks, updateGuestTasks]); // Include all necessary dependencies
 
   const fetchUserStats = useCallback(async () => {
-    debugLog('fetchUserStats called, currentUser:', currentUser);
+    debugLog('fetchUserStats called, currentUser:', currentUser, 'isGuestMode:', isGuestMode);
+
+    // If in guest mode, use demo data
+    if (isGuestMode) {
+      const demoStats = {
+        level: 3,
+        current_streak: 2,
+        total_tasks_completed: 15,
+        total_score: 750,
+        exp: 145
+      };
+
+      setLocalUserStats(demoStats);
+      updateUserStats({
+        level: demoStats.level,
+        currentStreak: demoStats.current_streak,
+        exp: demoStats.exp
+      });
+
+      setUser(prev => ({
+        ...prev,
+        level: demoStats.level,
+        exp: demoStats.exp,
+        streak: demoStats.current_streak
+      }));
+      return;
+    }
+
     try {
       const url = `${API_ENDPOINTS.userStats}?user=${currentUser || 'tester'}`;
       debugLog('Fetching user stats from:', url);
@@ -658,14 +809,25 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
         streak: 3
       }));
     }
-  }, [currentUser, updateUserStats]); // Include dependencies
+  }, [currentUser, isGuestMode, updateUserStats]); // Include isGuestMode dependency
 
   // Initialize data on component mount only once
   useEffect(() => {
     debugLog('Homepage useEffect running, about to fetch data');
-    fetchTasks();
-    fetchUserStats();
-  }, [currentUser]); // Only depend on currentUser, not the functions
+
+    // In guest mode, initialize with existing guest tasks if available
+    if (isGuestMode && guestTasks.length > 0) {
+      debugLog('🎯 Initializing with existing guest tasks:', guestTasks);
+      setTasks(guestTasks);
+      setLoading(false);
+    } else {
+      fetchTasks();
+    }
+
+    if (!isGuestMode) {
+      fetchUserStats();
+    }
+  }, [currentUser, isGuestMode, guestTasks]); // Depend on guestTasks for proper initialization
 
   // Random time-limited task system - appears at random intervals
   useEffect(() => {

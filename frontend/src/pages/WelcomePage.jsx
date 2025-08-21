@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { API_ENDPOINTS, apiRequest } from '../config/api.js';
 import { COLORS, EMOJIS, ANIMATION_CLASSES, LAYOUT_CLASSES } from '../config/constants.js';
 
-export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
+export default function WelcomePage({ onLoginSuccess, onNavigateToRegister, onGuestMode }) {
   const [isLoginMode, setIsLoginMode] = useState(false);
   const [formData, setFormData] = useState({
     username: '',
@@ -106,11 +106,30 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
             >
               {EMOJIS.login} I already have an account
             </button>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white text-gray-500">or</span>
+              </div>
+            </div>
+
+            <button
+              onClick={onGuestMode}
+              className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-4 rounded-xl text-lg font-medium transition-all duration-200 border-2 border-gray-200 hover:border-gray-300"
+            >
+              👤 Try as Guest
+            </button>
           </div>
 
           {/* Footer */}
-          <p className="text-xs text-gray-500 mt-8">
+          <p className="text-xs text-gray-500 mt-6">
             Join thousands of adventurers on their path to success
+          </p>
+          <p className="text-xs text-gray-400 mt-2">
+            Guest mode: Experience the app with demo data (no registration required)
           </p>
         </div>
       </div>

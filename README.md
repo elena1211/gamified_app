@@ -6,6 +6,8 @@
 
 **Try the app now:** [https://levelup-jet.vercel.app/home](https://levelup-jet.vercel.app/home)
 
+✨ **New Feature**: Click "👤 Try as Guest" to explore all features with demo data - no registration required!
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Django](https://img.shields.io/badge/Django-5.2.5-green.svg)](https://www.djangoproject.com/)
 [![React](https://img.shields.io/badge/React-19.1.0-blue.svg)](https://reactjs.org/)
@@ -59,12 +61,21 @@ LevelUp is a gamified productivity application that transforms mundane daily tas
 
 ## ✨ Features
 
-### 💼 Task Management
+### � Guest Mode Experience
+
+- **Try Without Registration**: Experience the full app with demo data
+- **No Commitment Required**: Test all features before creating an account
+- **Persistent Demo Session**: Your demo progress is saved across browser sessions
+- **Easy Conversion**: Seamlessly convert to a real account when ready
+
+### �💼 Task Management
 
 - **Daily Random Tasks**: 10 personalized tasks generated based on your main goal
+- **Task Completion & Undo**: Complete tasks with a tap, undo if needed
 - **Time-Limited Quests**: Quick challenges that appear randomly for immediate motivation boosts
 - **Task Categorization**: Tasks organized by attribute focus (Intelligence, Discipline, etc.)
 - **Progress Tracking**: Visual completion rates and streak tracking
+- **Cross-Page Persistence**: Task states maintained when navigating between pages
 
 ### 📈 Character Progression
 
@@ -81,11 +92,13 @@ LevelUp is a gamified productivity application that transforms mundane daily tas
 
 ### 🎨 User Experience
 
+- **Guest Mode**: Try the full experience with demo data before registering
 - **Mobile-First Design**: Responsive interface optimized for all devices
 - **Real-Time Updates**: Instant feedback on task completion
 - **Level-Up Celebrations**: Satisfying visual notifications for achievements
 - **Weekly Statistics**: Comprehensive progress tracking and analytics
 - **Streak System**: Motivation through consecutive day tracking
+- **Persistent State**: Progress saved across browser sessions (both demo and real accounts)
 
 ### 🔧 System Features
 
@@ -208,7 +221,16 @@ LevelUp is a gamified productivity application that transforms mundane daily tas
 
 ### Getting Started
 
-1. **Create Account**: Register with username and password
+**Option 1: Try as Guest**
+
+1. **Visit Welcome Page**: Click "👤 Try as Guest" button
+2. **Explore Demo Mode**: Experience all features with sample data
+3. **Complete Demo Tasks**: Test task completion and character progression
+4. **Convert When Ready**: Register to save your real progress
+
+**Option 2: Create Account**
+
+1. **Register**: Create account with username and password
 2. **Set Main Goal**: Choose your primary focus area (e.g., "Software Engineer")
 3. **Complete Daily Tasks**: Start with the generated daily random tasks
 4. **Track Progress**: Watch your character grow and attributes develop
@@ -216,19 +238,31 @@ LevelUp is a gamified productivity application that transforms mundane daily tas
 
 ### Daily Workflow
 
+**For New Users (Guest Mode):**
+
+1. **Start with Demo**: Try guest mode to understand the system
+2. **Explore Features**: Complete demo tasks, check statistics
+3. **Experience Progression**: See how character attributes grow
+4. **Convert Account**: Register when you're ready to track real progress
+
+**For Registered Users:**
+
 1. **Morning**: Check your 10 daily random tasks
 2. **Throughout Day**: Complete time-limited quests for quick wins
 3. **Task Completion**: Tap tasks to mark complete and gain experience
-4. **Progress Review**: Check weekly stats and maintain streaks
-5. **Evening**: Reflect on daily achievements
+4. **Undo if Needed**: Tap completed tasks again to undo completion
+5. **Progress Review**: Check weekly stats and maintain streaks
+6. **Evening**: Reflect on daily achievements
 
 ### Tips for Success
 
+- **Try Guest Mode First**: Get familiar with the system before committing
 - **Start Small**: Focus on completing easier tasks first
 - **Maintain Streaks**: Consistency is key for character development
 - **Balance Attributes**: Work on all six areas for well-rounded growth
 - **Use Time-Limited Tasks**: Perfect for motivation during low-energy moments
 - **Track Weekly Progress**: Use statistics to identify improvement areas
+- **Undo Mistakes**: Accidentally completed a task? Just tap it again to undo
 
 ## 📚 API Documentation
 
@@ -303,12 +337,14 @@ LevelUp_Project/
 
 #### Frontend Components
 
+- **WelcomePage**: Landing page with guest mode and registration options
 - **HomePage**: Main dashboard with tasks and character
-- **TaskList**: Daily random tasks display
+- **TaskList**: Daily random tasks display with completion/undo functionality
 - **StatsPanel**: Character attribute visualization
-- **UserProfileCard**: Character avatar and level display
+- **UserProfileCard**: Character avatar and level display with guest mode indicators
 - **TimeLimitedTaskPopup**: Quick challenge interface
-- **WeeklyTaskStats**: Progress analytics
+- **WeeklyTaskStats**: Progress analytics with guest mode demo data support
+- **AppContext**: Global state management for both guest and registered users
 
 ## 🤝 Contributing
 
@@ -337,6 +373,7 @@ We welcome contributions! Please follow these steps:
 
 ## 🚀 Future Enhancements
 
+- [ ] **Enhanced Guest Mode**: More demo scenarios and guided tours
 - [ ] **Social Features**: Friend systems and leaderboards
 - [ ] **Advanced Rewards**: More avatar customization options
 - [ ] **Task Templates**: User-created task categories
@@ -344,6 +381,7 @@ We welcome contributions! Please follow these steps:
 - [ ] **Mobile App**: Native iOS/Android applications
 - [ ] **Team Challenges**: Collaborative goal achievement
 - [ ] **Integration**: Connect with fitness trackers and productivity tools
+- [ ] **Guest-to-User Migration**: Import guest progress when converting to real account
 
 ## License
 

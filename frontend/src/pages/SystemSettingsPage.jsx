@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { User, LogOut, Bell } from 'lucide-react';
 import Modal from '../components/Modal.jsx';
 import BottomNav from '../components/BottomNav.jsx';
+import { useAppContext } from '../context/AppContext';
 
 /**
  * System Settings Page component
  * Handles user account, security, notifications, and support settings
  */
 export default function SystemSettingsPage({ currentUser, onLogout, onNavigateToHome, onNavigateToTaskManager }) {
+  const { isGuestMode } = useAppContext();
   const [activeSection, setActiveSection] = useState('account');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
@@ -49,9 +51,28 @@ export default function SystemSettingsPage({ currentUser, onLogout, onNavigateTo
         </h3>
         <div className="space-y-2 text-sm text-gray-600">
           <p><span className="font-medium">Username: </span>{currentUser}</p>
-          <p><span className="font-medium">Registration Date: </span>1st January 2024</p>
-          <p><span className="font-medium">Last Login: </span>Today</p>
-          <p><span className="font-medium">Account Status: </span><span className="text-green-600">Active</span></p>
+          {isGuestMode ? (
+            <>
+              <p><span className="font-medium">Account Type: </span>
+                <span className="text-orange-600">👤 Guest Mode</span>
+              </p>
+              <p><span className="font-medium">Data Storage: </span>
+                <span className="text-red-600">Demo only - not saved</span>
+              </p>
+              <div className="mt-3 p-3 bg-orange-50 rounded-lg border border-orange-200">
+                <p className="text-sm text-orange-800">
+                  <strong>Guest Mode Active:</strong> Your progress is temporary and won't be saved.
+                  Register for a free account to unlock the full experience and save your progress!
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <p><span className="font-medium">Registration Date: </span>1st January 2024</p>
+              <p><span className="font-medium">Last Login: </span>Today</p>
+              <p><span className="font-medium">Account Status: </span><span className="text-green-600">Active</span></p>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -124,12 +145,21 @@ export default function SystemSettingsPage({ currentUser, onLogout, onNavigateTo
               ))}
 
               <div className="border-t pt-2 mt-4">
+                {isGuestMode && (
+                  <button
+                    onClick={() => window.location.href = '/register'}
+                    className="w-full text-left p-3 rounded-lg transition-colors flex items-center text-green-600 hover:bg-green-50 mb-2"
+                  >
+                    <User className="w-5 h-5 mr-3" />
+                    Create Account
+                  </button>
+                )}
                 <button
                   onClick={handleLogoutClick}
                   className="w-full text-left p-3 rounded-lg transition-colors flex items-center text-red-600 hover:bg-red-50"
                 >
                   <LogOut className="w-5 h-5 mr-3" />
-                  Log Out
+                  {isGuestMode ? 'Exit Guest Mode' : 'Log Out'}
                 </button>
               </div>
             </div>

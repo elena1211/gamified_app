@@ -17,6 +17,7 @@ export const useAppContext = () => {
 export function AppProvider({ children }) {
   // User state
   const [currentUser, setCurrentUser] = useState(null);
+  const [isGuestMode, setIsGuestMode] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   // Tasks state (shared across TaskManagerPage)
@@ -51,13 +52,52 @@ export function AppProvider({ children }) {
   // Goal state (shared across HomePage)
   const [userGoal, setUserGoal] = useState(null);
 
+  // Demo user data for guest mode
+  const [demoUser, setDemoUser] = useState({
+    username: 'Guest Demo',
+    level: 3,
+    currentStreak: 4,
+    maxStreak: 7,
+    todayTasksCompleted: 2,
+    weeklyTasksCompleted: 8,
+    totalPoints: {
+      intelligence: 120,
+      discipline: 85,
+      energy: 95,
+      social: 110,
+      wellness: 100,
+      stress: 25
+    }
+  });
+
+  // Guest mode tasks state (persisted across page navigation)
+  const [guestTasks, setGuestTasks] = useState([]);
+
   // Initialize user state from localStorage
   useEffect(() => {
     const savedUser = localStorage.getItem('currentUser');
+    const savedGuestMode = localStorage.getItem('isGuestMode');
+
     if (savedUser) {
       setCurrentUser(savedUser);
       // Load user data when user is found
       loadUserData(savedUser);
+    } else if (savedGuestMode === 'true') {
+      setIsGuestMode(true);
+      setCurrentUser('Guest');
+
+      // Load guest mode data from localStorage
+      const savedGuestData = localStorage.getItem('guestModeData');
+      if (savedGuestData) {
+        try {
+          const guestData = JSON.parse(savedGuestData);
+          if (guestData.demoUser) setDemoUser(guestData.demoUser);
+          if (guestData.guestTasks) setGuestTasks(guestData.guestTasks);
+          if (guestData.attributeStats) setAttributeStats(guestData.attributeStats);
+        } catch (error) {
+          console.error('Error loading guest mode data:', error);
+        }
+      }
     }
     setIsLoading(false);
   }, []);
@@ -77,13 +117,46 @@ export function AppProvider({ children }) {
 
   const handleLoginSuccess = (username) => {
     setCurrentUser(username);
+    setIsGuestMode(false);
     localStorage.setItem('currentUser', username);
+    localStorage.removeItem('isGuestMode');
     loadUserData(username);
+  };
+
+  const handleGuestMode = () => {
+    setCurrentUser('Guest');
+    setIsGuestMode(true);
+    localStorage.setItem('isGuestMode', 'true');
+    localStorage.removeItem('currentUser');
+    // Set some demo data for guest mode
+    setUserStats({
+      level: 3,
+      currentStreak: 2,
+      maxStreak: 5,
+      totalPoints: {
+        intelligence: 25,
+        discipline: 18,
+        energy: 32,
+        social: 15,
+        wellness: 28,
+        stress: 8
+      }
+    });
+    setAttributeStats({
+      intelligence: 75,
+      discipline: 60,
+      energy: 85,
+      social: 70,
+      wellness: 80,
+      stress: 30
+    });
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
+    setIsGuestMode(false);
     localStorage.removeItem('currentUser');
+    localStorage.removeItem('isGuestMode');
     // Reset all state
     setTasks([]);
     setCompletedTasks([]);
@@ -143,6 +216,11 @@ export function AppProvider({ children }) {
         }
       });
 
+      // Save attribute stats changes in guest mode
+      if (isGuestMode) {
+        saveGuestModeData({ attributeStats: newStats });
+      }
+
       return newStats;
     });
 
@@ -171,6 +249,45 @@ export function AppProvider({ children }) {
     setUserGoal(newGoal);
   };
 
+  // Function to update demo user stats for guest mode
+  const updateDemoUser = (updates) => {
+    setDemoUser(prev => {
+      const newDemoUser = {
+        ...prev,
+        ...updates
+      };
+      // Save to localStorage when in guest mode
+      saveGuestModeData({ demoUser: newDemoUser });
+      return newDemoUser;
+    });
+  };
+
+  // Function to update guest tasks and persist them
+  const updateGuestTasks = (newTasks) => {
+    setGuestTasks(newTasks);
+    saveGuestModeData({ guestTasks: newTasks });
+  };
+
+  // Function to save guest mode data to localStorage
+  const saveGuestModeData = (updates) => {
+    if (!isGuestMode) return;
+
+    try {
+      const existingData = localStorage.getItem('guestModeData');
+      const currentData = existingData ? JSON.parse(existingData) : {};
+
+      const updatedData = {
+        ...currentData,
+        ...updates,
+        timestamp: Date.now()
+      };
+
+      localStorage.setItem('guestModeData', JSON.stringify(updatedData));
+    } catch (error) {
+      console.error('Error saving guest mode data:', error);
+    }
+  };
+
   // Calculate total points for a specific attribute
   const getAttributePoints = (attribute) => {
     return completedTasks
@@ -181,11 +298,20 @@ export function AppProvider({ children }) {
   const value = {
     // User state
     currentUser,
+    isGuestMode,
     isLoading,
     setIsLoading,
+    demoUser,
+    updateDemoUser,
+
+    // Guest mode functions
+    guestTasks,
+    updateGuestTasks,
+    saveGuestModeData,
 
     // Auth functions
     handleLoginSuccess,
+    handleGuestMode,
     handleLogout,
 
     // Tasks state and functions

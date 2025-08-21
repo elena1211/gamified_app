@@ -13,6 +13,7 @@ function AppRoutes() {
     currentUser,
     isLoading,
     handleLoginSuccess,
+    handleGuestMode,
     handleLogout
   } = useAppContext();
 
@@ -44,6 +45,11 @@ function AppRoutes() {
     navigate('/home');
   };
 
+  const handleGuestModeAndNavigate = () => {
+    handleGuestMode();
+    navigate('/home');
+  };
+
   const handleLogoutAndNavigate = () => {
     handleLogout();
     navigate('/welcome');
@@ -68,6 +74,7 @@ function AppRoutes() {
             <WelcomePage
               onLoginSuccess={handleLoginSuccess}
               onNavigateToRegister={handleNavigateToRegister}
+              onGuestMode={handleGuestModeAndNavigate}
             />
         }
       />

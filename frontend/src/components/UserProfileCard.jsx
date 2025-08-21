@@ -1,6 +1,8 @@
 import { getAvatarSrc, getAvatarTitle, getExpForLevel } from '../utils/avatar';
+import { useAppContext } from '../context/AppContext';
 
 export default function UserProfileCard({ user, userStats = {} }) {
+  const { isGuestMode } = useAppContext();
   const avatarSrc = getAvatarSrc(user.level);
   const avatarTitle = getAvatarTitle(user.level);
 
@@ -33,8 +35,20 @@ export default function UserProfileCard({ user, userStats = {} }) {
           </div>
         </div>
         <div className="w-full">
-          <h2 className="text-lg font-bold text-gray-800">{user.name}</h2>
+          <h2 className="text-lg font-bold text-gray-800">
+            {user.name}
+            {isGuestMode && (
+              <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
+                👤 Guest Mode
+              </span>
+            )}
+          </h2>
           <p className="text-sm text-gray-600">Level {user.level} {avatarTitle}</p>
+          {isGuestMode && (
+            <p className="text-xs text-gray-500 mt-1">
+              Experiencing demo data • Register to save progress
+            </p>
+          )}
 
           {/* EXP Progress Bar */}
           <div className="mt-2 mb-2">

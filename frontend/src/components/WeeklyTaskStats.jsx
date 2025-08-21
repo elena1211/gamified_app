@@ -2,21 +2,63 @@ import { useState, useEffect } from 'react';
 import { Calendar, TrendingUp, CheckCircle } from 'lucide-react';
 import { API_ENDPOINTS, apiRequest } from '../config/api.js';
 import { debugLog } from '../utils/logger';
+import { useAppContext } from '../context/AppContext';
 
 export default function WeeklyTaskStats({ currentUser, refreshTrigger }) {
+  const { isGuestMode, demoUser } = useAppContext();
   const [weeklyStats, setWeeklyStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const fetchWeeklyStats = async () => {
-    debugLog('🔄 WeeklyTaskStats: Fetching weekly stats for user:', currentUser, 'refreshTrigger:', refreshTrigger);
+    debugLog('🔄 WeeklyTaskStats: Fetching weekly stats for user:', currentUser, 'isGuestMode:', isGuestMode, 'refreshTrigger:', refreshTrigger);
     setLoading(true);
     setError(null);
 
     try {
-      const { data } = await apiRequest(`${API_ENDPOINTS.weeklyStats}?user=${currentUser || 'tester'}`);
-      debugLog('📊 WeeklyTaskStats: Received data:', data);
-      setWeeklyStats(data);
+      if (isGuestMode) {
+        // Guest mode: use demo data
+        debugLog('👤 WeeklyTaskStats: Using guest mode demo data');
+        const today = new Date();
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - today.getDay());
+
+        const demoWeeklyStats = {
+          week_start: startOfWeek.toISOString().split('T')[0],
+          week_end: new Date(startOfWeek.getTime() + 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          total_completed_this_week: demoUser.weeklyTasksCompleted || 8,
+          total_available_tasks: 35,
+          completion_percentage: Math.round(((demoUser.weeklyTasksCompleted || 8) / 35) * 100),
+          daily_breakdown: Array.from({ length: 7 }, (_, i) => {
+            const date = new Date(startOfWeek);
+            date.setDate(startOfWeek.getDate() + i);
+            const isToday = date.toDateString() === today.toDateString();
+            const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+            // Generate realistic demo data
+            let completed_tasks = 0;
+            if (i < today.getDay()) { // Past days
+              completed_tasks = Math.floor(Math.random() * 3) + 1; // 1-3 tasks
+            } else if (isToday) {
+              completed_tasks = demoUser.todayTasksCompleted || 2;
+            }
+
+            return {
+              date: date.toISOString().split('T')[0],
+              day_name: dayNames[i],
+              completed_tasks,
+              is_today: isToday
+            };
+          })
+        };
+
+        setWeeklyStats(demoWeeklyStats);
+      } else {
+        // Regular mode: fetch from API
+        const { data } = await apiRequest(`${API_ENDPOINTS.weeklyStats}?user=${currentUser || 'tester'}`);
+        debugLog('📊 WeeklyTaskStats: Received data:', data);
+        setWeeklyStats(data);
+      }
     } catch (error) {
       console.error('Error fetching weekly stats:', error);
       setError(error.message);
@@ -43,9 +85,9 @@ export default function WeeklyTaskStats({ currentUser, refreshTrigger }) {
   };
 
   useEffect(() => {
-    debugLog('🔄 WeeklyTaskStats: useEffect triggered with currentUser:', currentUser, 'refreshTrigger:', refreshTrigger);
+    debugLog('🔄 WeeklyTaskStats: useEffect triggered with currentUser:', currentUser, 'isGuestMode:', isGuestMode, 'refreshTrigger:', refreshTrigger);
     fetchWeeklyStats();
-  }, [currentUser, refreshTrigger]); // Remove fetchWeeklyStats to prevent infinite re-renders
+  }, [currentUser, isGuestMode, refreshTrigger]); // Remove fetchWeeklyStats to prevent infinite re-renders
 
   if (loading) {
     return (
