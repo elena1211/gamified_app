@@ -61,14 +61,14 @@ LevelUp is a gamified productivity application that transforms mundane daily tas
 
 ## ✨ Features
 
-### � Guest Mode Experience
+### 👥 Guest Mode Experience
 
 - **Try Without Registration**: Experience the full app with demo data
 - **No Commitment Required**: Test all features before creating an account
 - **Persistent Demo Session**: Your demo progress is saved across browser sessions
 - **Easy Conversion**: Seamlessly convert to a real account when ready
 
-### �💼 Task Management
+### 💼 Task Management
 
 - **Daily Random Tasks**: 10 personalized tasks generated based on your main goal
 - **Task Completion & Undo**: Complete tasks with a tap, undo if needed
