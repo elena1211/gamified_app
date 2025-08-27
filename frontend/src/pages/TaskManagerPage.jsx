@@ -364,9 +364,9 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
         ...newTask,
         user: currentUser || 'tester'
       };
-      
+
       console.log('🆕 Creating new task:', taskData);
-      
+
       const response = await fetch(API_ENDPOINTS.tasks, {
         method: 'POST',
         headers: {
@@ -374,14 +374,14 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
         },
         body: JSON.stringify(taskData)
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       const createdTask = await response.json();
       console.log('✅ Task created successfully:', createdTask);
-      
+
       // Transform the response to match our component structure
       const transformedTask = {
         id: createdTask.id,
@@ -427,7 +427,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
     try {
       debugLog('🎯 Attempting to complete task:', task.id, task.title);
       console.log('🔗 API endpoint:', API_ENDPOINTS.taskComplete);
-      
+
       const requestBody = {
         task_id: task.id,
         user: currentUser || 'tester'
@@ -439,13 +439,13 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
       // Call backend API to mark task as complete - use fetch instead of apiRequest for better error handling
       const response = await fetch(API_ENDPOINTS.taskComplete, {
         method: 'POST',
-        credentials: 'include',  // Include cookies for authentication
+        mode: 'cors',  // Use CORS mode for cross-origin requests
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(requestBody)
       });
-      
+
       console.log('📥 Response status:', response.status);
       console.log('📥 Response headers:', [...response.headers.entries()]);
 

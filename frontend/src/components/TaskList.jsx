@@ -6,7 +6,22 @@ export default function TaskList({ tasks: initialTasks, onTaskComplete }) {
 
   // Synchronise internal state when external tasks update
   useEffect(() => {
-    setTasks(initialTasks);
+    // Filter out any tasks with problematic titles before setting
+    const validTasks = initialTasks.filter(task => {
+      const cleanTitle = cleanTaskTitle(task.title);
+      // Reject if title is just numbers or problematic
+      if (/^\d+$/.test(cleanTitle) ||
+          cleanTitle === 'Task Loading...' ||
+          cleanTitle === 'Task Unavailable' ||
+          !task.title ||
+          task.title.trim() === '') {
+        console.warn('Filtering out problematic task:', task);
+        return false;
+      }
+      return true;
+    });
+
+    setTasks(validTasks);
   }, [initialTasks]);
 
   const toggleTask = (id) => {
@@ -45,7 +60,7 @@ export default function TaskList({ tasks: initialTasks, onTaskComplete }) {
                     task.completed ? "line-through text-gray-400" : "text-gray-800"
                   }`}
                 >
-                  {cleanTaskTitle(task.title)}
+                  {cleanTaskTitle(task.title) || `Task ${task.id}`}
                 </span>
                 {task.tip && (
                   <p className="text-xs text-gray-500 mt-1">💡 {task.tip}</p>

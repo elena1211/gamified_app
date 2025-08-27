@@ -176,7 +176,7 @@ class TaskListView(APIView):
         ).exclude(
             title__contains='Create New File'
         ).exclude(
-            title__contains='Type \'console.log\''
+            title__contains='Code Review Check'
         ).exclude(
             title__contains='Open Browser Dev Tools'
         ).exclude(
@@ -541,57 +541,57 @@ class RegisterView(APIView):
             # Create default tasks for the user
             default_tasks = [
                 {
-                    'title': '🧠 Practice Leetcode Problem',
-                    'description': 'Complete a medium-level algorithm problem',
+                    'title': '🧠 Practice Algorithm Problem',
+                    'description': 'Complete a coding problem on LeetCode, HackerRank, or CodeWars',
                     'attribute': 'intelligence',
                     'difficulty': 2,
                     'reward_point': 14
                 },
                 {
-                    'title': '📚 Read 30 pages',
-                    'description': 'Read and take notes on any educational book',
+                    'title': '📚 Study Tech Documentation',
+                    'description': 'Read 30 pages of technical documentation or programming book',
                     'attribute': 'intelligence',
                     'difficulty': 1,
                     'reward_point': 10
                 },
                 {
-                    'title': '🏃‍♂️ 30-minute workout',
-                    'description': 'Include cardio and strength training',
-                    'attribute': 'energy',
+                    'title': '💻 Code Review Session',
+                    'description': 'Review and refactor existing code for better performance',
+                    'attribute': 'discipline',
                     'difficulty': 2,
                     'reward_point': 12
                 },
                 {
-                    'title': '🧘‍♀️ 10-minute meditation',
-                    'description': 'Use guided meditation app or practice breathing',
+                    'title': '🧘‍♀️ Debug Mindfully',
+                    'description': 'Practice focused debugging techniques for 10 minutes',
                     'attribute': 'discipline',
                     'difficulty': 1,
                     'reward_point': 8
                 },
                 {
-                    'title': '🗣️ Practice presentation skills',
-                    'description': 'Record yourself giving a 5-minute presentation',
+                    'title': '🗣️ Tech Presentation',
+                    'description': 'Practice explaining a technical concept or present to team',
                     'attribute': 'social',
                     'difficulty': 3,
                     'reward_point': 20
                 },
                 {
-                    'title': '🧹 Organise workspace',
-                    'description': 'Clean and organise your desk and surrounding area',
+                    'title': '🧹 Organize Dev Environment',
+                    'description': 'Clean up workspace, organize project files, update IDE settings',
                     'attribute': 'discipline',
                     'difficulty': 1,
                     'reward_point': 8
                 },
                 {
-                    'title': '📝 Write journal entry',
-                    'description': 'Reflect on today\'s experiences and goals',
+                    'title': '📝 Technical Journaling',
+                    'description': 'Write about what you learned or challenges you solved today',
                     'attribute': 'discipline',
                     'difficulty': 1,
                     'reward_point': 6
                 },
                 {
-                    'title': '💡 Learn something new',
-                    'description': 'Watch educational video or read article on new topic',
+                    'title': '💡 Learn New Technology',
+                    'description': 'Watch a tutorial or read about a new programming tool/framework',
                     'attribute': 'intelligence',
                     'difficulty': 2,
                     'reward_point': 12
@@ -925,25 +925,117 @@ class DynamicTaskUncompleteView(APIView):
         reward_string = request.data.get('reward_string', '')  # For reversing attribute changes
 
         logger.info(f"DynamicTaskUncompleteView: Uncompleting task '{task_title}' for user '{username}'")
+        logger.info(f"Request data: {request.data}")
 
         try:
             user = User.objects.get(username=username)
+            logger.info(f"Found user: {user.username}")
 
             # Find the task by title for this user (both random and regular tasks)
+            # First try exact match
             task = Task.objects.filter(
                 title=task_title,
                 user=user
             ).first()
 
+            # If exact match fails, try partial match for common title mismatches
+            if not task:
+                # Try to find task by removing emojis and checking if core title matches
+                import re
+                core_title = re.sub(r'[^\w\s-]', '', task_title).strip()
+
+                # Remove potential timestamp from the search title
+                clean_search_title = re.sub(r' - \d{2}:\d{2}:\d{2}$', '', task_title)
+                clean_core_title = re.sub(r'[^\w\s-]', '', clean_search_title).strip()
+
+                # Enhanced title mappings with number fallbacks and Unicode handling
+                title_mappings = {
+                    # Existing mappings
+                    'Practice coding': 'Code Daily Challenge',
+                    'Code Daily Challenge': 'Practice coding',
+                    'Practice Leetcode Problem': 'Practice Algorithm Problem',
+                    'Practice Algorithm Problem': 'Practice Leetcode Problem',
+                    'Study Tech Docs': 'Study Tech Documentation',
+                    'Study Tech Documentation': 'Study Tech Docs',
+                    'Mindful Debugging': 'Debug Mindfully',
+                    'Debug Mindfully': 'Mindful Debugging',
+                    'Organise workspace': 'Organize Dev Environment',
+                    'Organize Dev Environment': 'Organise workspace',
+                    'Write journal entry': 'Technical Journaling',
+                    'Technical Journaling': 'Write journal entry',
+                    'Learn something new': 'Learn New Technology',
+                    'Learn New Technology': 'Learn something new',
+                    'Code Review Session': 'Code Review Session',
+                    'Tech Presentation': 'Tech Presentation',
+                    'Review Git Commands': 'Review Git Commands',
+                    'Read One Tech Article': 'Read One Tech Article',
+
+                    # Unicode handling - direct mappings without number fallbacks
+                    'Practice Leetcode Problem': 'Practice Leetcode Problem',
+                    'Learn something new': 'Learn something new',
+                    'Read 30 pages': 'Read 30 pages',
+                    '30-minute workout': '30-minute workout',
+                    'Meditation': 'Meditation',
+                    'Technical Notes': 'Technical Notes'
+                }
+
+                # Check if we have a mapping for this title
+                mapped_title = title_mappings.get(clean_core_title)
+                if mapped_title:
+                    task = Task.objects.filter(
+                        title__icontains=mapped_title,
+                        user=user
+                    ).first()
+
+                # Try exact matching first (handles Unicode properly)
+                if not task:
+                    task = Task.objects.filter(
+                        title=task_title,
+                        user=user
+                    ).first()
+
+                # Try exact matching without timestamp
+                if not task:
+                    task = Task.objects.filter(
+                        title=clean_search_title,
+                        user=user
+                    ).first()
+
+                # If still not found, try partial matching with cleaned title
+                if not task:
+                    task = Task.objects.filter(
+                        title__icontains=clean_core_title,
+                        user=user
+                    ).first()
+
+                # If still not found, try matching without timestamps
+                if not task and ' - ' in task_title:
+                    base_title = task_title.split(' - ')[0]
+                    task = Task.objects.filter(
+                        title__startswith=base_title,
+                        user=user
+                    ).first()
+
+            logger.info(f"Task search result: {task}")
+            if task:
+                logger.info(f"Found task ID: {task.id}, Title: '{task.title}'")
+
             if not task:
                 logger.warning(f"Task '{task_title}' not found for user '{username}'")
+                # List all tasks for debugging
+                all_tasks = Task.objects.filter(user=user)
+                logger.info(f"Available tasks for user '{username}':")
+                for t in all_tasks:
+                    logger.info(f"  ID: {t.id}, Title: '{t.title}'")
                 return Response({
                     'success': False,
                     'error': 'Dynamic task not found'
                 }, status=404)
 
-            # Find today's completion log for this task
+            # Find recent completion log for this task (prefer today, but allow recent ones)
             today = date.today()
+            
+            # First try to find today's completion
             completion_logs = UserTaskLog.objects.filter(
                 user=user,
                 task=task,
@@ -951,7 +1043,18 @@ class DynamicTaskUncompleteView(APIView):
                 completed_at__date=today
             )
 
-            logger.info(f"Found {completion_logs.count()} completion logs for task '{task_title}' on {today}")
+            # If no completion found today, look for the most recent completion
+            if not completion_logs.exists():
+                completion_logs = UserTaskLog.objects.filter(
+                    user=user,
+                    task=task,
+                    status='completed'
+                ).order_by('-completed_at')
+                
+                if completion_logs.exists():
+                    logger.info(f"No completion found today, using most recent completion from {completion_logs.first().completed_at}")
+
+            logger.info(f"Found {completion_logs.count()} completion logs for task '{task_title}'")
 
             completion_log = completion_logs.first()
 
