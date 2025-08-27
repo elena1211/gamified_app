@@ -51,8 +51,8 @@ const TIME_LIMITED_TASKS = [
     penalty: "-1 Discipline"
   },
   {
-    title: "Type 'console.log'",
-    description: "Type the letters 'console.log' anywhere in your editor",
+    title: "Code Review Check",
+    description: "Review one function or method in your current codebase",
     duration: 9,
     reward: "+4 Intelligence, +2 Discipline",
     penalty: "-2 Intelligence"
@@ -123,7 +123,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
         // Call dynamic task completion API for time-limited tasks
         const response = await fetch(API_ENDPOINTS.dynamicTaskComplete, {
           method: 'POST',
-          credentials: 'include',  // Include cookies for authentication
+          mode: 'cors',  // Use CORS mode for cross-origin requests
           headers: {
             'Content-Type': 'application/json',
           },
@@ -269,7 +269,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
         if (!task.completed) {
           const response = await fetch(API_ENDPOINTS.dynamicTaskComplete, {
             method: 'POST',
-            credentials: 'include',  // Include cookies for authentication
+            mode: 'cors',  // Use CORS mode for cross-origin requests
             headers: {
               'Content-Type': 'application/json',
             },
@@ -354,18 +354,21 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
           }
         } else {
           // For daily tasks that are already completed, call uncomplete API
-          debugLog('🔄 Uncompleting daily task via API');
+          debugLog('🔄 Uncompleting daily task via API, title:', task.title);
+          const uncompletePayload = {
+            task_title: task.title,
+            reward_string: task.reward || '',  // Pass reward string for attribute reversal
+            user: currentUser || 'tester'
+          };
+          debugLog('📤 Uncomplete payload:', uncompletePayload);
+
           const response = await fetch(API_ENDPOINTS.dynamicTaskUncomplete, {
             method: 'POST',
-            credentials: 'include',  // Include cookies for authentication
+            mode: 'cors',  // Use CORS mode for cross-origin requests
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-              task_title: task.title,
-              reward_string: task.reward || '',  // Pass reward string for attribute reversal
-              user: currentUser || 'tester'
-            })
+            body: JSON.stringify(uncompletePayload)
           });
 
           if (response.ok) {
@@ -435,7 +438,7 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
         // Use regular task completion API for database tasks
         const response = await fetch(API_ENDPOINTS.taskComplete, {
           method: 'POST',
-          credentials: 'include',  // Include cookies for authentication
+          mode: 'cors',  // Use CORS mode for cross-origin requests
           headers: {
             'Content-Type': 'application/json',
           },
@@ -593,24 +596,34 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
       const { data } = await apiRequest(url);
       debugLog('All tasks fetched:', data);
 
+      // Check if we got real API data or if it's empty/invalid
+      if (!data || !Array.isArray(data) || data.length === 0) {
+        debugLog('⚠️ No valid tasks from API, using fallback tasks');
+        throw new Error('No tasks returned from API');
+      }
+
       // Select 3 random daily tasks from the full list
       const selectedTasks = selectDailyTasks(data);
       setTasks(selectedTasks);
       setError(null);
+      debugLog('✅ Successfully loaded tasks from API:', selectedTasks);
+      debugLog('📋 Task titles:', selectedTasks.map(t => ({ id: t.id, title: t.title })));
     } catch (err) {
       console.error('Error fetching tasks:', err);
+      debugLog('⚠️ API failed, loading fallback tasks...');
       // Set default tasks if API fails - enhanced rewards (1-10 points)
       const fallbackTasks = [
-        {id: 1, title: "🧹 Organise workspace", tip: "Clean and organise your desk", reward: "+6 Discipline, +8 Wellness, +2 Energy", completed: false, difficulty: 1, attribute: "discipline"},
-        {id: 2, title: "📝 Write journal entry", tip: "Reflect on today's experiences", reward: "+5 Discipline, +7 Wellness, +3 Intelligence", completed: false, difficulty: 1, attribute: "discipline"},
-        {id: 3, title: "🏃‍♂️ 30-minute workout", tip: "Include cardio and strength training", reward: "+9 Energy, +6 Discipline, +8 Wellness", completed: false, difficulty: 2, attribute: "energy"},
-        {id: 4, title: "💻 Practice coding", tip: "Solve a Leetcode problem", reward: "+8 Intelligence, +5 Discipline, +2 Wellness", completed: false, difficulty: 2, attribute: "intelligence"},
-        {id: 5, title: "🧘‍♀️ Meditation", tip: "10 minutes of mindfulness", reward: "+4 Energy, +6 Discipline, +10 Wellness, -3 Stress", completed: false, difficulty: 1, attribute: "energy"},
-        {id: 6, title: "📚 Learn something new", tip: "Read an educational article", reward: "+7 Intelligence, +4 Discipline, +3 Wellness", completed: false, difficulty: 1, attribute: "intelligence"}
+        {id: 101, title: "🧹 Organise workspace", tip: "Clean and organise your desk", reward: "+6 Discipline, +8 Wellness, +2 Energy", completed: false, difficulty: 1, attribute: "discipline"},
+        {id: 102, title: "📝 Write journal entry", tip: "Reflect on today's experiences", reward: "+5 Discipline, +7 Wellness, +3 Intelligence", completed: false, difficulty: 1, attribute: "discipline"},
+        {id: 103, title: "🏃‍♂️ 30-minute workout", tip: "Include cardio and strength training", reward: "+9 Energy, +6 Discipline, +8 Wellness", completed: false, difficulty: 2, attribute: "energy"},
+        {id: 104, title: "💻 Practice coding", tip: "Solve a Leetcode problem", reward: "+8 Intelligence, +5 Discipline, +2 Wellness", completed: false, difficulty: 2, attribute: "intelligence"},
+        {id: 105, title: "🧘‍♀️ Meditation", tip: "10 minutes of mindfulness", reward: "+4 Energy, +6 Discipline, +10 Wellness, -3 Stress", completed: false, difficulty: 1, attribute: "energy"},
+        {id: 106, title: "📚 Learn something new", tip: "Read an educational article", reward: "+7 Intelligence, +4 Discipline, +3 Wellness", completed: false, difficulty: 1, attribute: "intelligence"}
       ];
       const selectedTasks = selectDailyTasks(fallbackTasks);
       setTasks(selectedTasks);
       setError(null); // Don't show error if we have fallback data
+      debugLog('📋 Fallback tasks loaded:', selectedTasks);
     } finally {
       if (!preventScroll) {
         setLoading(false);
@@ -785,16 +798,6 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
               className="bg-purple-500 hover:bg-purple-600 text-white px-6 py-3 rounded-xl shadow-md transition-all duration-300 hover:scale-105"
             >
               🎲 New Daily Random Tasks
-            </button>
-            <button
-              onClick={() => {
-                const randomTask = TIME_LIMITED_TASKS[Math.floor(Math.random() * TIME_LIMITED_TASKS.length)];
-                setCurrentTimeLimitedTask(randomTask);
-                setShowTimeLimitedTask(true);
-              }}
-              className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-xl shadow-md transition-all duration-300 hover:scale-105"
-            >
-              ⚡ Test Time-Limited Quest
             </button>
           </div>
         </div>

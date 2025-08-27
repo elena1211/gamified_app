@@ -28,7 +28,7 @@ export const API_ENDPOINTS = {
 // API utility functions
 export const apiRequest = async (url, options = {}) => {
   const defaultOptions = {
-    credentials: 'include',  // Include cookies for authentication
+    mode: 'cors',  // Enable CORS mode for cross-origin requests
     headers: {
       'Content-Type': 'application/json',
     },

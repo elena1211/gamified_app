@@ -2,11 +2,10 @@
 const isDevelopment = import.meta.env.MODE === 'development';
 
 export const logger = {
-  log: () => {
-    // Temporarily disable to reduce flicker
-    // if (isDevelopment) {
-    //   console.log(...args);
-    // }
+  log: (...args) => {
+    if (isDevelopment) {
+      console.log(...args);
+    }
   },
 
   error: (...args) => {
@@ -20,11 +19,10 @@ export const logger = {
     // }
   },
 
-  debug: () => {
-    // Temporarily disable to reduce flicker
-    // if (isDevelopment) {
-    //   console.log('🐛', ...args);
-    // }
+  debug: (...args) => {
+    if (isDevelopment) {
+      console.log('🐛', ...args);
+    }
   },
 
   api: (...args) => {
