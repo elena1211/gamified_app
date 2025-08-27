@@ -3,14 +3,15 @@ from rest_framework.views import APIView
 from rest_framework import status
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.hashers import make_password
-from django.views.decorators.csrf import csrf_exempt
-from django.utils.decorators import method_decorator
+from django.http import HttpResponse
 from .models import Task, User, Goal, UserTaskLog, UserAttribute
 from django.utils import timezone
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 import random
 import math
 import logging
+import re
+import secrets
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +22,11 @@ def get_or_create_user(username):
         return user
     except User.DoesNotExist:
         # Create new user with default settings
+        # Generate a random password for auto-created users
+        random_password = secrets.token_urlsafe(12)
         user = User.objects.create(
             username=username,
-            password=make_password('defaultpassword'),  # Default password
+            password=make_password(random_password),  # Random secure password
             level=1,
             exp=0,
             current_streak=0,
@@ -69,7 +72,6 @@ def apply_attribute_changes(user, reward_string):
         for change in changes:
             change = change.strip()
             # Match pattern like "+3 Intelligence" or "-1 Stress"
-            import re
             match = re.match(r'([+-]\d+)\s+(\w+)', change)
             if match:
                 value_str, attr_name = match.groups()
@@ -110,7 +112,6 @@ def reverse_attribute_changes(user, reward_string):
         for change in changes:
             change = change.strip()
             # Match pattern like "+3 Intelligence" or "-1 Stress"
-            import re
             match = re.match(r'([+-]\d+)\s+(\w+)', change)
             if match:
                 value_str, attr_name = match.groups()
@@ -140,26 +141,21 @@ def reverse_attribute_changes(user, reward_string):
 
 class TaskListView(APIView):
     """API view that returns task data from database"""
-    # Temporarily remove authentication for development
-    # permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        username = request.GET.get('user', 'tester')  # Default to 'tester' for backward compatibility
+        username = request.GET.get('user', 'tester')  # Default to 'tester'
 
         # Get or create user automatically
         user = get_or_create_user(username)
 
-        # Get today's date for checking completion status
         today = date.today()
 
-        # Get completed task IDs for today
         completed_task_ids = UserTaskLog.objects.filter(
             user=user,
             status='completed',
             completed_at__date=today
         ).values_list('task_id', flat=True)
 
-        # Get all tasks and separate completed/uncompleted
         # Exclude time-limited ultra-micro engineering tasks from daily task selection
         all_tasks = list(Task.objects.filter(
             user=user
@@ -229,7 +225,6 @@ class TaskListView(APIView):
         username = request.data.get('user', 'tester')  # Default to 'tester'
 
         try:
-            from datetime import datetime, timedelta
             user = get_or_create_user(username)
 
             # Set default deadline to 24 hours from now
@@ -330,7 +325,6 @@ class GoalView(APIView):
             }
             return Response(default_goal)
 
-from django.db import models
 def calculate_task_exp(task):
     """Calculate EXP gained from completing a task"""
     base_exp = 10 + (task.difficulty or 1) * 5
@@ -374,6 +368,7 @@ class TaskCompleteView(APIView):
             ).first()
 
             # Store old level and exp for level-up detection
+            # Store old level and exp for level-up detection
             old_level = user.level
             old_exp = user.exp
 
@@ -384,7 +379,6 @@ class TaskCompleteView(APIView):
                 user.exp = max(0, user.exp - exp_lost)
                 existing_log.delete()
                 message = "Task marked as incomplete"
-                success = True
             else:
                 # Mark task as completed and add EXP
                 task_log, created = UserTaskLog.objects.get_or_create(
@@ -405,7 +399,6 @@ class TaskCompleteView(APIView):
                 exp_gained = calculate_task_exp(task)
                 user.exp += exp_gained
                 message = "Task completed successfully"
-                success = True
 
             # Update level based on new EXP
             new_level = calculate_level_from_exp(user.exp)
@@ -417,10 +410,8 @@ class TaskCompleteView(APIView):
             # Update streak after task completion/uncompletion
             user.update_streak()
 
-            # Save user changes
             user.save()
 
-            # Get current completion status
             completed_today_count = UserTaskLog.objects.filter(
                 user=user,
                 status='completed',
@@ -430,12 +421,12 @@ class TaskCompleteView(APIView):
             total_tasks = Task.objects.filter(user=user).count()
 
             return Response({
-                "success": success,
+                "success": True,
                 "message": message,
                 "streak": user.current_streak,
                 "completed_tasks": completed_today_count,
                 "total_tasks": total_tasks,
-                "task_completed": not existing_log,  # True if we just completed it, False if we uncompleted it
+                "task_completed": not existing_log,  # Toggle status
                 "user_stats": {
                     "level": user.level,
                     "exp": user.exp,
@@ -456,8 +447,6 @@ class TaskCompleteView(APIView):
 
 class UserStatsView(APIView):
     """API view for user statistics including streak"""
-    # Temporarily remove authentication for development
-    # permission_classes = [IsAuthenticated]
 
     def get(self, request):
         username = request.GET.get('user', 'tester')  # Default to 'tester'
@@ -492,7 +481,6 @@ class UserStatsView(APIView):
                 "total_completed_tasks": 0
             })
 
-@method_decorator(csrf_exempt, name='dispatch')
 class RegisterView(APIView):
     """API view for user registration"""
     permission_classes = []  # Allow anonymous access for registration
@@ -618,7 +606,6 @@ class RegisterView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@method_decorator(csrf_exempt, name='dispatch')
 class LoginView(APIView):
     """API view for user login"""
     permission_classes = []  # Allow anonymous access for login
@@ -777,7 +764,6 @@ class DynamicTaskCompleteView(APIView):
                     is_random=True
                 )
 
-                # Create completion log immediately
                 UserTaskLog.objects.create(
                     user=user,
                     task=task,
@@ -834,7 +820,6 @@ class DynamicTaskCompleteView(APIView):
                     }
                 )
 
-                # Check if already completed today
                 today = date.today()
                 existing_log = UserTaskLog.objects.filter(
                     user=user,
@@ -844,7 +829,6 @@ class DynamicTaskCompleteView(APIView):
                 ).first()
 
                 if not existing_log:
-                    # Create completion log
                     UserTaskLog.objects.create(
                         user=user,
                         task=task,
@@ -933,7 +917,6 @@ class DynamicTaskUncompleteView(APIView):
             # If exact match fails, try partial match for common title mismatches
             if not task:
                 # Try to find task by removing emojis and checking if core title matches
-                import re
                 core_title = re.sub(r'[^\w\s-]', '', task_title).strip()
 
                 # Remove potential timestamp from the search title
@@ -1093,7 +1076,6 @@ class CompletedTasksHistoryView(APIView):
                 task = log.task
                 # Clean task title by removing timestamp pattern (e.g., " - 14:25:35")
                 clean_title = task.title
-                import re
                 clean_title = re.sub(r' - \d{2}:\d{2}:\d{2}$', '', clean_title)
 
                 completed_tasks.append({
@@ -1187,7 +1169,6 @@ class ProgressStatsView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@method_decorator(csrf_exempt, name='dispatch')
 class RootView(APIView):
     """Root endpoint to verify the API is running"""
     permission_classes = []  # Allow anonymous access
@@ -1207,7 +1188,6 @@ class RootView(APIView):
         # Check if browser requests HTML
         accept_header = request.META.get('HTTP_ACCEPT', '')
         if 'text/html' in accept_header:
-            from django.http import HttpResponse
             html_content = """
             <!DOCTYPE html>
             <html lang="en">
