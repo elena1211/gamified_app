@@ -1,5 +1,4 @@
 import { X, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 
 /**
  * Unified modal component for all dialog types
@@ -19,14 +18,12 @@ export default function Modal({
   showCloseButton = true,
   penalty = null, // For game penalty notifications
 }) {
-  const { t } = useTranslation(['common', 'dashboard']);
-  
   if (!isOpen) return null;
 
-  // Set default values using translations
-  const defaultTitle = title || t('common:confirm');
-  const defaultConfirmText = confirmText || t('common:confirm');
-  const defaultCancelText = cancelText || t('common:cancel');
+  // Set default values
+  const defaultTitle = title || "Confirm";
+  const defaultConfirmText = confirmText || "Confirm";
+  const defaultCancelText = cancelText || "Cancel";
 
   const isGamePenalty = type === 'game-penalty';
   const isNotification = variant === 'notification';

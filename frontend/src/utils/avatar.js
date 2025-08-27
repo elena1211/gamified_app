@@ -67,20 +67,6 @@ export const getLevelProgress = (totalExp) => {
   };
 };
 
-// Calculate EXP gained from completing a task
-export const getTaskExp = (task) => {
-  // Base EXP: base points + difficulty bonus
-  const baseExp = 10 + (task.difficulty || 1) * 5;
-
-  // Different task type bonuses
-  if (task.is_random) {
-    // Time-limited tasks give 50% more EXP
-    return Math.floor(baseExp * 1.5);
-  }
-
-  return baseExp;
-};
-
 // Check if leveled up
 export const checkLevelUp = (oldExp, newExp) => {
   const oldLevel = getLevelFromExp(oldExp);

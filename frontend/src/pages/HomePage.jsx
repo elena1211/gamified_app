@@ -416,45 +416,28 @@ export default function HomePage({ currentUser, onNavigateToSettings, onNavigate
                 debugLog('🔄 Weekly stats refresh: incrementing from', prev, 'to', newValue);
                 return newValue;
               });
-            } else {
-              debugLog('⚠️ Dynamic uncomplete failed, performing local toggle:', data.message || data.error);
-              // If API says task not found or no completion record, just toggle locally
-              setTasks(prevTasks => prevTasks.map(t =>
-                t.id === task.id
-                  ? { ...t, completed: false }
-                  : t
-              ));
-              
-              // Show a user-friendly message
-              console.warn('Task uncompleted locally due to:', data.message || data.error);
             }
           } else {
-            debugLog('⚠️ API request failed, checking response...');
-            try {
-              const errorData = await response.json();
-              debugLog('API error response:', errorData);
-              
-              // If it's a "not found" or "no completion record" error, handle gracefully
-              if (errorData.error === 'Dynamic task not found' || 
-                  errorData.message === 'No completion record found for today') {
-                debugLog('⚠️ Task not found or no completion record, performing local toggle');
-                setTasks(prevTasks => prevTasks.map(t =>
-                  t.id === task.id
-                    ? { ...t, completed: false }
-                    : t
-                ));
-                console.warn('Task uncompleted locally:', errorData.message || errorData.error);
-              } else {
-                throw new Error(errorData.error || errorData.message || 'Unknown API error');
-              }
-            } catch (parseError) {
-              debugLog('⚠️ Failed to parse error response, falling back to local toggle');
-              setTasks(prevTasks => prevTasks.map(t =>
-                t.id === task.id
-                  ? { ...t, completed: false }
-                  : t
-              ));
+            debugLog('⚠️ Failed to uncomplete via API, response:', response.status);
+            const errorData = await response.text();
+            debugLog('⚠️ Error details:', errorData);
+
+            // Fallback to local toggle if API fails
+            setTasks(prevTasks => prevTasks.map(t =>
+              t.id === task.id
+                ? { ...t, completed: false }
+                : t
+            ));
+
+            // Reverse stat changes for local toggle
+            if (task.reward) {
+              const reverseReward = task.reward.replace(/\+/g, '-');
+              applyStatChanges(reverseReward);
+              debugLog('📉 Reversed stat changes locally:', reverseReward);
             }
+
+            // Still refresh weekly stats for local changes
+            setRefreshTrigger(prev => prev + 1);
           }
         }
       } else {

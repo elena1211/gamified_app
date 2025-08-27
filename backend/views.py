@@ -1,49 +1,18 @@
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth import authenticate, login
-from django.contrib.auth.hashers import make_password, check_password
+from django.contrib.auth.hashers import make_password
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from .models import Task, User, Goal, UserTaskLog, UserAttribute
 from django.utils import timezone
-from datetime import date, timedelta, datetime
+from datetime import date, timedelta
 import random
 import math
 import logging
-from django.db.models import Count, Q
-import unicodedata
-import re
 
 logger = logging.getLogger(__name__)
-
-def _strip_timestamp(title: str) -> str:
-    """Remove trailing timestamp pattern like ' - HH:MM:SS' from a title."""
-    if not title:
-        return ''
-    return re.sub(r"\s-\s\d{2}:\d{2}:\d{2}$", "", title)
-
-def _normalize_title_for_match(title: str) -> str:
-    """Normalize a title for fuzzy matching: NFKC, drop ZWJ/VS16, strip timestamp, remove punctuation, collapse spaces, lowercase."""
-    if not title:
-        return ''
-    # Unicode normalize
-    s = unicodedata.normalize('NFKC', title)
-    # Remove zero-width joiner and emoji variation selector
-    s = s.replace('\u200d', '').replace('\ufe0f', '')
-    # Strip trailing time suffix
-    s = _strip_timestamp(s)
-    # Remove most punctuation except word chars, space and hyphen
-    s = re.sub(r"[^\w\s-]", "", s)
-    # Collapse whitespace and lowercase
-    s = re.sub(r"\s+", " ", s).strip().lower()
-    return s
-
-def _is_numeric_only_title(title: str) -> bool:
-    """Return True if the title is effectively just a number (after normalization)."""
-    s = _normalize_title_for_match(title)
-    return bool(s) and re.fullmatch(r"\d+(?:\.\d+)?", s) is not None
 
 def get_or_create_user(username):
     """Helper function to get or create a user with default attributes"""
@@ -231,9 +200,6 @@ class TaskListView(APIView):
         else:
             # All tasks are completed, show some completed ones
             selected_tasks = random.sample(all_tasks, min(num_tasks, len(all_tasks)))
-
-        # Filter out numeric-only or invalid titles
-        selected_tasks = [t for t in selected_tasks if t and t.title and not _is_numeric_only_title(t.title)]
 
         tasks = []
         for task in selected_tasks:
@@ -426,15 +392,13 @@ class TaskCompleteView(APIView):
                     task=task,
                     defaults={
                         'status': 'completed',
-                        'completed_at': timezone.now(),
-                        'earned_points': task.reward_point
+                        'completed_at': timezone.now()
                     }
                 )
 
                 if not created and task_log.status != 'completed':
                     task_log.status = 'completed'
                     task_log.completed_at = timezone.now()
-                    task_log.earned_points = task.reward_point
                     task_log.save()
 
                 # Add EXP when completing
@@ -810,8 +774,7 @@ class DynamicTaskCompleteView(APIView):
                     attribute=attribute,
                     difficulty=2,
                     deadline=timezone.now() + timedelta(days=1),
-                    is_random=True,
-                    created_by_ai=True
+                    is_random=True
                 )
 
                 # Create completion log immediately
@@ -819,8 +782,7 @@ class DynamicTaskCompleteView(APIView):
                     user=user,
                     task=task,
                     status='completed',
-                    completed_at=timezone.now(),
-                    earned_points=reward_points
+                    completed_at=timezone.now()
                 )
 
                 # Add EXP when completing time-limited task
@@ -868,8 +830,7 @@ class DynamicTaskCompleteView(APIView):
                         'attribute': attribute,
                         'difficulty': 1,
                         'deadline': timezone.now() + timedelta(days=1),
-                        'is_random': True,
-                        'created_by_ai': True
+                        'is_random': True
                     }
                 )
 
@@ -888,8 +849,7 @@ class DynamicTaskCompleteView(APIView):
                         user=user,
                         task=task,
                         status='completed',
-                        completed_at=timezone.now(),
-                        earned_points=reward_points
+                        completed_at=timezone.now()
                     )
 
                     # Add EXP when completing daily task
@@ -963,72 +923,76 @@ class DynamicTaskUncompleteView(APIView):
             user = User.objects.get(username=username)
             logger.info(f"Found user: {user.username}")
 
-            # Normalize incoming title once
-            normalized_in = _normalize_title_for_match(task_title)
-
             # Find the task by title for this user (both random and regular tasks)
-            # First try exact match and timestamp-stripped exact
-            task = Task.objects.filter(title=task_title, user=user).first()
-            if not task:
-                task = Task.objects.filter(title=_strip_timestamp(task_title), user=user).first()
+            # First try exact match
+            task = Task.objects.filter(
+                title=task_title,
+                user=user
+            ).first()
 
-            # Title synonym mappings (bidirectional where useful)
-            title_mappings = {
-                'practice leetcode problem': 'practice algorithm problem',
-                'practice algorithm problem': 'practice leetcode problem',
-                'study tech docs': 'study tech documentation',
-                'study tech documentation': 'study tech docs',
-                'mindful debugging': 'debug mindfully',
-                'debug mindfully': 'mindful debugging',
-                'organise workspace': 'organize dev environment',
-                'organize dev environment': 'organise workspace',
-                'write journal entry': 'technical journaling',
-                'technical journaling': 'write journal entry',
-                'learn something new': 'learn new technology',
-                'learn new technology': 'learn something new',
-                'meditation': 'mindful debugging',
-                'read one tech article': 'read one tech article',
-                'review git commands': 'review git commands',
-            }
-
+            # If exact match fails, try partial match for common title mismatches
             if not task:
-                # Try mapped synonym search (icontains)
-                mapped = title_mappings.get(normalized_in)
-                if mapped:
-                    task = Task.objects.filter(user=user, title__icontains=mapped).first()
+                # Try to find task by removing emojis and checking if core title matches
+                import re
+                core_title = re.sub(r'[^\w\s-]', '', task_title).strip()
 
-            if not task:
-                # Fallback: normalized scan over user's tasks for equality, prefix, or substring containment
-                candidates = list(Task.objects.filter(user=user))
-                for t in candidates:
-                    nt = _normalize_title_for_match(t.title)
-                    if (
-                        nt == normalized_in
-                        or nt.startswith(normalized_in)
-                        or normalized_in.startswith(nt)
-                        or (normalized_in in nt)
-                        or (nt in normalized_in)
-                    ):
-                        task = t
-                        break
+                # Remove potential timestamp from the search title
+                clean_search_title = re.sub(r' - \d{2}:\d{2}:\d{2}$', '', task_title)
+                clean_core_title = re.sub(r'[^\w\s-]', '', clean_search_title).strip()
+
+                # Enhanced fallback search strategies
+                possible_titles = [
+                    task_title,
+                    task_title.strip(),
+                    clean_search_title,
+                    clean_core_title
+                ]
+
+                # Also try removing common emoji patterns and special characters
+                emoji_cleaned = re.sub(r'[^\w\s-]', '', task_title).strip()
+                possible_titles.append(emoji_cleaned)
+
+                # Try various matching strategies
+                for search_title in possible_titles:
+                    if search_title:
+                        # Try exact match first
+                        task = Task.objects.filter(title=search_title, user=user).first()
+                        if task:
+                            break
+
+                        # Try case-insensitive contains match
+                        task = Task.objects.filter(title__icontains=search_title, user=user).first()
+                        if task:
+                            break
+
+                # If still not found, try finding by similar keywords
+                if not task and len(clean_core_title) > 3:
+                    words = clean_core_title.lower().split()
+                    for word in words:
+                        if len(word) > 3:  # Only search meaningful words
+                            task = Task.objects.filter(title__icontains=word, user=user).first()
+                            if task:
+                                logger.info(f"Found task by keyword '{word}': {task.title}")
+                                break
 
             logger.info(f"Task search result: {task}")
             if task:
                 logger.info(f"Found task ID: {task.id}, Title: '{task.title}'")
 
             if not task:
-                logger.warning(f"Task '{task_title}' not found for user '{username}'. Treating as idempotent uncomplete.")
+                logger.warning(f"Task '{task_title}' not found for user '{username}'")
+                # List all tasks for debugging
+                all_tasks = Task.objects.filter(user=user)
+                logger.info(f"Available tasks for user '{username}':")
+                for t in all_tasks:
+                    logger.info(f"  ID: {t.id}, Title: '{t.title}'")
                 return Response({
-                    'success': True,
-                    'message': 'Task already uncompleted',
-                    'task_completed': False,
-                    'streak': user.current_streak
-                })
+                    'success': False,
+                    'error': 'Dynamic task not found'
+                }, status=404)
 
-            # Find recent completion log for this task (prefer today, but allow recent ones)
+            # Find today's completion log for this task
             today = date.today()
-            
-            # First try to find today's completion
             completion_logs = UserTaskLog.objects.filter(
                 user=user,
                 task=task,
@@ -1036,18 +1000,7 @@ class DynamicTaskUncompleteView(APIView):
                 completed_at__date=today
             )
 
-            # If no completion found today, look for the most recent completion
-            if not completion_logs.exists():
-                completion_logs = UserTaskLog.objects.filter(
-                    user=user,
-                    task=task,
-                    status='completed'
-                ).order_by('-completed_at')
-                
-                if completion_logs.exists():
-                    logger.info(f"No completion found today, using most recent completion from {completion_logs.first().completed_at}")
-
-            logger.info(f"Found {completion_logs.count()} completion logs for task '{task_title}'")
+            logger.info(f"Found {completion_logs.count()} completion logs for task '{task_title}' on {today}")
 
             completion_log = completion_logs.first()
 
@@ -1097,10 +1050,9 @@ class DynamicTaskUncompleteView(APIView):
                     }
                 })
             else:
-                # Idempotent success when no completion log exists for today/recent
                 return Response({
-                    'success': True,
-                    'message': 'No completion record found; treated as already uncompleted',
+                    'success': False,
+                    'message': 'No completion record found for today',
                     'task_completed': False,
                     'streak': user.current_streak
                 })
