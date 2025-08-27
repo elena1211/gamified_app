@@ -135,34 +135,27 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'backend.User'
 
 # CORS settings for React frontend
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",  # React default
-    "http://localhost:5173",  # Vite default
-    "http://localhost:5174",  # Vite alternative port
-    "http://localhost:5175",  # Previous Vite port
-    "http://localhost:5176",  # Current Vite port
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:5174",
-    "http://127.0.0.1:5175",
-    "http://127.0.0.1:5176",
-    "https://levelup-jet.vercel.app",  # Production frontend
-]
-
-# Allow all origins in development (temporary fix)
-CORS_ALLOW_ALL_ORIGINS = True
+if DEBUG:
+    # Development: Allow all origins for convenience
+    CORS_ALLOW_ALL_ORIGINS = True
+else:
+    # Production: Only allow specific origins
+    CORS_ALLOWED_ORIGINS = [
+        "https://levelup-jet.vercel.app",  # Production frontend
+    ]
 
 CORS_ALLOW_CREDENTIALS = True
 
 # CSRF settings for cross-origin requests
-CSRF_TRUSTED_ORIGINS = [
-    "https://web-production-d27fa.up.railway.app",
-    "https://levelup-jet.vercel.app",
-]
+if not DEBUG:
+    CSRF_TRUSTED_ORIGINS = [
+        "https://web-production-d27fa.up.railway.app",
+        "https://levelup-jet.vercel.app",
+    ]
 
 # Django REST Framework settings
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny'  # Temporarily allow all access for testing
+        'rest_framework.permissions.AllowAny'  # TODO: Add proper authentication in production
     ]
 }
