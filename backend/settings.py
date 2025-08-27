@@ -43,7 +43,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'corsheaders',  # For React frontend
     'rest_framework',  # For API
-    'backend',  # Your main app
+    'backend',  # Main app (contains models, views, etc.)
 ]
 
 MIDDLEWARE = [
