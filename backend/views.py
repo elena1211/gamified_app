@@ -1338,7 +1338,7 @@ class RootView(APIView):
 
 
 class HealthView(APIView):
-    """Health check endpoint for Railway"""
+    """Health check endpoint for Render"""
     permission_classes = []  # Allow anonymous access for health checks
 
     def get(self, request):
