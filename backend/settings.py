@@ -37,7 +37,8 @@ ALLOWED_HOSTS = (
     [h.strip() for h in os.environ.get("ALLOWED_HOSTS", "").split(",") if h.strip()]
     or ["localhost", "127.0.0.1"]
 )
-
+if not DEBUG:
+    ALLOWED_HOSTS += ["gamified-app-p9ao.onrender.com", ".onrender.com"]
 # Application definition
 
 INSTALLED_APPS = [
