@@ -309,6 +309,15 @@ class TaskDetailView(APIView):
 
 class GoalView(APIView):
     """API view for user's main goal"""
+
+    DEFAULT_GOAL = {
+        "id": 1,
+        "title": "Become a Software Engineer",
+        "description": "Master programming skills, build projects, and land a position at a tech company",
+        "is_completed": False,
+        "created_at": "2024-01-01"
+    }
+
     def get(self, request):
         username = request.GET.get('user', 'tester')  # Default to 'tester'
 
@@ -328,26 +337,13 @@ class GoalView(APIView):
                 }
                 return Response(goal_data)
             else:
-                # Return default goal if none exists
-                default_goal = {
-                    "id": 1,
-                    "title": "Become a Software Engineer",
-                    "description": "Master programming skills, build projects, and land a position at a tech company",
-                    "is_completed": False,
-                    "created_at": "2024-01-01"
-                }
-                return Response(default_goal)
+                return Response(self.DEFAULT_GOAL)
 
         except User.DoesNotExist:
-            # Return default goal if user doesn't exist
-            default_goal = {
-                "id": 1,
-                "title": "Become a Software Engineer",
-                "description": "Master programming skills, build projects, and land a position at a tech company",
-                "is_completed": False,
-                "created_at": "2024-01-01"
-            }
-            return Response(default_goal)
+            return Response(self.DEFAULT_GOAL)
+        except Exception as e:
+            logger.error(f"GoalView error for user '{username}': {e}")
+            return Response(self.DEFAULT_GOAL)
 
 def calculate_task_exp(task):
     """Calculate EXP gained from completing a task"""
