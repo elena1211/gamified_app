@@ -46,6 +46,7 @@ export const apiRequest = async (url, options = {}) => {
 
   try {
     debugLog("Making API request to:", url, "with config:", config);
+    console.log("[API_REQUEST_URL]", url);
     const response = await fetch(url, config);
 
     if (!response.ok) {
