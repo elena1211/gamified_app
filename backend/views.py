@@ -57,6 +57,19 @@ def get_or_create_user(username):
             description="Learn how to use the gamified productivity system"
         )
 
+        # Seed default daily tasks so the user always has tasks to start with
+        default_deadline = timezone.now() + timedelta(days=3650)
+        default_tasks_data = [
+            {'title': '🧹 Organise workspace',   'description': 'Clean and organise your desk',              'reward_point': 6, 'difficulty': 1, 'attribute': 'discipline'},
+            {'title': '📝 Write journal entry',  'description': "Reflect on today's experiences",           'reward_point': 5, 'difficulty': 1, 'attribute': 'discipline'},
+            {'title': '🏃\u200d♂️ 30-minute workout',   'description': 'Include cardio and strength training',     'reward_point': 9, 'difficulty': 2, 'attribute': 'energy'},
+            {'title': '💻 Practice coding',      'description': 'Solve a Leetcode problem',                  'reward_point': 8, 'difficulty': 2, 'attribute': 'intelligence'},
+            {'title': '🧘\u200d♀️ Meditation',         'description': '10 minutes of mindfulness',                 'reward_point': 4, 'difficulty': 1, 'attribute': 'energy'},
+            {'title': '📚 Learn something new',  'description': 'Read an educational article',               'reward_point': 7, 'difficulty': 1, 'attribute': 'intelligence'},
+        ]
+        for td in default_tasks_data:
+            Task.objects.create(user=user, deadline=default_deadline, **td)
+
         logger.info(f"Auto-created new user: {username}")
         return user
 
@@ -178,6 +191,17 @@ class TaskListView(APIView):
         ).exclude(
             description__contains='Time-limited task completed'
         ))
+
+        # Drop tasks with corrupted titles:
+        #   - purely numeric (e.g. "1", "42")
+        #   - timestamp suffix from accidental time-limited task storage
+        #     (e.g. "Navigate to GitHub - 16:13:13")
+        all_tasks = [
+            t for t in all_tasks
+            if t.title
+            and not re.match(r'^\s*\d+\s*$', t.title)
+            and not re.search(r' - \d{2}:\d{2}:\d{2}$', t.title)
+        ]
 
         uncompleted_tasks = [task for task in all_tasks if task.id not in completed_task_ids]
         completed_tasks = [task for task in all_tasks if task.id in completed_task_ids]
@@ -372,12 +396,20 @@ class TaskCompleteView(APIView):
             old_level = user.level
             old_exp = user.exp
 
+            # Build reward string for attribute side-effects
+            reward_attr = task.attribute.title()
+            reward_str = f"+{task.reward_point//2} {reward_attr}"
+            if task.difficulty > 1:
+                reward_str += f", +{task.difficulty-1} Discipline"
+
             if existing_log:
                 # Task already completed today - TOGGLE to uncomplete
                 # Subtract EXP when uncompleting
                 exp_lost = calculate_task_exp(task)
                 user.exp = max(0, user.exp - exp_lost)
                 existing_log.delete()
+                # Reverse attribute changes so they persist to DB
+                reverse_attribute_changes(user, reward_str)
                 message = "Task marked as incomplete"
             else:
                 # Mark task as completed and add EXP
@@ -398,6 +430,8 @@ class TaskCompleteView(APIView):
                 # Add EXP when completing
                 exp_gained = calculate_task_exp(task)
                 user.exp += exp_gained
+                # Apply attribute changes so they persist to DB
+                apply_attribute_changes(user, reward_str)
                 message = "Task completed successfully"
 
             # Update level based on new EXP
@@ -454,6 +488,9 @@ class UserStatsView(APIView):
         try:
             user = User.objects.get(username=username)
 
+            # Build attribute values from database
+            attr_data = {attr.name: attr.value for attr in user.attributes.all()}
+
             stats = {
                 "level": user.level,
                 "exp": user.exp,
@@ -461,6 +498,7 @@ class UserStatsView(APIView):
                 "max_streak": user.max_streak,
                 "last_activity_date": user.last_activity_date.strftime("%Y-%m-%d") if user.last_activity_date else None,
                 "total_completed_tasks": UserTaskLog.objects.filter(user=user, status='completed').count(),
+                "attributes": attr_data,
                 "level_progress": {
                     "current_level_exp": get_exp_for_level(user.level),
                     "next_level_exp": get_exp_for_level(user.level + 1),
@@ -1286,7 +1324,7 @@ class RootView(APIView):
                     </div>
 
                     <div class="footer">
-                        <p><span class="emoji">🚀</span>Backend deployed on Railway</p>
+                        <p><span class="emoji">🚀</span>Backend deployed on Render</p>
                         <p>Built with Django REST Framework</p>
                     </div>
                 </div>

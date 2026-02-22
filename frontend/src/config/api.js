@@ -1,15 +1,16 @@
 // API configuration and helper functions
-import { debugLog } from '../utils/logger';
+import { debugLog } from "../utils/logger";
 
 // Environment-based API configuration
-const API_BASE = import.meta.env.VITE_API_URL || 'https://web-production-d27fa.up.railway.app/api';
+const API_BASE =
+  import.meta.env.VITE_API_URL || "https://gamified-app-p9ao.onrender.com/api";
 
 export const API_ENDPOINTS = {
   // Authentication
   login: `${API_BASE}/login/`,
   register: `${API_BASE}/register/`,
 
-    // Tasks
+  // Tasks
   tasks: `${API_BASE}/tasks/`,
   taskComplete: `${API_BASE}/tasks/complete/`,
   dynamicTaskComplete: `${API_BASE}/tasks/complete-dynamic/`,
@@ -22,15 +23,15 @@ export const API_ENDPOINTS = {
   userProgress: `${API_BASE}/user/progress/`,
 
   // Goals
-  goal: `${API_BASE}/goal/`
+  goal: `${API_BASE}/goal/`,
 };
 
 // API utility functions
 export const apiRequest = async (url, options = {}) => {
   const defaultOptions = {
-    mode: 'cors',  // Enable CORS mode for cross-origin requests
+    mode: "cors", // Enable CORS mode for cross-origin requests
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
   };
 
@@ -44,7 +45,7 @@ export const apiRequest = async (url, options = {}) => {
   };
 
   try {
-    debugLog('Making API request to:', url, 'with config:', config);
+    debugLog("Making API request to:", url, "with config:", config);
     const response = await fetch(url, config);
 
     if (!response.ok) {
@@ -53,18 +54,20 @@ export const apiRequest = async (url, options = {}) => {
         const errorData = await response.json();
         errorMessage = errorData.error || errorMessage;
       } catch (parseError) {
-        console.error('Failed to parse error response:', parseError);
+        console.error("Failed to parse error response:", parseError);
       }
       throw new Error(errorMessage);
     }
 
     const data = await response.json();
-    debugLog('API response:', data);
+    debugLog("API response:", data);
     return { data, response };
   } catch (error) {
-    console.error('API request failed:', error);
-    if (error.name === 'TypeError' && error.message.includes('fetch')) {
-      throw new Error('Connection error: Unable to connect to server. Please check if the backend is running.');
+    console.error("API request failed:", error);
+    if (error.name === "TypeError" && error.message.includes("fetch")) {
+      throw new Error(
+        "Connection error: Unable to connect to server. Please check if the backend is running.",
+      );
     }
     throw new Error(`Connection error: ${error.message}`);
   }
