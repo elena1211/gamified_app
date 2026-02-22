@@ -30,7 +30,14 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-your-secret-key-here-
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get("DEBUG", "0") == "1"
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',') if os.environ.get('ALLOWED_HOSTS') else ['*']
+
+# Strip whitespace from each entry so Render env-var copy-paste typos don't break host validation
+_raw_hosts = os.environ.get("ALLOWED_HOSTS", "").strip()
+ALLOWED_HOSTS = (
+    [h.strip() for h in _raw_hosts.split(",") if h.strip()]
+    if _raw_hosts
+    else ["*", ".onrender.com", "localhost", "127.0.0.1"]
+)
 
 # Application definition
 
@@ -145,16 +152,10 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'backend.User'
 
 # CORS settings for React frontend
-if DEBUG:
-    # Development: Allow all origins for convenience
-    CORS_ALLOW_ALL_ORIGINS = True
-else:
-    # Production: Only allow specific origins
-    CORS_ALLOWED_ORIGINS = (
-    os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
-    if os.environ.get("CORS_ALLOWED_ORIGINS")
-    else []
-)
+# The API uses AllowAny permissions (no token auth), so allowing all origins is safe.
+# Previously this defaulted to [] in production when the env var wasn't set, blocking
+# every browser request with a CORS error.
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
 # CSRF settings for cross-origin requests
