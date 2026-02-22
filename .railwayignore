@@ -1,4 +1,5 @@
-# Railway ignore file - prevent frontend from interfering with Python detection
+# Legacy ignore file — project is now deployed on Render, not Railway.
+# Kept to avoid breaking any historical Railway connections.
 
 # Ignore frontend directory to prevent Node.js detection
 frontend/
