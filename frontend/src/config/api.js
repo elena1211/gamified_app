@@ -26,6 +26,14 @@ export const API_ENDPOINTS = {
   goal: `${API_BASE}/goal/`,
 };
 
+// Render free-tier services sleep after 15 min and take 30-60s to wake.
+// The first request after a sleep returns 502/503/504; retry with backoff
+// so the UI doesn't surface a transient cold start as an error.
+const RETRYABLE_STATUS = new Set([502, 503, 504]);
+const RETRY_DELAYS_MS = [1000, 3000, 6000];
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 // API utility functions
 export const apiRequest = async (url, options = {}) => {
   const defaultOptions = {
@@ -44,34 +52,65 @@ export const apiRequest = async (url, options = {}) => {
     },
   };
 
-  try {
-    debugLog("Making API request to:", url, "with config:", config);
-    console.log("[API_REQUEST_URL]", url);
-    const response = await fetch(url, config);
+  debugLog("Making API request to:", url, "with config:", config);
 
-    if (!response.ok) {
-      let errorMessage = `HTTP error! status: ${response.status}`;
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.error || errorMessage;
-      } catch (parseError) {
-        console.error("Failed to parse error response:", parseError);
+  let lastError = null;
+
+  for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      const response = await fetch(url, config);
+
+      if (response.ok) {
+        const data = await response.json();
+        debugLog("API response:", data);
+        return { data, response };
       }
-      throw new Error(errorMessage);
-    }
 
-    const data = await response.json();
-    debugLog("API response:", data);
-    return { data, response };
-  } catch (error) {
-    console.error("API request failed:", error);
-    if (error.name === "TypeError" && error.message.includes("fetch")) {
-      throw new Error(
-        "Connection error: Unable to connect to server. Please check if the backend is running.",
+      // Retry only on transient 5xx (e.g. Render cold start).
+      // 4xx is the client's fault — fail fast.
+      if (!RETRYABLE_STATUS.has(response.status) || attempt === RETRY_DELAYS_MS.length) {
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (parseError) {
+          console.error("Failed to parse error response:", parseError);
+        }
+        throw new Error(errorMessage);
+      }
+
+      debugLog(
+        `⏳ Got ${response.status}, retrying in ${RETRY_DELAYS_MS[attempt]}ms (server may be waking up)…`,
       );
+      await sleep(RETRY_DELAYS_MS[attempt]);
+    } catch (error) {
+      lastError = error;
+      const isNetworkError =
+        error.name === "TypeError" && error.message.includes("fetch");
+
+      // On the final attempt, or on a non-retryable error, stop trying.
+      if (!isNetworkError || attempt === RETRY_DELAYS_MS.length) {
+        console.error("API request failed:", error);
+        if (isNetworkError) {
+          throw new Error(
+            "Connection error: Unable to connect to server. Please check if the backend is running.",
+          );
+        }
+        if (error.message.startsWith("HTTP error") || error.message.startsWith("Connection error")) {
+          throw error;
+        }
+        throw new Error(`Connection error: ${error.message}`);
+      }
+
+      debugLog(
+        `⏳ Network error, retrying in ${RETRY_DELAYS_MS[attempt]}ms…`,
+      );
+      await sleep(RETRY_DELAYS_MS[attempt]);
     }
-    throw new Error(`Connection error: ${error.message}`);
   }
+
+  // Shouldn't reach here, but throw a defensive fallback rather than returning undefined.
+  throw lastError || new Error("Connection error: max retries exceeded");
 };
 
 export default API_ENDPOINTS;
