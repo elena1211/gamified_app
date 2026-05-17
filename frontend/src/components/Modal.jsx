@@ -28,12 +28,14 @@ export default function Modal({
   const isGamePenalty = type === 'game-penalty';
   const isNotification = variant === 'notification';
 
+  const isQuestDismissed = defaultTitle.includes('Dismissed');
+
   const getIcon = () => {
     if (isGamePenalty) {
       // Game-specific emojis for penalties
       return (
         <div className="text-6xl mb-2">
-          {defaultTitle.includes(t('dashboard:quest.questDismissed')) ? '😰' : '⏰'}
+          {isQuestDismissed ? '😰' : '⏰'}
         </div>
       );
     }
@@ -77,14 +79,14 @@ export default function Modal({
             <div className="text-center">
               <p className="text-red-800 font-medium mb-2">{message}</p>
               <div className="text-red-600">
-                <span className="font-semibold">{t('dashboard:quest.penalty')}:</span>
+                <span className="font-semibold">Penalty:</span>
                 <span className="ml-1">{penalty}</span>
               </div>
             </div>
           </div>
           <div className="text-center mb-6">
             <p className="text-gray-600 text-sm">
-              {defaultTitle.includes(t('dashboard:quest.questDismissed'))
+              {isQuestDismissed
                 ? "Remember to be brave next time!"
                 : "Act faster next time!"
               }
