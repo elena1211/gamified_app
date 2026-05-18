@@ -5,15 +5,8 @@ export default function TimeLimitedTaskPopup({ task, onAccept, onReject, onTimeU
   const [timeLeft, setTimeLeft] = useState(task.duration);
 
   useEffect(() => {
-    if (timeLeft <= 0) {
-      onTimeUp();
-      return;
-    }
-
-    const timer = setInterval(() => {
-      setTimeLeft(prev => prev - 1);
-    }, 1000);
-
+    if (timeLeft <= 0) { onTimeUp(); return; }
+    const timer = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
     return () => clearInterval(timer);
   }, [timeLeft, onTimeUp]);
 
@@ -23,74 +16,63 @@ export default function TimeLimitedTaskPopup({ task, onAccept, onReject, onTimeU
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const urgency = timeLeft <= 10;
+
   return (
-    <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 9999,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
-      }}
-    >
-      <div
-        className="bg-white rounded-2xl p-6 max-w-sm mx-4 shadow-2xl relative"
-        style={{
-          zIndex: 10000,
-          backgroundColor: 'white',
-          borderRadius: '1rem',
-          padding: '1.5rem',
-          maxWidth: '24rem',
-          margin: '0 1rem',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
-        }}
-      >
-        <div className="text-center mb-4">
-          <div className="text-3xl mb-2">⚡</div>
-          <h2 className="text-xl font-bold text-gray-800">Time-Limited Quest</h2>
+    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[9999] p-4">
+      <div className="rpg-window max-w-sm w-full">
+        <div
+          className="rpg-header justify-center text-sm"
+          style={{
+            background: urgency
+              ? 'linear-gradient(180deg, var(--accent-rust) 0%, #8B2C1A 100%)'
+              : 'linear-gradient(180deg, var(--frame) 0%, var(--frame-deep) 100%)',
+          }}
+        >
+          ⚡ Time-Limited Quest
         </div>
 
-        <div className="bg-yellow-50 rounded-xl p-4 mb-4">
-          <h3 className="font-semibold text-gray-800 mb-2 text-center">{cleanTaskTitle(task.title)}</h3>
-          <p className="text-sm text-gray-600 mb-3">{task.description}</p>
+        <div className="px-5 py-4">
+          {/* Task details */}
+          <div
+            className="rounded-sm px-4 py-3 mb-4"
+            style={{ background: 'var(--paper-deep)', border: '1px solid var(--frame)' }}
+          >
+            <h3 className="font-semibold text-ink text-base mb-1 text-center">
+              {cleanTaskTitle(task.title)}
+            </h3>
+            {task.description && (
+              <p className="text-xs text-ink-soft text-center">{task.description}</p>
+            )}
+          </div>
 
-          <div className="text-center">
-            <div className="text-2xl font-bold text-red-600 mb-1">
+          {/* Countdown */}
+          <div className="text-center mb-4">
+            <div
+              className="font-display text-4xl tabular-nums mb-1"
+              style={{ color: urgency ? 'var(--accent-rust)' : 'var(--accent-gold-deep)' }}
+            >
               {formatTime(timeLeft)}
             </div>
-            <p className="text-xs text-gray-500">Time Remaining</p>
+            <p className="text-xs text-ink-mute uppercase tracking-widest">Time Remaining</p>
           </div>
-        </div>
 
-        <div className="mb-6">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm text-green-600">✅ Reward:</span>
-            <span className="text-sm font-medium">{task.reward}</span>
+          {/* Reward / penalty */}
+          <div className="space-y-1 mb-5 text-sm">
+            <div className="flex justify-between">
+              <span className="text-sage">✦ Reward:</span>
+              <span className="text-ink font-medium">{task.reward}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-rust">✗ Penalty:</span>
+              <span className="text-ink font-medium">{task.penalty}</span>
+            </div>
           </div>
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-red-600">❌ Penalty:</span>
-            <span className="text-sm font-medium">{task.penalty}</span>
-          </div>
-        </div>
 
-        <div className="flex gap-3">
-          <button
-            onClick={onAccept}
-            className="flex-1 bg-green-500 hover:bg-green-600 text-white py-3 rounded-xl font-medium transition-colors"
-          >
-            Accept Challenge
-          </button>
-          <button
-            onClick={onReject}
-            className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-3 rounded-xl font-medium transition-colors"
-          >
-            Dismiss
-          </button>
+          <div className="flex gap-3">
+            <button onClick={onAccept} className="rpg-btn-sage flex-1">Accept</button>
+            <button onClick={onReject} className="rpg-btn-secondary flex-1">Dismiss</button>
+          </div>
         </div>
       </div>
     </div>

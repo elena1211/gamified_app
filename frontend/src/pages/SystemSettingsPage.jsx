@@ -1,39 +1,21 @@
 import { useState } from 'react';
-import { User, LogOut, Bell } from 'lucide-react';
+import { User, Bell } from 'lucide-react';
 import Modal from '../components/Modal.jsx';
 import BottomNav from '../components/BottomNav.jsx';
 
-/**
- * System Settings Page component
- * Handles user account, security, notifications, and support settings
- */
 export default function SystemSettingsPage({ currentUser, onLogout, onNavigateToHome, onNavigateToTaskManager }) {
   const [activeSection, setActiveSection] = useState('account');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-
   const [preferences, setPreferences] = useState({
     notifications: localStorage.getItem('notifications') !== 'false',
     soundEffects: localStorage.getItem('soundEffects') !== 'false',
-    dailyReminder: localStorage.getItem('dailyReminder') !== 'false'
+    dailyReminder: localStorage.getItem('dailyReminder') !== 'false',
   });
 
   const sections = [
-    { id: 'account', title: 'Account', icon: User },
-    { id: 'preferences', title: 'Preferences', icon: Bell }
+    { id: 'account', title: 'Account', Icon: User },
+    { id: 'preferences', title: 'Preferences', Icon: Bell },
   ];
-
-  const handleLogoutClick = () => {
-    setShowLogoutConfirm(true);
-  };
-
-  const handleLogoutConfirm = () => {
-    setShowLogoutConfirm(false);
-    if (onLogout) onLogout();
-  };
-
-  const handleLogoutCancel = () => {
-    setShowLogoutConfirm(false);
-  };
 
   const updatePreference = (key, value) => {
     setPreferences(prev => ({ ...prev, [key]: value }));
@@ -41,114 +23,125 @@ export default function SystemSettingsPage({ currentUser, onLogout, onNavigateTo
   };
 
   const renderAccountSection = () => (
-    <div className="space-y-6">
-      <div className="bg-gray-50 p-4 rounded-lg">
-        <h3 className="font-semibold text-gray-800 mb-2 flex items-center">
-          <User className="w-5 h-5 mr-2" />
-          Account Information
-        </h3>
-        <div className="space-y-2 text-sm text-gray-600">
-          <p><span className="font-medium">Username: </span>{currentUser}</p>
-          <p><span className="font-medium">Registration Date: </span>1st January 2024</p>
-          <p><span className="font-medium">Last Login: </span>Today</p>
-          <p><span className="font-medium">Account Status: </span><span className="text-green-600">Active</span></p>
-        </div>
+    <div className="space-y-3">
+      <h3 className="font-display text-base text-ink mb-3">Account Information</h3>
+      <div className="rpg-window-light px-4 py-3 text-sm space-y-2">
+        {[
+          ['Username', currentUser],
+          ['Registration Date', '1 January 2024'],
+          ['Last Login', 'Today'],
+          ['Account Status', <span key="s" className="text-sage">Active</span>],
+        ].map(([label, value]) => (
+          <div key={label} className="flex justify-between">
+            <span className="text-ink-mute">{label}</span>
+            <span className="text-ink font-medium">{value}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
 
   const renderPreferencesSection = () => (
-    <div className="space-y-4">
+    <div className="space-y-3">
+      <h3 className="font-display text-base text-ink mb-3">Preferences</h3>
       {[
         { key: 'notifications', label: 'Notifications', desc: 'Receive app notifications and alerts' },
         { key: 'dailyReminder', label: 'Daily Reminder', desc: 'Get reminded to check your tasks daily' },
-        { key: 'soundEffects', label: 'Sound Effects', desc: 'Play sounds when completing tasks' }
+        { key: 'soundEffects', label: 'Sound Effects', desc: 'Play sounds when completing tasks' },
       ].map(item => (
-        <div key={item.key} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+        <div
+          key={item.key}
+          className="rpg-window-light flex items-center justify-between px-4 py-3"
+        >
           <div>
-            <h4 className="font-medium text-gray-800">{item.label}</h4>
-            <p className="text-sm text-gray-600">{item.desc}</p>
+            <h4 className="text-sm font-semibold text-ink">{item.label}</h4>
+            <p className="text-xs text-ink-mute">{item.desc}</p>
           </div>
           <button
             onClick={() => updatePreference(item.key, !preferences[item.key])}
-            className={`w-12 h-6 rounded-full transition-colors ${
-              preferences[item.key] ? 'bg-pink-600' : 'bg-gray-300'
-            }`}
+            className="w-11 h-6 rounded-full transition-colors flex-shrink-0 relative"
+            style={{
+              background: preferences[item.key] ? 'var(--accent-rose-deep)' : 'var(--frame)',
+              transition: 'background 200ms',
+            }}
+            aria-pressed={preferences[item.key]}
           >
-            <div className={`w-5 h-5 bg-white rounded-full transition-transform ${
-              preferences[item.key] ? 'translate-x-6' : 'translate-x-1'
-            }`} />
+            <div
+              className="absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform shadow-sm"
+              style={{ transform: preferences[item.key] ? 'translateX(22px)' : 'translateX(2px)' }}
+            />
           </button>
         </div>
       ))}
     </div>
   );
 
-  const renderContent = () => {
-    switch (activeSection) {
-      case 'account': return renderAccountSection();
-      case 'preferences': return renderPreferencesSection();
-      default: return renderAccountSection();
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    <div className="paper-bg min-h-screen pb-20 page-enter">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+      <div style={{ background: 'var(--paper-deep)', borderBottom: '2px solid var(--frame)' }}>
         <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center">
-            <h1 className="text-xl font-bold text-gray-800">Settings</h1>
-          </div>
+          <h1 className="font-display text-xl text-ink tracking-wide">Settings</h1>
         </div>
       </div>
 
       <div className="max-w-4xl mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
           {/* Sidebar */}
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg shadow-sm p-4 space-y-2">
-              {sections.map(section => (
-                <button
-                  key={section.id}
-                  onClick={() => setActiveSection(section.id)}
-                  className={`w-full text-left p-3 rounded-lg transition-colors flex items-center ${
-                    activeSection === section.id
-                      ? 'bg-pink-100 text-pink-700 font-medium'
-                      : 'text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  <section.icon className="w-5 h-5 mr-3" />
-                  {section.title}
-                </button>
-              ))}
+            <div className="rpg-window">
+              <div className="rpg-header">Navigation</div>
+              <div className="p-2 space-y-1">
+                {sections.map(({ id, title, Icon }) => (
+                  <button
+                    key={id}
+                    onClick={() => setActiveSection(id)}
+                    className="w-full text-left px-3 py-2.5 rounded-sm flex items-center gap-2 text-sm transition-colors"
+                    style={
+                      activeSection === id
+                        ? { background: 'var(--paper-shadow)', color: 'var(--ink)', fontWeight: 600 }
+                        : { color: 'var(--ink-soft)' }
+                    }
+                  >
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    {title}
+                  </button>
+                ))}
 
-              <div className="border-t pt-2 mt-4">
+                <div
+                  className="mt-2 pt-2"
+                  style={{ borderTop: '1px solid var(--frame)', opacity: 0.5 }}
+                />
                 <button
-                  onClick={handleLogoutClick}
-                  className="w-full text-left p-3 rounded-lg transition-colors flex items-center text-red-600 hover:bg-red-50"
+                  onClick={() => setShowLogoutConfirm(true)}
+                  className="w-full text-left px-3 py-2.5 rounded-sm flex items-center gap-2 text-sm transition-colors"
+                  style={{ color: 'var(--accent-rust)' }}
                 >
-                  <LogOut className="w-5 h-5 mr-3" />
+                  <span>⎋</span>
                   Log Out
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Main Content */}
+          {/* Main content */}
           <div className="lg:col-span-3">
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              {renderContent()}
+            <div className="rpg-window">
+              <div className="rpg-header">
+                {activeSection === 'account' ? 'Account' : 'Preferences'}
+              </div>
+              <div className="px-5 py-4">
+                {activeSection === 'account' ? renderAccountSection() : renderPreferencesSection()}
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Logout Confirmation Dialog */}
       <Modal
         isOpen={showLogoutConfirm}
-        onClose={handleLogoutCancel}
-        onConfirm={handleLogoutConfirm}
+        onClose={() => setShowLogoutConfirm(false)}
+        onConfirm={() => { setShowLogoutConfirm(false); if (onLogout) onLogout(); }}
         title="Confirm Logout"
         message="Are you sure you want to log out?"
         confirmText="Log Out"
@@ -158,7 +151,7 @@ export default function SystemSettingsPage({ currentUser, onLogout, onNavigateTo
       />
 
       <BottomNav
-        onSettingsClick={() => {}} // Empty function since we're already on settings page
+        onSettingsClick={() => {}}
         onHomeClick={onNavigateToHome}
         onTaskManagerClick={onNavigateToTaskManager}
         currentPage="settings"

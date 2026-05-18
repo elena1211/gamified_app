@@ -36,29 +36,20 @@ const TaskCard = ({
 
   if (isEditing && editData) {
     return (
-      <div
-        className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-3"
-        style={{ minHeight: '200px' }}
-      >
+      <div className="rpg-window mb-3 p-4" style={{ minHeight: '200px' }}>
         <form onSubmit={handleSubmit} className="space-y-3">
           <input
             type="text"
             value={editData.title}
-            onChange={(e) => {
-              e.preventDefault();
-              onEditDataChange('title', e.target.value);
-            }}
-            className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onChange={(e) => { e.preventDefault(); onEditDataChange('title', e.target.value); }}
+            className="rpg-input text-sm"
             placeholder="Task title"
           />
           <input
             type="text"
             value={editData.description}
-            onChange={(e) => {
-              e.preventDefault();
-              onEditDataChange('description', e.target.value);
-            }}
-            className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onChange={(e) => { e.preventDefault(); onEditDataChange('description', e.target.value); }}
+            className="rpg-input text-sm"
             placeholder="Task description"
           />
           <input
@@ -71,19 +62,16 @@ const TaskCard = ({
                 onEditDataChange('reward_point', e.target.value);
               }
             }}
-            className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Reward points (1-5)"
+            className="rpg-input text-sm"
+            placeholder="Reward points (1–5)"
             min="1"
             max="5"
           />
           <div className="flex gap-2">
             <select
               value={editData.difficulty}
-              onChange={(e) => {
-                e.preventDefault();
-                onEditDataChange('difficulty', parseInt(e.target.value));
-              }}
-              className="px-3 py-2 border rounded-lg text-sm flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onChange={(e) => { e.preventDefault(); onEditDataChange('difficulty', parseInt(e.target.value)); }}
+              className="rpg-select flex-1 text-sm"
             >
               {difficultyOptions.map(opt => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -91,11 +79,8 @@ const TaskCard = ({
             </select>
             <select
               value={editData.attribute}
-              onChange={(e) => {
-                e.preventDefault();
-                onEditDataChange('attribute', e.target.value);
-              }}
-              className="px-3 py-2 border rounded-lg text-sm flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onChange={(e) => { e.preventDefault(); onEditDataChange('attribute', e.target.value); }}
+              className="rpg-select flex-1 text-sm"
             >
               {attributeOptions.map(opt => (
                 <option key={opt.value} value={opt.value}>{opt.emoji} {opt.label}</option>
@@ -103,22 +88,15 @@ const TaskCard = ({
             </select>
           </div>
           <div className="flex gap-2">
-            <button
-              type="submit"
-              className="flex items-center gap-1 px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600 flex-1 justify-center"
-            >
-              <Save size={14} /> Save
+            <button type="submit" className="rpg-btn-sage flex-1 text-sm py-2">
+              <Save size={13} /> Save
             </button>
             <button
               type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onCancelEdit(e);
-              }}
-              className="flex items-center gap-1 px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600 flex-1 justify-center"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onCancelEdit(e); }}
+              className="rpg-btn-secondary flex-1 text-sm py-2"
             >
-              <X size={14} /> Cancel
+              <X size={13} /> Cancel
             </button>
           </div>
         </form>
@@ -127,48 +105,38 @@ const TaskCard = ({
   }
 
   return (
-    <div
-      className="bg-white border border-gray-200 rounded-lg p-4 mb-3 shadow-sm"
-      style={{ minHeight: '120px' }}
-    >
+    <div className="rpg-window-light mb-3 p-4" style={{ minHeight: '100px' }}>
       <div className="h-full flex flex-col">
         <div className="flex justify-between items-start mb-2">
-          <h3 className="font-medium text-gray-800 flex-1 pr-2 leading-tight">{cleanTaskTitle(task.title)}</h3>
+          <h3 className="text-sm font-semibold text-ink flex-1 pr-2 leading-snug">
+            {cleanTaskTitle(task.title)}
+          </h3>
           {!isHistory && (
             <div className="flex gap-1 flex-shrink-0">
               <button
                 type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onComplete(task, e);
-                }}
-                className="p-1 text-green-500 hover:bg-green-50 rounded"
-                title="Complete task"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onComplete(task, e); }}
+                className="p-1 rounded transition-colors hover:bg-[var(--paper-shadow)]"
+                style={{ color: 'var(--accent-sage)' }}
+                title="Complete quest"
               >
                 <CheckCircle size={16} />
               </button>
               <button
                 type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onStartEdit(task, e);
-                }}
-                className="p-1 text-blue-500 hover:bg-blue-50 rounded"
-                title="Edit task"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onStartEdit(task, e); }}
+                className="p-1 rounded transition-colors hover:bg-[var(--paper-shadow)]"
+                style={{ color: 'var(--ink-soft)' }}
+                title="Edit quest"
               >
                 <Edit size={16} />
               </button>
               <button
                 type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onDelete(task.id, e);
-                }}
-                className="p-1 text-red-500 hover:bg-red-50 rounded"
-                title="Delete task"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(task.id, e); }}
+                className="p-1 rounded transition-colors hover:bg-[var(--paper-shadow)]"
+                style={{ color: 'var(--accent-rust)' }}
+                title="Delete quest"
               >
                 <Trash2 size={16} />
               </button>
@@ -177,25 +145,21 @@ const TaskCard = ({
         </div>
 
         {task.description && (
-          <p className="text-gray-600 text-sm mb-3 flex-1">{task.description}</p>
+          <p className="text-xs text-ink-soft mb-3 flex-1 italic">{task.description}</p>
         )}
 
-        <div className="flex items-center gap-3 mt-auto">
-          <span className={`text-xs px-2 py-1 rounded-full ${difficulty?.colour} bg-opacity-10`}>
-            {difficulty?.label}
-          </span>
-          <span className="text-xs text-gray-500">
-            {attribute?.emoji} {attribute?.label}
-          </span>
-          <span className="text-xs font-medium text-green-600 ml-auto">
+        <div className="flex items-center gap-3 mt-auto text-xs">
+          <span className="text-ink-mute">{difficulty?.label}</span>
+          <span className="text-ink-mute">{attribute?.emoji} {attribute?.label}</span>
+          <span className="ml-auto font-semibold" style={{ color: 'var(--accent-sage)' }}>
             +{task.reward_point} {attribute?.label}
           </span>
         </div>
 
         {isHistory && task.completedAt && (
-          <div className="mt-2 text-xs text-gray-500 flex justify-between">
+          <div className="mt-2 text-xs text-ink-mute flex justify-between">
             <span>Completed: {task.completedAt}</span>
-            {task.completedTime && <span>Time: {task.completedTime}</span>}
+            {task.completedTime && <span>{task.completedTime}</span>}
           </div>
         )}
       </div>
@@ -580,88 +544,83 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
 
   if (loading) {
     return (
-      <div className="bg-gradient-to-br from-pink-100 to-purple-100 flex items-center justify-center" style={{minHeight: '100vh'}}>
-        <div className="text-purple-800 text-xl">🔧 Loading Task Manager...</div>
+      <div className="paper-bg min-h-screen flex items-center justify-center">
+        <p className="text-ink-soft font-display text-lg tracking-wide animate-pulse">
+          Loading Quest Log…
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="bg-pink-50 pb-20" style={{minHeight: '100vh'}}>
-      <div className="max-w-4xl mx-auto px-6 py-8">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Task Manager</h1>
-          <p className="text-gray-600">Manage your quests and track your progress</p>
-        </div>
+    <div className="paper-bg min-h-screen pb-20 page-enter">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-5">
+        {/* Page header */}
+        <header>
+          <h1 className="font-display text-2xl text-ink tracking-wide mb-0.5">Quest Log</h1>
+          <p className="text-sm text-ink-mute">Manage your quests and track your progress</p>
+        </header>
 
-        {/* Weekly Stats Component */}
-        <div className="mb-6">
+        {/* Weekly diary */}
+        <div className="rpg-window">
+          <div className="rpg-header">This Week's Diary</div>
           <WeeklyTaskStats currentUser={currentUser} refreshTrigger={refreshTrigger} />
         </div>
 
-        <div className="flex mb-6 bg-white rounded-lg p-1 shadow-sm">
-          <button
-            type="button"
-            onClick={() => setActiveTab('active')}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-              activeTab === 'active'
-                ? 'bg-purple-500 text-white'
-                : 'text-gray-600 hover:text-purple-600'
-            }`}
-          >
-            Active Tasks ({tasks.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('history');
-              // Load completed history when switching to history tab
-              if (completedTasks.length === 0) {
-                fetchCompletedHistory();
+        {/* Tab switcher */}
+        <div
+          className="rpg-window-light flex p-1 gap-1"
+        >
+          {[
+            { id: 'active', label: `Active Quests (${tasks.length})` },
+            { id: 'history', label: `Completed History (${completedTasks.length})` },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => {
+                setActiveTab(tab.id);
+                if (tab.id === 'history' && completedTasks.length === 0) fetchCompletedHistory();
+              }}
+              className="flex-1 py-2 px-3 rounded-sm text-xs font-semibold uppercase tracking-wider transition-colors"
+              style={
+                activeTab === tab.id
+                  ? { background: 'var(--frame)', color: 'var(--paper)' }
+                  : { color: 'var(--ink-soft)' }
               }
-            }}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-              activeTab === 'history'
-                ? 'bg-purple-500 text-white'
-                : 'text-gray-600 hover:text-purple-600'
-            }`}
-          >
-            Completed History ({completedTasks.length})
-          </button>
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
         {activeTab === 'active' && (
-          <div>
+          <div className="space-y-4">
             <button
               type="button"
               onClick={() => setShowAddForm(true)}
-              className="w-full mb-6 py-3 px-4 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors flex items-center justify-center gap-2"
+              className="rpg-btn-primary w-full"
             >
-              <Plus size={20} />
-              Add New Task
+              <Plus size={16} /> Add New Quest
             </button>
 
             {showAddForm && (
-              <form
-                onSubmit={handleAddTask}
-                ref={addFormRef}
-                className="bg-white border border-gray-200 rounded-lg p-6 mb-6 shadow-sm"
-              >
-                <h3 className="text-lg font-medium mb-4">Create New Task</h3>
-                <div className="space-y-4">
+              <div className="rpg-window">
+                <div className="rpg-header">Create New Quest</div>
+                <form onSubmit={handleAddTask} ref={addFormRef} className="px-5 py-4 space-y-3">
                   <input
                     type="text"
                     value={newTask.title}
                     onChange={(e) => setNewTask(prev => ({ ...prev, title: e.target.value }))}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm"
-                    placeholder="Task title (e.g., 🏃‍♂️ 30-minute workout)"
+                    className="rpg-input"
+                    placeholder="Quest title (e.g., 30-minute workout)"
                   />
                   <input
                     type="text"
                     value={newTask.description}
                     onChange={(e) => setNewTask(prev => ({ ...prev, description: e.target.value }))}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm"
-                    placeholder="Task description or tip"
+                    className="rpg-input"
+                    placeholder="Description or tip"
                   />
                   <input
                     type="number"
@@ -672,8 +631,8 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
                         setNewTask(prev => ({ ...prev, reward_point: e.target.value }));
                       }
                     }}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm"
-                    placeholder="Reward points (1-5)"
+                    className="rpg-input"
+                    placeholder="Reward points (1–5)"
                     min="1"
                     max="5"
                   />
@@ -681,7 +640,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
                     <select
                       value={newTask.difficulty}
                       onChange={(e) => setNewTask(prev => ({ ...prev, difficulty: parseInt(e.target.value) }))}
-                      className="flex-1 px-4 py-3 border border-gray-300 rounded-lg text-sm"
+                      className="rpg-select flex-1"
                     >
                       {difficultyOptions.map(opt => (
                         <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -690,41 +649,36 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
                     <select
                       value={newTask.attribute}
                       onChange={(e) => setNewTask(prev => ({ ...prev, attribute: e.target.value }))}
-                      className="flex-1 px-4 py-3 border border-gray-300 rounded-lg text-sm"
+                      className="rpg-select flex-1"
                     >
                       {attributeOptions.map(opt => (
                         <option key={opt.value} value={opt.value}>{opt.emoji} {opt.label}</option>
                       ))}
                     </select>
                   </div>
-                  <div className="flex gap-3">
-                    <button
-                      type="submit"
-                      className="flex-1 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
-                    >
-                      Create Task
-                    </button>
+                  <div className="flex gap-3 pt-1">
+                    <button type="submit" className="rpg-btn-sage flex-1">Create Quest</button>
                     <button
                       type="button"
                       onClick={() => {
                         setShowAddForm(false);
                         setNewTask({ title: '', description: '', reward_point: '', difficulty: 1, attribute: 'discipline' });
                       }}
-                      className="flex-1 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                      className="rpg-btn-secondary flex-1"
                     >
                       Cancel
                     </button>
                   </div>
-                </div>
-              </form>
+                </form>
+              </div>
             )}
 
             <div>
-              <h2 className="text-xl font-semibold mb-4 text-gray-800">Active Tasks</h2>
+              <h2 className="font-display text-base text-ink mb-3">Active Quests</h2>
               {tasks.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <p>No active tasks. Create your first task above!</p>
-                </div>
+                <p className="text-center py-8 text-sm text-ink-mute italic">
+                  No active quests — create your first one above!
+                </p>
               ) : (
                 tasks.map(task => (
                   <TaskCard
@@ -749,11 +703,11 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
 
         {activeTab === 'history' && (
           <div>
-            <h2 className="text-xl font-semibold mb-4 text-gray-800">Completed Tasks History</h2>
+            <h2 className="font-display text-base text-ink mb-3">Completed History</h2>
             {completedTasks.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <CheckCircle size={48} className="mx-auto mb-4 text-gray-300" />
-                <p>No completed tasks yet. Complete some tasks to see your history!</p>
+              <div className="text-center py-8 text-ink-mute">
+                <CheckCircle size={40} className="mx-auto mb-3 opacity-30" />
+                <p className="text-sm italic">No completed quests yet — get going!</p>
               </div>
             ) : (
               completedTasks.map(task => (
