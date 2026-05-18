@@ -4,75 +4,75 @@ import { cleanTaskTitle } from "../utils/taskUtils";
 export default function TaskList({ tasks: initialTasks, onTaskComplete }) {
   const [tasks, setTasks] = useState(initialTasks);
 
-  // Synchronise internal state when external tasks update
   useEffect(() => {
-    // Filter out any tasks with problematic titles before setting
-    const validTasks = initialTasks.filter(task => {
+    const validTasks = initialTasks.filter((task) => {
       const cleanTitle = cleanTaskTitle(task.title);
-      // Reject if title is just numbers or problematic
-      if (/^\d+$/.test(cleanTitle) ||
-          cleanTitle === 'Task Loading...' ||
-          cleanTitle === 'Task Unavailable' ||
-          !task.title ||
-          task.title.trim() === '') {
-        console.warn('Filtering out problematic task:', task);
+      if (
+        /^\d+$/.test(cleanTitle) ||
+        cleanTitle === "Task Loading..." ||
+        cleanTitle === "Task Unavailable" ||
+        !task.title ||
+        task.title.trim() === ""
+      ) {
+        console.warn("Filtering out problematic task:", task);
         return false;
       }
       return true;
     });
-
     setTasks(validTasks);
   }, [initialTasks]);
 
   const toggleTask = (id) => {
-    const task = tasks.find(t => t.id === id);
-
-    // Call the completion handler which handles both complete and uncomplete
-    if (onTaskComplete) {
-      onTaskComplete(task);
-    }
+    const task = tasks.find((t) => t.id === id);
+    if (onTaskComplete) onTaskComplete(task);
   };
 
   return (
-    <div>
-      <h3 className="font-bold text-lg mb-4 text-gray-800">📋 Daily Random Tasks</h3>
-      <div className="space-y-3">
+    <div className="px-5 py-4">
+      <ul className="divide-y divide-[var(--frame)]/30">
         {tasks.map((task) => (
-          <div
-            key={task.id}
-            className={`p-3 rounded-xl border-2 transition-all cursor-pointer hover:shadow-md ${
-              task.completed
-                ? 'bg-green-50 border-green-200 hover:bg-green-100'
-                : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-            }`}
-            onClick={() => toggleTask(task.id)}
-          >
-            <div className="flex items-start space-x-3">
-              <input
-                type="checkbox"
-                checked={task.completed}
-                readOnly
-                className="mt-1 w-5 h-5 accent-pink-500 rounded pointer-events-none"
+          <li key={task.id}>
+            <button
+              type="button"
+              onClick={() => toggleTask(task.id)}
+              className={`w-full text-left flex items-start gap-3 py-3 px-1 transition-colors ${
+                task.completed
+                  ? "opacity-60"
+                  : "hover:bg-[var(--paper)]/50"
+              }`}
+            >
+              <span
+                className={`task-diamond mt-1 ${task.completed ? "checked" : ""}`}
+                aria-hidden
               />
               <div className="flex-1 min-w-0">
-                <span
-                  className={`text-sm font-medium block ${
-                    task.completed ? "line-through text-gray-400" : "text-gray-800"
+                <div
+                  className={`text-base font-semibold leading-snug ${
+                    task.completed ? "line-through text-ink-mute" : "text-ink"
                   }`}
                 >
                   {cleanTaskTitle(task.title) || `Task ${task.id}`}
-                </span>
+                </div>
                 {task.tip && (
-                  <p className="text-xs text-gray-500 mt-1">💡 {task.tip}</p>
+                  <p className="text-xs text-ink-soft mt-1 italic">
+                    — {task.tip}
+                  </p>
                 )}
                 {task.reward && (
-                  <p className="text-xs text-green-600 mt-1 font-medium">🎁 {task.reward}</p>
+                  <p className="text-xs text-gold font-semibold mt-1 tracking-wide">
+                    {task.reward}
+                  </p>
                 )}
               </div>
-            </div>
-          </div>
+            </button>
+          </li>
         ))}
-      </div>
+        {tasks.length === 0 && (
+          <li className="py-6 text-center text-sm text-ink-mute italic">
+            No tasks today — try drawing a new set below.
+          </li>
+        )}
+      </ul>
     </div>
   );
 }
