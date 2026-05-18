@@ -198,6 +198,127 @@ body {
 .text-sage      { color: var(--accent-sage); }
 .text-rust      { color: var(--accent-rust); }
 
+/* ========================================================================
+   RPG form input
+   ======================================================================== */
+.rpg-input {
+  background: var(--paper);
+  border: 2px solid var(--frame);
+  border-radius: 3px;
+  padding: 9px 12px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--ink);
+  width: 100%;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 200ms;
+}
+.rpg-input:focus {
+  border-color: var(--accent-rose-deep);
+  box-shadow: 0 0 0 2px rgba(181, 119, 135, 0.2);
+}
+.rpg-input::placeholder { color: var(--ink-mute); }
+
+/* ========================================================================
+   RPG buttons
+   ======================================================================== */
+.rpg-btn-primary {
+  background: linear-gradient(180deg, var(--accent-rose) 0%, var(--accent-rust) 100%);
+  color: var(--paper);
+  border: 2px solid var(--accent-rust);
+  border-radius: 3px;
+  padding: 10px 20px;
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: filter 150ms, transform 100ms;
+  box-shadow: 0 2px 0 rgba(107, 40, 30, 0.4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.rpg-btn-primary:hover  { filter: brightness(1.08); }
+.rpg-btn-primary:active { transform: translateY(1px); box-shadow: none; }
+.rpg-btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.rpg-btn-secondary {
+  background: var(--paper-deep);
+  color: var(--ink-soft);
+  border: 2px solid var(--frame);
+  border-radius: 3px;
+  padding: 10px 20px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 150ms;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.rpg-btn-secondary:hover { background: var(--paper-shadow); }
+
+.rpg-btn-gold {
+  background: linear-gradient(180deg, #F2C66B 0%, var(--accent-gold) 50%, var(--accent-gold-deep) 100%);
+  color: var(--frame-deep);
+  border: 2px solid var(--accent-gold-deep);
+  border-radius: 3px;
+  padding: 10px 20px;
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: filter 150ms;
+  box-shadow: 0 2px 0 rgba(120, 80, 20, 0.4), inset 0 1px 0 rgba(255, 240, 190, 0.6);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.rpg-btn-gold:hover { filter: brightness(1.06); }
+
+.rpg-btn-sage {
+  background: linear-gradient(180deg, #b8d4a8 0%, var(--accent-sage) 100%);
+  color: var(--frame-deep);
+  border: 2px solid var(--accent-sage);
+  border-radius: 3px;
+  padding: 10px 20px;
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: filter 150ms;
+  box-shadow: 0 2px 0 rgba(60, 80, 40, 0.3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.rpg-btn-sage:hover { filter: brightness(1.06); }
+
+/* ========================================================================
+   RPG select (dropdown)
+   ======================================================================== */
+.rpg-select {
+  background: var(--paper);
+  border: 2px solid var(--frame);
+  border-radius: 3px;
+  padding: 9px 12px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--ink);
+  outline: none;
+  cursor: pointer;
+  transition: border-color 200ms;
+}
+.rpg-select:focus { border-color: var(--accent-rose-deep); }
+
 /* Decorative divider — old paper section break */
 .paper-divider {
   display: flex;

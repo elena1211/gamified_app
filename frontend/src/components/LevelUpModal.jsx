@@ -1,104 +1,92 @@
-import React from 'react';
 import { getAvatarSrc } from '../utils/avatar';
 
-const LevelUpModal = ({
-  isOpen,
-  onClose,
-  oldLevel,
-  newLevel,
-  newExp,
-  oldStage,
-  newStage
-}) => {
+export default function LevelUpModal({ isOpen, onClose, oldLevel, newLevel, newExp, oldStage, newStage }) {
   if (!isOpen) return null;
 
   const stageChanged = oldStage !== newStage;
 
+  const stageMessages = {
+    2: "You're making great progress!",
+    3: "You're becoming a quest master!",
+    4: "You're almost at the summit!",
+    5: "You've reached the pinnacle!",
+  };
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl p-8 max-w-md w-full mx-4 text-center">
-        {/* Celebration Header */}
-        <div className="mb-6">
-          <h2 className="text-3xl font-bold text-blue-600 mb-2">
-            🎉 Level Up! 🎉
-          </h2>
-          <div className="text-lg text-gray-700">
-            Level {oldLevel} → Level {newLevel}
-          </div>
+    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+      <div className="rpg-window max-w-sm w-full text-center">
+        <div
+          className="rpg-header justify-center text-base"
+          style={{ background: 'linear-gradient(180deg, var(--accent-gold) 0%, var(--accent-gold-deep) 100%)', color: 'var(--frame-deep)' }}
+        >
+          ★ Level Up! ★
         </div>
 
-        {/* Avatar Display */}
-        <div className="mb-6">
-          {stageChanged ? (
-            <div className="flex justify-center items-center space-x-4">
-              <div className="text-center">
-                <img
-                  src={getAvatarSrc(oldLevel)}
-                  alt={`Stage ${oldStage}`}
-                  className="w-20 h-20 rounded-full border-4 border-gray-300 mx-auto mb-2 object-contain bg-gray-50"
-                />
-                <div className="text-sm text-gray-500">Before</div>
-              </div>
+        <div className="px-6 py-5">
+          <div className="font-display text-2xl text-gold mb-1">
+            Level {oldLevel} → Level {newLevel}
+          </div>
+          <p className="text-xs text-ink-mute mb-5">Well done — keep going!</p>
 
-              <div className="text-2xl">→</div>
-
+          {/* Avatar display */}
+          <div className="mb-5 flex justify-center items-center gap-6">
+            {stageChanged ? (
+              <>
+                <div className="text-center">
+                  <img
+                    src={getAvatarSrc(oldLevel)}
+                    alt={`Stage ${oldStage}`}
+                    className="w-20 h-20 mx-auto mb-1 object-contain"
+                    style={{ border: '3px solid var(--frame)', borderRadius: 4, background: 'var(--paper-deep)' }}
+                  />
+                  <span className="text-xs text-ink-mute">Before</span>
+                </div>
+                <span className="text-ink-mute text-lg">→</span>
+                <div className="text-center">
+                  <img
+                    src={getAvatarSrc(newLevel)}
+                    alt={`Stage ${newStage}`}
+                    className="w-20 h-20 mx-auto mb-1 object-contain animate-pulse"
+                    style={{ border: '3px solid var(--accent-gold)', borderRadius: 4, background: '#FFF9E6' }}
+                  />
+                  <span className="text-xs text-gold font-semibold">Evolved!</span>
+                </div>
+              </>
+            ) : (
               <div className="text-center">
                 <img
                   src={getAvatarSrc(newLevel)}
                   alt={`Stage ${newStage}`}
-                  className="w-20 h-20 rounded-full border-4 border-yellow-400 mx-auto mb-2 animate-pulse object-contain bg-yellow-50"
+                  className="w-24 h-24 mx-auto mb-1 object-contain"
+                  style={{ border: '3px solid var(--frame)', borderRadius: 4, background: 'var(--paper-deep)' }}
                 />
-                <div className="text-sm text-yellow-600 font-bold">New Stage!</div>
+                <span className="text-xs text-ink-soft">Current avatar</span>
               </div>
-            </div>
-          ) : (
-            <div className="text-center">
-              <img
-                src={getAvatarSrc(newLevel)}
-                alt={`Stage ${newStage}`}
-                className="w-24 h-24 rounded-full border-4 border-blue-400 mx-auto mb-2 object-contain bg-blue-50"
-              />
-              <div className="text-sm text-blue-600">Current Avatar</div>
-            </div>
-          )}
-        </div>
-
-        {/* Stage Change Message */}
-        {stageChanged && (
-          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <h3 className="text-lg font-bold text-yellow-800 mb-2">
-              🌟 Avatar Evolved! 🌟
-            </h3>
-            <p className="text-yellow-700">
-              Your avatar has evolved to Stage {newStage}!
-              {newStage === 2 && " You're making great progress!"}
-              {newStage === 3 && " You're becoming a task master!"}
-              {newStage === 4 && " You're almost at the top level!"}
-              {newStage === 5 && " You've reached the maximum level!"}
-            </p>
+            )}
           </div>
-        )}
 
-        {/* Level Progress Info */}
-        <div className="mb-6 text-gray-600">
-          <div className="text-sm">Current EXP: {newExp}</div>
-          {!stageChanged && (
-            <div className="text-xs mt-1">
-              Keep completing tasks to reach the next stage!
+          {stageChanged && (
+            <div
+              className="mb-5 px-4 py-3 rounded-sm text-sm"
+              style={{ background: '#FFF9E6', border: '2px solid var(--accent-gold)', color: 'var(--frame-deep)' }}
+            >
+              <p className="font-semibold mb-1">✦ Avatar Evolved!</p>
+              <p>{stageMessages[newStage] ?? 'A new stage awaits!'}</p>
             </div>
           )}
-        </div>
 
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg transition-colors"
-        >
-          Continue
-        </button>
+          <div className="text-xs text-ink-mute mb-5">
+            Current EXP: <span className="text-gold font-semibold tabular-nums">{newExp}</span>
+            {!stageChanged && (
+              <p className="mt-1">Keep completing quests to reach the next stage!</p>
+            )}
+          </div>
+
+          <button onClick={onClose} className="rpg-btn-gold w-full">
+            Continue
+          </button>
+        </div>
       </div>
     </div>
   );
-};
-
-export default LevelUpModal;
+}
