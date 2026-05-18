@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react';
-import { Calendar, TrendingUp, CheckCircle } from 'lucide-react';
-import { API_ENDPOINTS, apiRequest } from '../config/api.js';
-import { debugLog } from '../utils/logger';
+import { useState, useEffect } from "react";
+import { API_ENDPOINTS, apiRequest } from "../config/api.js";
+import { debugLog } from "../utils/logger";
 
 export default function WeeklyTaskStats({ currentUser, refreshTrigger }) {
   const [weeklyStats, setWeeklyStats] = useState(null);
@@ -9,181 +8,131 @@ export default function WeeklyTaskStats({ currentUser, refreshTrigger }) {
   const [error, setError] = useState(null);
 
   const fetchWeeklyStats = async () => {
-    debugLog('🔄 WeeklyTaskStats: Fetching weekly stats for user:', currentUser, 'refreshTrigger:', refreshTrigger);
+    debugLog("🔄 WeeklyTaskStats: Fetching for user:", currentUser);
     setLoading(true);
     setError(null);
 
     try {
-      const { data } = await apiRequest(`${API_ENDPOINTS.weeklyStats}?user=${currentUser || 'tester'}`);
-      debugLog('📊 WeeklyTaskStats: Received data:', data);
+      const { data } = await apiRequest(
+        `${API_ENDPOINTS.weeklyStats}?user=${currentUser || "tester"}`,
+      );
       setWeeklyStats(data);
     } catch (error) {
-      console.error('Error fetching weekly stats:', error);
+      console.error("Error fetching weekly stats:", error);
       setError(error.message);
-      // Fallback data
-      setWeeklyStats({
-        week_start: '2025-08-11',
-        week_end: '2025-08-17',
-        total_completed_this_week: 12,
-        total_available_tasks: 8,
-        completion_percentage: 21.4,
-        daily_breakdown: [
-          { date: '2025-08-11', day_name: 'Mon', completed_tasks: 3, is_today: false },
-          { date: '2025-08-12', day_name: 'Tue', completed_tasks: 2, is_today: true },
-          { date: '2025-08-13', day_name: 'Wed', completed_tasks: 0, is_today: false },
-          { date: '2025-08-14', day_name: 'Thu', completed_tasks: 0, is_today: false },
-          { date: '2025-08-15', day_name: 'Fri', completed_tasks: 0, is_today: false },
-          { date: '2025-08-16', day_name: 'Sat', completed_tasks: 0, is_today: false },
-          { date: '2025-08-17', day_name: 'Sun', completed_tasks: 0, is_today: false }
-        ]
-      });
+      setWeeklyStats(null);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    debugLog('🔄 WeeklyTaskStats: useEffect triggered with currentUser:', currentUser, 'refreshTrigger:', refreshTrigger);
     fetchWeeklyStats();
-  }, [currentUser, refreshTrigger]); // Remove fetchWeeklyStats to prevent infinite re-renders
+  }, [currentUser, refreshTrigger]);
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="animate-pulse">
-          <div className="h-4 bg-gray-200 rounded w-1/3 mb-4"></div>
-          <div className="h-8 bg-gray-200 rounded w-1/2 mb-4"></div>
-          <div className="flex gap-2">
-            {Array.from({ length: 7 }).map((_, i) => (
-              <div key={i} className="flex-1 h-12 bg-gray-200 rounded"></div>
-            ))}
-          </div>
+      <div className="px-5 py-4 animate-pulse">
+        <div className="grid grid-cols-7 gap-2">
+          {Array.from({ length: 7 }).map((_, i) => (
+            <div
+              key={i}
+              className="aspect-square bg-[var(--paper-shadow)] rounded"
+            />
+          ))}
         </div>
       </div>
     );
   }
 
-  if (error) {
+  if (error || !weeklyStats) {
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-red-200 p-6">
-        <div className="text-center text-red-600">
-          <p className="text-sm">Failed to load weekly stats</p>
-          <button
-            onClick={fetchWeeklyStats}
-            className="mt-2 text-xs text-red-500 hover:text-red-700 underline"
-          >
-            Try again
-          </button>
-        </div>
+      <div className="px-5 py-6 text-center text-sm text-ink-mute italic">
+        Diary couldn't be opened — try again later.
+        <button
+          onClick={fetchWeeklyStats}
+          className="ml-2 underline text-rose hover:text-ink-soft"
+        >
+          retry
+        </button>
       </div>
     );
   }
 
-  const getCompletionColor = (count) => {
-    if (count === 0) return 'bg-gray-100 text-gray-400';
-    if (count <= 2) return 'bg-green-100 text-green-600';
-    if (count <= 4) return 'bg-blue-100 text-blue-600';
-    return 'bg-purple-100 text-purple-600';
+  // Choose intensity colour based on count
+  const getCellStyle = (count, maxCount, isToday) => {
+    const baseBorder = isToday ? "var(--accent-rose-deep)" : "var(--frame)";
+    if (count === 0) {
+      return {
+        backgroundColor: "var(--paper)",
+        borderColor: baseBorder,
+        color: "var(--ink-mute)",
+      };
+    }
+    const intensity = Math.min(1, count / Math.max(1, maxCount));
+    // Interpolate between paper and gold
+    return {
+      backgroundColor: `rgba(212, 160, 76, ${0.15 + intensity * 0.55})`,
+      borderColor: baseBorder,
+      color: "var(--ink)",
+    };
   };
 
-  const getCompletionHeight = (count) => {
-    const maxHeight = 48; // 12 * 4 (h-12)
-    const height = Math.min((count / Math.max(...weeklyStats.daily_breakdown.map(d => d.completed_tasks), 1)) * maxHeight, maxHeight);
-    return Math.max(height, 8); // Minimum height for visibility
-  };
+  const maxCount = Math.max(
+    ...weeklyStats.daily_breakdown.map((d) => d.completed_tasks),
+    1,
+  );
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <Calendar className="w-5 h-5 text-purple-600" />
-          <h3 className="text-lg font-semibold text-gray-800">Weekly Task Tracking</h3>
-        </div>
-        <div className="text-right">
-          <div className="text-2xl font-bold text-purple-600">
+    <div className="px-5 py-4">
+      <div className="flex items-baseline justify-between mb-3">
+        <p className="text-xs text-ink-mute tracking-wide uppercase">
+          {new Date(weeklyStats.week_start).toLocaleDateString("en-GB", {
+            month: "short",
+            day: "numeric",
+          })}{" "}
+          —{" "}
+          {new Date(weeklyStats.week_end).toLocaleDateString("en-GB", {
+            month: "short",
+            day: "numeric",
+          })}
+        </p>
+        <p className="text-sm text-ink-soft">
+          <span className="font-display text-2xl text-gold tabular-nums">
             {weeklyStats.total_completed_this_week}
-          </div>
-          <div className="text-xs text-gray-500">tasks completed</div>
-        </div>
+          </span>{" "}
+          quests done
+        </p>
       </div>
 
-      {/* Week Range */}
-      <div className="text-sm text-gray-600 mb-4">
-        {new Date(weeklyStats.week_start).toLocaleDateString('en-GB', {
-          month: 'short',
-          day: 'numeric'
-        })} - {new Date(weeklyStats.week_end).toLocaleDateString('en-GB', {
-          month: 'short',
-          day: 'numeric'
-        })}
-      </div>
-
-      {/* Daily Chart */}
-      <div className="mb-4">
-        <div className="flex items-end justify-between gap-1 h-16 mb-2">
-          {weeklyStats.daily_breakdown.map((day, index) => (
-            <div key={index} className="flex-1 flex flex-col items-center">
-              <div
-                className={`w-full rounded-t transition-all duration-300 flex items-end justify-center text-xs font-medium ${getCompletionColor(day.completed_tasks)} ${day.is_today ? 'ring-2 ring-purple-400 ring-opacity-50' : ''}`}
-                style={{ height: `${getCompletionHeight(day.completed_tasks)}px` }}
-              >
-                {day.completed_tasks > 0 && (
-                  <span className="pb-1">{day.completed_tasks}</span>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Day Labels */}
-        <div className="flex justify-between text-xs text-gray-500">
-          {weeklyStats.daily_breakdown.map((day, index) => (
+      <div className="grid grid-cols-7 gap-2">
+        {weeklyStats.daily_breakdown.map((day, idx) => (
+          <div key={idx} className="flex flex-col items-center gap-1">
             <div
-              key={index}
-              className={`flex-1 text-center ${day.is_today ? 'font-semibold text-purple-600' : ''}`}
+              className={`w-full aspect-square flex items-center justify-center border-2 rounded-sm text-lg font-semibold tabular-nums transition-colors ${
+                day.is_today ? "shadow-[0_0_0_2px_var(--paper)]" : ""
+              }`}
+              style={getCellStyle(day.completed_tasks, maxCount, day.is_today)}
+            >
+              {day.completed_tasks > 0 ? day.completed_tasks : "—"}
+            </div>
+            <span
+              className={`text-[11px] tracking-wider uppercase ${
+                day.is_today ? "text-rose font-semibold" : "text-ink-mute"
+              }`}
             >
               {day.day_name}
-            </div>
-          ))}
-        </div>
+            </span>
+          </div>
+        ))}
       </div>
 
-      {/* Stats Summary */}
-      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-100">
-        <div className="text-center">
-          <div className="flex items-center justify-center gap-1 mb-1">
-            <TrendingUp className="w-4 h-4 text-green-600" />
-            <span className="text-sm font-medium text-gray-700">Completion Rate</span>
-          </div>
-          <div className="text-lg font-bold text-green-600">
-            {weeklyStats.completion_percentage}%
-          </div>
-        </div>
-
-        <div className="text-center">
-          <div className="flex items-center justify-center gap-1 mb-1">
-            <CheckCircle className="w-4 h-4 text-blue-600" />
-            <span className="text-sm font-medium text-gray-700">Daily Average</span>
-          </div>
-          <div className="text-lg font-bold text-blue-600">
-            {(weeklyStats.total_completed_this_week / 7).toFixed(1)}
-          </div>
-        </div>
+      <div className="paper-divider mt-4">
+        <span>
+          {weeklyStats.completion_percentage}% completion
+          {weeklyStats.total_completed_this_week > 0 && " ・ keep going"}
+        </span>
       </div>
-
-      {/* Motivational Message */}
-      {weeklyStats.total_completed_this_week > 0 && (
-        <div className="mt-4 p-3 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-100">
-          <p className="text-sm text-purple-700 text-center">
-            {weeklyStats.total_completed_this_week >= 20
-              ? "🎉 Amazing week! You've completed loads of tasks!"
-              : weeklyStats.total_completed_this_week >= 10
-              ? "💪 Well done! Keep up the great pace!"
-              : "✨ Good start! Keep going!"}
-          </p>
-        </div>
-      )}
     </div>
   );
 }

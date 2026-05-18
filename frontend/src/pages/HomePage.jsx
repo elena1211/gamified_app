@@ -10,7 +10,7 @@ import Modal from "../components/Modal";
 import WeeklyTaskStats from "../components/WeeklyTaskStats";
 import LevelUpModal from "../components/LevelUpModal";
 import { useAppContext } from "../context/AppContext";
-import { getAvatarStage } from "../utils/avatar";
+import { getAvatarStage, getExpForLevel } from "../utils/avatar";
 import { debugLog } from "../utils/logger";
 
 // Time-limited ultra-micro engineering actions - Atomic habit style (5-10 seconds)
@@ -645,9 +645,9 @@ export default function HomePage({
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-pink-100 to-purple-100 flex items-center justify-center">
-        <div className="text-purple-800 text-xl">
-          🎮 Loading your adventure...
+      <div className="min-h-screen paper-bg flex items-center justify-center">
+        <div className="font-display text-xl text-ink-soft tracking-wide animate-pulse">
+          Opening your diary…
         </div>
       </div>
     );
@@ -655,62 +655,123 @@ export default function HomePage({
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-pink-100 to-purple-100 flex items-center justify-center">
-        <div className="bg-red-100 border border-red-400 text-red-700 px-6 py-4 rounded-lg max-w-md">
-          <h2 className="font-bold mb-2">❌ Connection Error</h2>
-          <p className="mb-4">{error}</p>
-          <button
-            onClick={() => fetchTasks(false)}
-            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded text-sm"
-          >
-            Retry Connection
-          </button>
+      <div className="min-h-screen paper-bg flex items-center justify-center px-4">
+        <div className="rpg-window max-w-md w-full">
+          <div className="rpg-header">Connection Error</div>
+          <div className="px-5 py-5">
+            <p className="text-sm text-ink-soft mb-4">{error}</p>
+            <button
+              onClick={() => fetchTasks(false)}
+              className="px-4 py-2 text-sm font-semibold text-paper bg-[var(--frame)] hover:bg-[var(--frame-deep)] rounded-sm tracking-wide transition-colors"
+            >
+              Retry Connection
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
+  // EXP calculations for the STATUS window
+  const lvl = Math.max(1, user.level || 1);
+  const curLvlExp = getExpForLevel(lvl);
+  const nextLvlExp = getExpForLevel(lvl + 1);
+  const expIntoLevel = Math.max(0, (user.exp || 0) - curLvlExp);
+  const expForLevel = Math.max(1, nextLvlExp - curLvlExp);
+  const expPct = Math.min(100, (expIntoLevel / expForLevel) * 100);
+
+  // Day counter: days since 2024-01-01 (matches the "Growth Journal Day n" feel)
+  const dayNumber = Math.max(
+    1,
+    Math.floor(
+      (new Date() - new Date("2024-01-01")) / (1000 * 60 * 60 * 24),
+    ),
+  );
+
   return (
-    <div className="min-h-screen bg-pink-50 !px-8 !py-12">
-      <div className="max-w-4xl mx-auto space-y-8">
-        {/* Profile Card */}
-        <div className="bg-white rounded-2xl p-8 shadow-md flex flex-col items-center">
-          <UserProfileCard user={user} userStats={localUserStats} />
+    <div className="min-h-screen paper-bg page-enter pb-24">
+      <div className="max-w-5xl mx-auto px-4 sm:px-8 py-6 sm:py-10 space-y-6">
+        {/* Page banner — diary title */}
+        <header className="flex items-baseline justify-between gap-4 border-b-2 border-dotted border-[var(--frame)]/50 pb-3">
+          <h1 className="font-display text-2xl sm:text-3xl text-ink tracking-wider">
+            Level Up
+            <span className="text-ink-soft text-base sm:text-lg ml-2 italic font-body">
+              Growth Journal
+            </span>
+          </h1>
+          <div className="text-xs sm:text-sm text-ink-soft tracking-widest uppercase tabular-nums">
+            Day {dayNumber}
+          </div>
+        </header>
+
+        {/* Row 1: Portrait + STATUS window */}
+        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6 items-start">
+          {/* Portrait column */}
+          <div className="rpg-window-light p-6">
+            <UserProfileCard user={user} userStats={localUserStats} />
+          </div>
+
+          {/* STATUS window */}
+          <div className="rpg-window">
+            <div className="rpg-header">Status</div>
+            <div className="px-5 pt-4 pb-2 border-b border-[var(--frame)]/30">
+              <div className="flex items-baseline justify-between mb-1">
+                <span className="font-display text-lg text-ink tracking-wide">
+                  EXP
+                </span>
+                <span className="text-xs text-ink-soft tabular-nums">
+                  {expIntoLevel} / {expForLevel}
+                  <span className="text-ink-mute ml-2">
+                    ({Math.round(expPct)}%)
+                  </span>
+                </span>
+              </div>
+              <div className="exp-bar-track">
+                <div
+                  className="exp-bar-fill"
+                  style={{ width: `${expPct}%` }}
+                />
+              </div>
+            </div>
+            <StatsPanel stats={attributeStats} />
+          </div>
         </div>
 
         {/* Main Goal */}
         <MainGoal currentUser={currentUser} />
 
-        {/* Weekly Stats Component */}
-        <div className="bg-white rounded-2xl p-8 shadow-md">
+        {/* Today's Tasks */}
+        <div className="rpg-window">
+          <div className="rpg-header">Today's Quests</div>
+          <TaskList tasks={tasks} onTaskComplete={handleTaskComplete} />
+          <div className="px-5 pb-5">
+            <div className="paper-divider mb-3">
+              <span>draw new quests</span>
+            </div>
+            <div className="text-center">
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  fetchTasks(true);
+                }}
+                className="inline-flex items-center gap-2 px-5 py-2.5 font-display tracking-wider uppercase text-sm text-paper bg-gradient-to-b from-[var(--accent-rose)] to-[var(--accent-rose-deep)] border-2 border-[var(--accent-rose-deep)] rounded-sm shadow-[0_2px_0_rgba(107,79,44,0.25)] hover:translate-y-[1px] hover:shadow-[0_1px_0_rgba(107,79,44,0.25)] active:translate-y-[2px] active:shadow-none transition-all"
+              >
+                <span aria-hidden>◈</span>
+                <span>Roll New Quests</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Weekly Diary */}
+        <div className="rpg-window">
+          <div className="rpg-header">This Week's Diary</div>
           <WeeklyTaskStats
             currentUser={currentUser}
             refreshTrigger={refreshTrigger}
           />
         </div>
 
-        {/* Stats Panel */}
-        <div className="bg-white rounded-2xl p-8 shadow-md">
-          <StatsPanel stats={attributeStats} />
-        </div>
-        {/* Task List */}
-        <div className="bg-white rounded-2xl p-8 shadow-md">
-          <TaskList tasks={tasks} onTaskComplete={handleTaskComplete} />
-        </div>
-        {/* Control Buttons */}
-        <div className="text-center">
-          <div className="flex justify-center gap-3 mb-4">
-            <button
-              onClick={(e) => {
-                e.preventDefault();
-                fetchTasks(true);
-              }}
-              className="bg-purple-500 hover:bg-purple-600 text-white px-6 py-3 rounded-xl shadow-md transition-all duration-300 hover:scale-105"
-            >
-              🎲 New Daily Random Tasks
-            </button>
-          </div>
-        </div>
         <BottomNav
           onSettingsClick={handleSettingsClick}
           onTaskManagerClick={handleTaskManagerClick}
