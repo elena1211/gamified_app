@@ -81,6 +81,11 @@ export function AppProvider({ children }) {
   // Goal state (shared across HomePage)
   const [userGoal, setUserGoal] = useState(null);
 
+  // System state
+  const [unreadSystemMessages, setUnreadSystemMessages] = useState(0);
+  const [activeTitle, setActiveTitle] = useState(null);
+  const [systemPersonality, setSystemPersonality] = useState('logical');
+
   const loadUserData = async (username) => {
     try {
       debugLog("Loading user data for:", username);
@@ -289,6 +294,14 @@ export function AppProvider({ children }) {
 
     // Utility functions
     loadUserData,
+
+    // System state
+    unreadSystemMessages,
+    setUnreadSystemMessages,
+    activeTitle,
+    setActiveTitle,
+    systemPersonality,
+    setSystemPersonality,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

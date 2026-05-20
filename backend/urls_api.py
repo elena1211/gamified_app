@@ -14,4 +14,9 @@ urlpatterns = [
     path('goal/', views.GoalView.as_view(), name='user-goal'),
     path('user/stats/', views.UserStatsView.as_view(), name='user-stats'),
     path('user/progress/', views.ProgressStatsView.as_view(), name='user-progress'),
+    # System / AI endpoints
+    path('system/chat/', views.SystemChatView.as_view(), name='system-chat'),
+    path('system/messages/', views.SystemMessagesView.as_view(), name='system-messages'),
+    path('system/daily-status/', views.SystemDailyStatusView.as_view(), name='system-daily-status'),
+    path('system/punishment-check/', views.PunishmentCheckView.as_view(), name='system-punishment-check'),
 ]

@@ -1,9 +1,11 @@
 import { getAvatarSrc, getAvatarTitle } from '../utils/avatar';
+import { useAppContext } from '../context/AppContext.jsx';
 
 const FALLBACK_AVATAR =
   "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiByeD0iMTAwIiBmaWxsPSIjZmM5MWJmIi8+CjxjaXJjbGUgY3g9IjEwMCIgY3k9IjgwIiByPSIzMCIgZmlsbD0iI2ZmZmZmZiIvPgo8ZWxsaXBzZSBjeD0iMTAwIiBjeT0iMTUwIiByeD0iNDAiIHJ5PSIzMCIgZmlsbD0iI2ZmZmZmZiIvPgo8L3N2Zz4K";
 
 export default function UserProfileCard({ user, userStats = {} }) {
+  const { activeTitle } = useAppContext();
   const avatarSrc = getAvatarSrc(user.level);
   const avatarTitle = getAvatarTitle(user.level);
 
@@ -33,6 +35,16 @@ export default function UserProfileCard({ user, userStats = {} }) {
           {avatarTitle}
         </p>
       </div>
+
+      {/* Active title */}
+      {activeTitle && (
+        <div
+          className="mt-2 px-3 py-0.5 text-xs rounded-sm font-semibold tracking-wider"
+          style={{ background: 'var(--paper-shadow)', color: 'var(--accent-gold-deep)', border: '1px solid var(--accent-gold)' }}
+        >
+          ✦ {activeTitle.display}
+        </div>
+      )}
 
       {/* Streak */}
       <div className="mt-3 flex items-center gap-2 text-rose font-semibold text-sm">

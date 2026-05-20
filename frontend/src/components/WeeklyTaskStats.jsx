@@ -130,7 +130,7 @@ export default function WeeklyTaskStats({ currentUser, refreshTrigger }) {
       <div className="paper-divider mt-4">
         <span>
           {weeklyStats.completion_percentage}% completion
-          {weeklyStats.total_completed_this_week > 0 && " ・ keep going"}
+          {weeklyStats.total_completed_this_week > 0 && " — keep going"}
         </span>
       </div>
     </div>

@@ -4,7 +4,7 @@ from rest_framework import status
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.hashers import make_password
 from django.http import HttpResponse
-from .models import Task, User, Goal, UserTaskLog, UserAttribute
+from .models import Task, User, Goal, UserTaskLog, UserAttribute, SystemLog, UserTitle
 from django.utils import timezone
 from datetime import date, timedelta, datetime
 import random
@@ -1342,4 +1342,376 @@ class HealthView(APIView):
             "status": "healthy",
             "timestamp": timezone.now().isoformat(),
             "database": "connected"
+        })
+
+
+# ── System / AI views ──────────────────────────────────────────────────────────
+
+PERSONALITY_PROMPTS = {
+    'logical': (
+        "Your personality is cold, precise, and efficient. Use minimal words. "
+        "State facts and requirements bluntly. Avoid emotional language. "
+        "You are a high-performance AI assistant — not a friend."
+    ),
+    'mentor': (
+        "Your personality is warm but purposeful. Briefly explain WHY each mission matters. "
+        "Occasionally offer a short piece of wisdom. You care about the Host's long-term growth."
+    ),
+    'tsundere': (
+        "Your personality is outwardly grumpy but secretly supportive. "
+        "Complain a little before giving the mission. Use phrases like 'I'm not doing this for you…'. "
+        "But when the host does well, show a tiny slip of genuine pride."
+    ),
+    'drill_sergeant': (
+        "Your personality is demanding and intense. No excuses accepted. "
+        "Push the host hard. Celebrate hard effort loudly. "
+        "Use short, punchy sentences. Everything is an order."
+    ),
+}
+
+MISSION_PREFIXES = {
+    'daily':            '[Daily]',
+    'main':             '[Main Quest]',
+    'urgent':           '[Urgent]',
+    'punishment':       '[Punishment]',
+    'hidden':           '[Hidden]',
+    'system_generated': '[System]',
+}
+
+def _build_system_prompt(personality: str) -> str:
+    style = PERSONALITY_PROMPTS.get(personality, PERSONALITY_PROMPTS['logical'])
+    return f"""You are [SYSTEM], an AI companion in a gamified self-improvement app.
+Host personality type: {personality}.
+{style}
+
+Address the user as "Host". Respond in English only.
+You MUST respond with valid JSON only — no markdown fences, no extra text. Schema:
+{{
+  "system_message": "<1-3 sentences>",
+  "missions": [
+    {{
+      "title": "<task title, max 40 chars>",
+      "description": "<one sentence — why or how>",
+      "mission_type": "daily|main|urgent|punishment",
+      "attribute": "intelligence|discipline|energy|social|wellness|stress",
+      "reward": "+<N> <Attribute>",
+      "difficulty": 1,
+      "flavor_text": "<system's in-character comment on this mission, 1 sentence>"
+    }}
+  ],
+  "evaluation": "<optional: 1 sentence evaluating host's recent performance>"
+}}"""
+
+def _build_user_prompt(user, context_type: str, user_message: str) -> str:
+    attrs = {a.name: a.value for a in UserAttribute.objects.filter(user=user)}
+    goal = Goal.objects.filter(user=user).first()
+    goal_title = goal.title if goal else 'No goal set'
+    goal_desc = goal.description if goal else ''
+
+    week_ago = date.today() - timedelta(days=7)
+    recent_logs = UserTaskLog.objects.filter(
+        user=user, assigned_at__date__gte=week_ago
+    )
+    total = recent_logs.count()
+    completed = recent_logs.filter(status='completed').count()
+    completion_rate = round((completed / total * 100) if total > 0 else 0)
+
+    recent_titles = list(
+        UserTaskLog.objects.filter(user=user, status='completed')
+        .order_by('-completed_at')
+        .values_list('task__title', flat=True)[:3]
+    )
+
+    context_instructions = {
+        'morning_brief': (
+            "Issue 2-3 missions for today. Prioritise the host's weakest attributes "
+            "and their main goal. Mix at least one 'main' type and one 'daily' type."
+        ),
+        'evening_eval': (
+            "Evaluate today's performance briefly. Issue 0-1 bonus or punishment mission "
+            "depending on how the host performed today."
+        ),
+        'user_input': (
+            f"The host says: \"{user_message}\"\n"
+            "Respond to their situation and issue 1-2 relevant missions tailored to what they described."
+        ),
+    }.get(context_type, '')
+
+    return f"""Host Profile:
+- Goal: {goal_title} — {goal_desc}
+- Level: {user.level} | EXP: {user.exp} | Streak: {user.current_streak} days
+- Stats: Intelligence {attrs.get('intelligence',0)}, Discipline {attrs.get('discipline',0)}, Energy {attrs.get('energy',0)}, Social {attrs.get('social',0)}, Wellness {attrs.get('wellness',0)}, Stress {attrs.get('stress',0)}
+- 7-day completion rate: {completion_rate}%
+- Last 3 completed tasks: {', '.join(recent_titles) if recent_titles else 'none'}
+
+Context: {context_type}
+{context_instructions}"""
+
+
+def _award_title(user, title_key: str) -> bool:
+    """Award a title if not already earned. Returns True if newly awarded."""
+    _, created = UserTitle.objects.get_or_create(user=user, title_key=title_key)
+    if created:
+        UserTitle.objects.filter(user=user, is_active=True).update(is_active=False)
+        UserTitle.objects.filter(user=user, title_key=title_key).update(is_active=True)
+    return created
+
+
+def _check_and_award_titles(user) -> list:
+    """Check all title conditions and award any newly earned titles."""
+    awarded = []
+    attrs = {a.name: a.value for a in UserAttribute.objects.filter(user=user)}
+
+    if user.current_streak >= 7:
+        if _award_title(user, 'iron_will'):
+            awarded.append('iron_will')
+
+    if attrs.get('intelligence', 0) >= 200:
+        if _award_title(user, 'consistent_scholar'):
+            awarded.append('consistent_scholar')
+
+    today_completed = UserTaskLog.objects.filter(
+        user=user, status='completed', completed_at__date=date.today()
+    ).count()
+    if today_completed >= 5:
+        if _award_title(user, 'overachiever'):
+            awarded.append('overachiever')
+
+    return awarded
+
+
+class SystemChatView(APIView):
+    """
+    POST /api/system/chat/
+    Calls Claude API and returns a System message + missions.
+    Body: { user, message, context_type }
+    """
+    def post(self, request):
+        import json, os
+        try:
+            import anthropic as _anthropic
+        except ImportError:
+            return Response({'error': 'anthropic package not installed'}, status=500)
+
+        username = request.data.get('user', 'tester')
+        user_message = request.data.get('message', '')
+        context_type = request.data.get('context_type', 'user_input')
+
+        user = get_or_create_user(username)
+
+        api_key = os.environ.get('ANTHROPIC_API_KEY', '')
+        if not api_key:
+            return Response({'error': 'ANTHROPIC_API_KEY not configured'}, status=500)
+
+        client = _anthropic.Anthropic(api_key=api_key)
+
+        system_prompt = _build_system_prompt(user.system_personality or 'logical')
+        user_prompt = _build_user_prompt(user, context_type, user_message)
+
+        try:
+            response = client.messages.create(
+                model='claude-haiku-4-5-20251001',
+                max_tokens=1024,
+                system=system_prompt,
+                messages=[{'role': 'user', 'content': user_prompt}],
+            )
+            raw = response.content[0].text.strip()
+            # Strip markdown fences if present
+            if raw.startswith('```'):
+                raw = re.sub(r'^```\w*\n?', '', raw)
+                raw = re.sub(r'\n?```$', '', raw)
+            parsed = json.loads(raw)
+        except Exception as e:
+            logger.error(f"Claude API error: {e}")
+            return Response({'error': f'AI generation failed: {str(e)}'}, status=500)
+
+        system_message = parsed.get('system_message', '')
+        missions_data = parsed.get('missions', [])
+        evaluation = parsed.get('evaluation', '')
+
+        # Persist missions as Tasks
+        deadline = timezone.now() + timedelta(days=1)
+        created_missions = []
+        for m in missions_data:
+            attr = m.get('attribute', 'discipline')
+            if attr not in [c[0] for c in Task.ATTRIBUTE_CHOICES]:
+                attr = 'discipline'
+            task = Task.objects.create(
+                user=user,
+                title=m.get('title', 'System Mission')[:150],
+                description=m.get('description', ''),
+                attribute=attr,
+                difficulty=max(1, min(3, int(m.get('difficulty', 1)))),
+                reward_point=max(3, min(15, int(m.get('difficulty', 1)) * 4 + 2)),
+                deadline=deadline,
+                is_random=False,
+                mission_type=m.get('mission_type', 'system_generated'),
+                system_flavor=m.get('flavor_text', ''),
+            )
+            created_missions.append({
+                'id': task.id,
+                'title': task.title,
+                'description': task.description,
+                'mission_type': task.mission_type,
+                'attribute': task.attribute,
+                'reward': m.get('reward', f'+{task.reward_point} {attr.title()}'),
+                'difficulty': task.difficulty,
+                'flavor_text': task.system_flavor,
+                'prefix': MISSION_PREFIXES.get(task.mission_type, '◈'),
+            })
+
+        # Award first-contact title on first system use
+        titles_awarded = []
+        if not SystemLog.objects.filter(user=user).exists():
+            if _award_title(user, 'first_system_contact'):
+                titles_awarded.append('first_system_contact')
+        titles_awarded += _check_and_award_titles(user)
+
+        # Persist system log
+        log_content = system_message
+        if evaluation:
+            log_content += f'\n\n[Evaluation] {evaluation}'
+        SystemLog.objects.create(
+            user=user,
+            message_type=context_type if context_type in ['daily_brief', 'evening_eval', 'punishment'] else 'chat_response',
+            content=log_content,
+            missions_issued=created_missions,
+        )
+
+        return Response({
+            'system_message': system_message,
+            'evaluation': evaluation,
+            'missions': created_missions,
+            'titles_awarded': titles_awarded,
+            'personality': user.system_personality,
+        })
+
+
+class SystemMessagesView(APIView):
+    """GET /api/system/messages/?user=X — last 10 system logs"""
+    def get(self, request):
+        username = request.GET.get('user', 'tester')
+        user = get_or_create_user(username)
+        logs = SystemLog.objects.filter(user=user).order_by('-created_at')[:10]
+        SystemLog.objects.filter(user=user, was_read=False).update(was_read=True)
+        return Response([{
+            'id': log.id,
+            'message_type': log.message_type,
+            'content': log.content,
+            'missions_issued': log.missions_issued,
+            'created_at': log.created_at.isoformat(),
+            'was_read': log.was_read,
+        } for log in logs])
+
+
+class SystemDailyStatusView(APIView):
+    """GET /api/system/daily-status/?user=X"""
+    def get(self, request):
+        username = request.GET.get('user', 'tester')
+        user = get_or_create_user(username)
+        today = date.today()
+
+        has_brief_today = SystemLog.objects.filter(
+            user=user,
+            message_type__in=['daily_brief', 'chat_response'],
+            created_at__date=today,
+        ).exists()
+
+        unread = SystemLog.objects.filter(user=user, was_read=False).count()
+
+        active_title = UserTitle.objects.filter(user=user, is_active=True).first()
+
+        return Response({
+            'has_seen_morning_brief': has_brief_today,
+            'unread_messages': unread,
+            'active_title': {
+                'key': active_title.title_key,
+                'display': active_title.get_title_key_display(),
+            } if active_title else None,
+            'personality': user.system_personality,
+        })
+
+
+class PunishmentCheckView(APIView):
+    """
+    POST /api/system/punishment-check/?user=X
+    Called once daily on app open. Applies attribute penalty if yesterday was poor.
+    """
+    def post(self, request):
+        username = request.data.get('user') or request.GET.get('user', 'tester')
+        user = get_or_create_user(username)
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+
+        # Only apply punishment once per day
+        already_checked = SystemLog.objects.filter(
+            user=user,
+            message_type='punishment',
+            created_at__date=today,
+        ).exists()
+        if already_checked:
+            return Response({'punishment_applied': False, 'reason': 'already_checked_today'})
+
+        # Check yesterday's completion
+        yesterday_logs = UserTaskLog.objects.filter(user=user, assigned_at__date=yesterday)
+        total = yesterday_logs.count()
+        completed = yesterday_logs.filter(status='completed').count()
+
+        if total == 0:
+            return Response({'punishment_applied': False, 'reason': 'no_tasks_yesterday'})
+
+        rate = completed / total
+
+        if rate >= 0.3:
+            return Response({'punishment_applied': False, 'reason': 'good_performance', 'rate': rate})
+
+        # Apply punishment
+        severity = 'heavy' if rate == 0 else 'light'
+        if severity == 'heavy':
+            penalty_str = '-5 Discipline, +8 Stress'
+            system_msg = 'Host completed zero tasks yesterday. System is disappointed. Penalty applied: -5 Discipline, +8 Stress.'
+        else:
+            penalty_str = '-2 Discipline, +3 Stress'
+            system_msg = f'Host completion rate was only {round(rate * 100)}% yesterday. Inactivity recorded. Light penalty applied: -2 Discipline, +3 Stress.'
+
+        apply_attribute_changes(user, penalty_str)
+
+        # Create punishment task
+        punishment_task = Task.objects.create(
+            user=user,
+            title='Redemption Quest',
+            description="Complete this mission to atone for yesterday's inactivity.",
+            attribute='discipline',
+            difficulty=2,
+            reward_point=8,
+            deadline=timezone.now() + timedelta(hours=24),
+            is_random=False,
+            mission_type='punishment',
+            system_flavor='System directive: execute immediately. Inactivity will not be tolerated.',
+        )
+
+        SystemLog.objects.create(
+            user=user,
+            message_type='punishment',
+            content=system_msg,
+            missions_issued=[{
+                'id': punishment_task.id,
+                'title': punishment_task.title,
+                'mission_type': 'punishment',
+                'attribute': 'discipline',
+                'reward': '+8 Discipline',
+            }],
+        )
+
+        return Response({
+            'punishment_applied': True,
+            'severity': severity,
+            'penalty': penalty_str,
+            'system_message': system_msg,
+            'punishment_task': {
+                'id': punishment_task.id,
+                'title': punishment_task.title,
+                'description': punishment_task.description,
+                'reward': '+8 Discipline',
+            },
         })

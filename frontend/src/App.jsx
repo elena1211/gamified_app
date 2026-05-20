@@ -4,6 +4,7 @@ import TaskManagerPage from './pages/TaskManagerPage';
 import RegisterPage from './pages/RegisterPage';
 import WelcomePage from './pages/WelcomePage';
 import SystemSettingsPage from './pages/SystemSettingsPage';
+import SystemPage from './pages/SystemPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import { AppProvider, useAppContext } from './context/AppContext';
 import { debugLog } from './utils/logger';
@@ -44,6 +45,10 @@ function AppRoutes() {
     navigate('/home');
   };
 
+  const handleNavigateToSystem = () => {
+    navigate('/system');
+  };
+
   const handleLogoutAndNavigate = () => {
     handleLogout();
     navigate('/welcome');
@@ -52,8 +57,10 @@ function AppRoutes() {
   // Show loading spinner while checking auth state
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-pink-100 to-purple-100 flex items-center justify-center">
-        <div className="text-purple-800 text-xl">🎮 Loading...</div>
+      <div className="paper-bg min-h-screen flex items-center justify-center">
+        <p className="font-display text-xl text-ink-soft animate-pulse tracking-wide">
+          System initialising…
+        </p>
       </div>
     );
   }
@@ -121,6 +128,20 @@ function AppRoutes() {
                 onLogout={handleLogoutAndNavigate}
                 onNavigateToHome={handleNavigateToHome}
                 onNavigateToTaskManager={handleNavigateToTaskManager}
+              />
+            </ErrorBoundary> :
+            <Navigate to="/welcome" replace />
+        }
+      />
+      <Route
+        path="/system"
+        element={
+          currentUser ?
+            <ErrorBoundary>
+              <SystemPage
+                onNavigateToHome={handleNavigateToHome}
+                onNavigateToTaskManager={handleNavigateToTaskManager}
+                onNavigateToSettings={handleNavigateToSettings}
               />
             </ErrorBoundary> :
             <Navigate to="/welcome" replace />
