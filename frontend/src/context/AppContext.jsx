@@ -116,13 +116,15 @@ export function AppProvider({ children }) {
         });
       }
 
-      // Load level / exp / streak from DB
+      // Load level / exp / streak / join date from DB
       if (data.level !== undefined) {
         setUserStats((prev) => ({
           ...prev,
           level: data.level,
           currentStreak: data.current_streak || 0,
+          maxStreak: data.max_streak || 0,
           exp: data.exp || 0,
+          dateJoined: data.date_joined || null,
         }));
       }
     } catch (error) {

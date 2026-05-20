@@ -5,25 +5,15 @@ import { useAppContext } from '../context/AppContext.jsx';
 import BottomNav from '../components/BottomNav.jsx';
 import SystemMessageBox from '../components/SystemMessageBox.jsx';
 
-const CONTEXT_LABELS = {
-  morning_brief:  'Morning Brief',
-  evening_eval:   'Evening Evaluation',
-  user_input:     'Your Report',
-  chat_response:  'System Response',
-  punishment:     'System Penalty',
-};
-
 export default function SystemPage({ onNavigateToHome, onNavigateToTaskManager, onNavigateToSettings }) {
   const { currentUser } = useAppContext();
   const [messages, setMessages] = useState([]);
-  const [latestResponse, setLatestResponse] = useState(null);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [newTitles, setNewTitles] = useState([]);
   const bottomRef = useRef(null);
 
-  // Load history on mount
   useEffect(() => {
     const load = async () => {
       try {
@@ -32,7 +22,7 @@ export default function SystemPage({ onNavigateToHome, onNavigateToTaskManager, 
         );
         setMessages(data.reverse());
       } catch {
-        // history unavailable
+        // history unavailable; fall back to empty list
       } finally {
         setHistoryLoading(false);
       }
@@ -40,16 +30,14 @@ export default function SystemPage({ onNavigateToHome, onNavigateToTaskManager, 
     load();
   }, [currentUser]);
 
-  // Auto-scroll on new messages
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, latestResponse]);
+  }, [messages]);
 
   const sendToSystem = async (contextType = 'user_input', customMessage = null) => {
     const msg = customMessage ?? inputText.trim();
     if (contextType === 'user_input' && !msg) return;
     setLoading(true);
-    setLatestResponse(null);
     if (contextType === 'user_input') setInputText('');
 
     try {
@@ -75,7 +63,6 @@ export default function SystemPage({ onNavigateToHome, onNavigateToTaskManager, 
         isNew: true,
       };
 
-      setLatestResponse(newEntry);
       setMessages(prev => [...prev, newEntry]);
 
       if (data.titles_awarded?.length > 0) {
@@ -83,14 +70,15 @@ export default function SystemPage({ onNavigateToHome, onNavigateToTaskManager, 
         setTimeout(() => setNewTitles([]), 6000);
       }
     } catch (err) {
-      setLatestResponse({
+      setMessages(prev => [...prev, {
         id: Date.now(),
         message_type: 'alert',
-        content: `[SYSTEM ERROR] ${err.message}`,
+        content: `[SYSTEM ERROR] ${err.message}. The AI backend may be unavailable. Please try again in a moment.`,
         missions_issued: [],
         created_at: new Date().toISOString(),
         isNew: true,
-      });
+        is_error: true,
+      }]);
     } finally {
       setLoading(false);
     }

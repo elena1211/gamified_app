@@ -46,18 +46,23 @@ export default function SystemMessageBox({ log, animate = false, className = '' 
   const label = TYPE_LABEL[log.message_type] || 'System Message';
   const missions = log.missions_issued || log.missions || [];
   const isPunishment = log.message_type === 'punishment';
+  const isError = log.is_error;
+
+  const accentBorder = isError ? 'var(--accent-rust)' : isPunishment ? 'var(--accent-rust)' : null;
+  const accentGradient = (isError || isPunishment)
+    ? 'linear-gradient(180deg, var(--accent-rust) 0%, #8B2C1A 100%)'
+    : null;
 
   return (
     <div
       className={`rpg-window ${className}`}
-      style={isPunishment ? { borderColor: 'var(--accent-rust)', boxShadow: '0 3px 0 rgba(184,92,66,.3), 0 6px 16px rgba(184,92,66,.15)' } : {}}
+      style={accentBorder ? { borderColor: accentBorder, boxShadow: '0 3px 0 rgba(184,92,66,.3), 0 6px 16px rgba(184,92,66,.15)' } : {}}
     >
-      {/* Header */}
       <div
         className="rpg-header text-xs"
-        style={isPunishment ? { background: 'linear-gradient(180deg, var(--accent-rust) 0%, #8B2C1A 100%)' } : {}}
+        style={accentGradient ? { background: accentGradient } : {}}
       >
-        [SYSTEM] ▸ {label}
+        [SYSTEM] ▸ {isError ? 'Error' : label}
       </div>
 
       <div className="px-5 py-4 font-mono text-sm space-y-3" style={{ fontFamily: 'monospace, "Klee One", serif' }}>
