@@ -152,6 +152,48 @@ def reverse_attribute_changes(user, reward_string):
     except Exception as e:
         logger.error(f"Error reversing attribute changes: {e}")
 
+# Map common goal keywords to attributes the user should grow.
+# Used to bias daily task selection toward goal-relevant attributes,
+# so a 'Get Fit' user is more likely to see energy/wellness tasks.
+GOAL_KEYWORD_TO_ATTRIBUTES = {
+    'fit':         ['energy', 'wellness'],
+    'health':      ['wellness', 'energy'],
+    'workout':     ['energy', 'wellness'],
+    'gym':         ['energy', 'wellness'],
+    'engineer':    ['intelligence', 'discipline'],
+    'software':    ['intelligence', 'discipline'],
+    'developer':   ['intelligence', 'discipline'],
+    'programming': ['intelligence', 'discipline'],
+    'coding':      ['intelligence', 'discipline'],
+    'data':        ['intelligence', 'discipline'],
+    'web':         ['intelligence', 'discipline'],
+    'language':    ['intelligence', 'social'],
+    'learn':       ['intelligence'],
+    'study':       ['intelligence', 'discipline'],
+    'business':    ['social', 'discipline'],
+    'startup':     ['social', 'discipline'],
+    'social':      ['social'],
+    'mindful':     ['wellness'],
+    'meditat':     ['wellness'],
+    'mental':      ['wellness'],
+    'sleep':       ['wellness', 'energy'],
+}
+
+
+def preferred_attributes_for_goal(goal_title: str, goal_desc: str = '') -> list:
+    """Return the list of attribute names preferred for this goal's keywords."""
+    if not goal_title:
+        return []
+    haystack = (goal_title + ' ' + (goal_desc or '')).lower()
+    preferred = []
+    for keyword, attrs in GOAL_KEYWORD_TO_ATTRIBUTES.items():
+        if keyword in haystack:
+            for a in attrs:
+                if a not in preferred:
+                    preferred.append(a)
+    return preferred
+
+
 class TaskListView(APIView):
     """API view that returns task data from database"""
 
@@ -206,20 +248,48 @@ class TaskListView(APIView):
         uncompleted_tasks = [task for task in all_tasks if task.id not in completed_task_ids]
         completed_tasks = [task for task in all_tasks if task.id in completed_task_ids]
 
+        # Weighted sampling: tasks whose attribute matches the user's goal
+        # are roughly 3x more likely to be selected. Off-goal tasks still appear
+        # (variety preserved) but the bias addresses user-test feedback where
+        # a 'Get Fit' user kept getting Leetcode tasks.
+        goal = Goal.objects.filter(user=user).first()
+        preferred_attrs = preferred_attributes_for_goal(
+            goal.title if goal else '',
+            goal.description if goal else '',
+        )
+
+        def weighted_sample(pool, n):
+            if not pool:
+                return []
+            weights = [3 if t.attribute in preferred_attrs else 1 for t in pool]
+            picked = []
+            remaining = list(zip(pool, weights))
+            for _ in range(min(n, len(pool))):
+                total = sum(w for _, w in remaining)
+                if total <= 0:
+                    break
+                r = random.uniform(0, total)
+                acc = 0
+                for i, (task, w) in enumerate(remaining):
+                    acc += w
+                    if r <= acc:
+                        picked.append(task)
+                        remaining.pop(i)
+                        break
+            return picked
+
         # Prioritize uncompleted tasks
         num_tasks = min(random.randint(3, 6), len(all_tasks))
 
         if len(uncompleted_tasks) >= num_tasks:
-            # If we have enough uncompleted tasks, use only those
-            selected_tasks = random.sample(uncompleted_tasks, num_tasks)
+            selected_tasks = weighted_sample(uncompleted_tasks, num_tasks)
         elif len(uncompleted_tasks) > 0:
-            # Mix uncompleted and some completed tasks
             remaining_slots = num_tasks - len(uncompleted_tasks)
-            selected_completed = random.sample(completed_tasks, min(remaining_slots, len(completed_tasks)))
+            selected_completed = weighted_sample(completed_tasks, remaining_slots)
             selected_tasks = uncompleted_tasks + selected_completed
         else:
             # All tasks are completed, show some completed ones
-            selected_tasks = random.sample(all_tasks, min(num_tasks, len(all_tasks)))
+            selected_tasks = weighted_sample(all_tasks, num_tasks)
 
         tasks = []
         for task in selected_tasks:
@@ -493,6 +563,7 @@ class UserStatsView(APIView):
                 "current_streak": user.current_streak,
                 "max_streak": user.max_streak,
                 "last_activity_date": user.last_activity_date.strftime("%Y-%m-%d") if user.last_activity_date else None,
+                "date_joined": user.date_joined.strftime("%Y-%m-%d") if user.date_joined else None,
                 "total_completed_tasks": UserTaskLog.objects.filter(user=user, status='completed').count(),
                 "attributes": attr_data,
                 "level_progress": {

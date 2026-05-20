@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import TaskManagerPage from './pages/TaskManagerPage';
@@ -6,6 +7,7 @@ import WelcomePage from './pages/WelcomePage';
 import SystemSettingsPage from './pages/SystemSettingsPage';
 import SystemPage from './pages/SystemPage';
 import ErrorBoundary from './components/ErrorBoundary';
+import OnboardingTutorial, { hasSeenOnboarding } from './components/OnboardingTutorial';
 import { AppProvider, useAppContext } from './context/AppContext';
 import { debugLog } from './utils/logger';
 
@@ -18,6 +20,21 @@ function AppRoutes() {
   } = useAppContext();
 
   const navigate = useNavigate();
+  const [showTutorial, setShowTutorial] = useState(false);
+
+  // Show onboarding once per browser, after first login
+  useEffect(() => {
+    if (currentUser && !hasSeenOnboarding()) {
+      setShowTutorial(true);
+    }
+  }, [currentUser]);
+
+  // Allow Settings page to trigger the tutorial via window event
+  useEffect(() => {
+    const handler = () => setShowTutorial(true);
+    window.addEventListener('levelup:show-tutorial', handler);
+    return () => window.removeEventListener('levelup:show-tutorial', handler);
+  }, []);
 
   debugLog('AppRoutes rendering, currentUser:', currentUser, 'isLoading:', isLoading);
 
@@ -66,6 +83,7 @@ function AppRoutes() {
   }
 
   return (
+    <>
     <Routes>
       <Route
         path="/welcome"
@@ -152,6 +170,10 @@ function AppRoutes() {
         element={<Navigate to={currentUser ? "/home" : "/welcome"} replace />}
       />
     </Routes>
+    {showTutorial && (
+      <OnboardingTutorial onComplete={() => setShowTutorial(false)} />
+    )}
+    </>
   );
 }
 

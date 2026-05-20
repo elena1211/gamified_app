@@ -87,7 +87,7 @@ export default function HomePage({
   const navigate = useNavigate();
 
   // Use global state from context
-  const { attributeStats, applyStatChanges, updateUserStats, setUnreadSystemMessages, setActiveTitle } = useAppContext();
+  const { attributeStats, applyStatChanges, updateUserStats, setUnreadSystemMessages, setActiveTitle, userStats } = useAppContext();
 
   // System state: punishment + morning brief
   const [punishmentResult, setPunishmentResult] = useState(null);
@@ -720,13 +720,11 @@ export default function HomePage({
   const expForLevel = Math.max(1, nextLvlExp - curLvlExp);
   const expPct = Math.min(100, (expIntoLevel / expForLevel) * 100);
 
-  // Day counter: days since 2024-01-01 (matches the "Growth Journal Day n" feel)
-  const dayNumber = Math.max(
-    1,
-    Math.floor(
-      (new Date() - new Date("2024-01-01")) / (1000 * 60 * 60 * 24),
-    ),
-  );
+  // Day counter: days since the host joined LevelUp (Day 1 = first day, monotonic).
+  const joinDate = userStats?.dateJoined ? new Date(userStats.dateJoined) : null;
+  const dayNumber = joinDate
+    ? Math.max(1, Math.floor((new Date() - joinDate) / (1000 * 60 * 60 * 24)) + 1)
+    : 1;
 
   return (
     <div className="min-h-screen paper-bg page-enter pb-24">

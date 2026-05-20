@@ -77,6 +77,20 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
               >
                 Sign In
               </button>
+              <button
+                onClick={() => {
+                  // Generate a per-browser guest username so each device has its own data.
+                  let guest = localStorage.getItem('levelup_guest_id');
+                  if (!guest) {
+                    guest = 'guest_' + Math.random().toString(36).slice(2, 8);
+                    localStorage.setItem('levelup_guest_id', guest);
+                  }
+                  onLoginSuccess(guest);
+                }}
+                className="w-full text-xs text-ink-mute hover:text-ink underline transition-colors py-1"
+              >
+                Continue as guest (no account needed)
+              </button>
             </div>
 
             <p className="text-xs text-ink-mute text-center mt-6">

@@ -22,15 +22,17 @@ export default function SystemSettingsPage({ currentUser, onLogout, onNavigateTo
     localStorage.setItem(key, value);
   };
 
+  const isGuest = typeof currentUser === 'string' && currentUser.startsWith('guest_');
+
   const renderAccountSection = () => (
     <div className="space-y-3">
       <h3 className="font-display text-base text-ink mb-3">Account Information</h3>
       <div className="rpg-window-light px-4 py-3 text-sm space-y-2">
         {[
           ['Username', currentUser],
-          ['Registration Date', '1 January 2024'],
-          ['Last Login', 'Today'],
-          ['Account Status', <span key="s" className="text-sage">Active</span>],
+          ['Account Status', isGuest
+            ? <span key="s" className="text-rust">Guest (data on this device only)</span>
+            : <span key="s" className="text-sage">Active</span>],
         ].map(([label, value]) => (
           <div key={label} className="flex justify-between">
             <span className="text-ink-mute">{label}</span>
@@ -38,6 +40,26 @@ export default function SystemSettingsPage({ currentUser, onLogout, onNavigateTo
           </div>
         ))}
       </div>
+
+      {isGuest && (
+        <div
+          className="rpg-window px-4 py-3 mt-3"
+          style={{ borderColor: 'var(--accent-gold)', background: '#FFF9E6' }}
+        >
+          <p className="text-sm text-ink mb-2">
+            You are using LevelUp as a guest. Your progress is stored only on this device
+            and may be lost if you clear browser data.
+          </p>
+          <button
+            onClick={() => {
+              if (onLogout) onLogout();
+            }}
+            className="rpg-btn-primary text-xs"
+          >
+            Create a Real Account
+          </button>
+        </div>
+      )}
     </div>
   );
 
@@ -73,6 +95,22 @@ export default function SystemSettingsPage({ currentUser, onLogout, onNavigateTo
           </button>
         </div>
       ))}
+
+      <div className="rpg-window-light flex items-center justify-between px-4 py-3 mt-3">
+        <div>
+          <h4 className="text-sm font-semibold text-ink">Replay Tutorial</h4>
+          <p className="text-xs text-ink-mute">View the introductory walkthrough again</p>
+        </div>
+        <button
+          onClick={() => {
+            localStorage.removeItem('levelup_onboarding_done');
+            window.dispatchEvent(new Event('levelup:show-tutorial'));
+          }}
+          className="rpg-btn-secondary text-xs"
+        >
+          Replay
+        </button>
+      </div>
     </div>
   );
 
