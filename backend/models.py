@@ -2,12 +2,22 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from datetime import date, timedelta
 
+PERSONALITY_CHOICES = [
+    ('logical', 'Logical'),
+    ('mentor', 'Mentor'),
+    ('tsundere', 'Tsundere'),
+    ('drill_sergeant', 'Drill Sergeant'),
+]
+
 class User(AbstractUser):
     level = models.PositiveIntegerField(default=1)
     exp = models.PositiveIntegerField(default=0)
     current_streak = models.PositiveIntegerField(default=0)
     max_streak = models.PositiveIntegerField(default=0)
     last_activity_date = models.DateField(null=True, blank=True)
+    system_personality = models.CharField(
+        max_length=20, choices=PERSONALITY_CHOICES, default='logical'
+    )
 
     class Meta:
         verbose_name = "User"
@@ -104,6 +114,14 @@ class Task(models.Model):
         ('wellness', 'Wellness'),
         ('stress', 'Stress')
     ]
+    MISSION_TYPE_CHOICES = [
+        ('daily', 'Daily Quest'),
+        ('main', 'Main Quest'),
+        ('urgent', 'Urgent Quest'),
+        ('punishment', 'Punishment Quest'),
+        ('hidden', 'Hidden Quest'),
+        ('system_generated', 'System Generated'),
+    ]
 
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     title = models.CharField(max_length=150)
@@ -113,6 +131,10 @@ class Task(models.Model):
     reward_point = models.PositiveIntegerField(default=10)
     deadline = models.DateTimeField()
     is_random = models.BooleanField(default=False)
+    mission_type = models.CharField(
+        max_length=20, choices=MISSION_TYPE_CHOICES, default='daily'
+    )
+    system_flavor = models.TextField(blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -143,3 +165,52 @@ class UserTaskLog(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.task.title} - {self.get_status_display()}"
+
+
+class SystemLog(models.Model):
+    MESSAGE_TYPE_CHOICES = [
+        ('daily_brief', 'Daily Brief'),
+        ('evening_eval', 'Evening Evaluation'),
+        ('punishment', 'Punishment'),
+        ('chat_response', 'Chat Response'),
+        ('alert', 'Alert'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='system_logs')
+    message_type = models.CharField(max_length=20, choices=MESSAGE_TYPE_CHOICES)
+    content = models.TextField()
+    missions_issued = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+    was_read = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "System Log"
+        verbose_name_plural = "System Logs"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username} - {self.message_type} - {self.created_at.date()}"
+
+
+class UserTitle(models.Model):
+    TITLE_CHOICES = [
+        ('iron_will', 'Iron Will'),
+        ('early_bird', 'Early Bird'),
+        ('comeback_king', 'Comeback King'),
+        ('consistent_scholar', 'Consistent Scholar'),
+        ('overachiever', 'Overachiever'),
+        ('first_system_contact', 'First Contact'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='titles')
+    title_key = models.CharField(max_length=30, choices=TITLE_CHOICES)
+    earned_at = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "User Title"
+        verbose_name_plural = "User Titles"
+        unique_together = ('user', 'title_key')
+
+    def __str__(self):
+        return f"{self.user.username} - {self.get_title_key_display()}"

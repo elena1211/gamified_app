@@ -1,3 +1,4 @@
+anthropic>=0.25.0
 asgiref==3.9.1
 autoflake==2.3.1
 dj-database-url==3.1.2

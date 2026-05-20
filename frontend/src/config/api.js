@@ -24,6 +24,12 @@ export const API_ENDPOINTS = {
 
   // Goals
   goal: `${API_BASE}/goal/`,
+
+  // System / AI
+  systemChat: `${API_BASE}/system/chat/`,
+  systemMessages: `${API_BASE}/system/messages/`,
+  systemDailyStatus: `${API_BASE}/system/daily-status/`,
+  systemPunishmentCheck: `${API_BASE}/system/punishment-check/`,
 };
 
 // Render free-tier services sleep after 15 min and take 30-60s to wake.

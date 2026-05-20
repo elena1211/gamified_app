@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { API_ENDPOINTS, apiRequest } from "../config/api.js";
 import BottomNav from "../components/BottomNav";
 import StatsPanel from "../components/StatsPanel";
@@ -9,6 +10,7 @@ import TimeLimitedTaskPopup from "../components/TimeLimitedTaskPopup";
 import Modal from "../components/Modal";
 import WeeklyTaskStats from "../components/WeeklyTaskStats";
 import LevelUpModal from "../components/LevelUpModal";
+import SystemAlert from "../components/SystemAlert";
 import { useAppContext } from "../context/AppContext";
 import { getAvatarStage, getExpForLevel } from "../utils/avatar";
 import { debugLog } from "../utils/logger";
@@ -82,8 +84,15 @@ export default function HomePage({
 }) {
   debugLog("HomePage component starting to render, currentUser:", currentUser);
 
+  const navigate = useNavigate();
+
   // Use global state from context
-  const { attributeStats, applyStatChanges, updateUserStats } = useAppContext();
+  const { attributeStats, applyStatChanges, updateUserStats, setUnreadSystemMessages, setActiveTitle } = useAppContext();
+
+  // System state: punishment + morning brief
+  const [punishmentResult, setPunishmentResult] = useState(null);
+  const [showMorningBriefBanner, setShowMorningBriefBanner] = useState(false);
+  const [systemUnread, setSystemUnread] = useState(0);
 
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -575,6 +584,37 @@ export default function HomePage({
     fetchUserStats();
   }, [currentUser]); // Only depend on currentUser, not the functions
 
+  // System: punishment check + daily status on mount
+  useEffect(() => {
+    const checkSystem = async () => {
+      const user = currentUser || 'tester';
+      try {
+        // Daily punishment check
+        const { data: punish } = await apiRequest(
+          `${API_ENDPOINTS.systemPunishmentCheck}?user=${user}`,
+          { method: 'POST', body: JSON.stringify({ user }) }
+        );
+        if (punish.punishment_applied) {
+          setPunishmentResult(punish);
+          applyStatChanges(punish.penalty);
+        }
+      } catch { /* ignore */ }
+
+      try {
+        // Daily status (unread count + morning brief flag)
+        const { data: status } = await apiRequest(
+          `${API_ENDPOINTS.systemDailyStatus}?user=${user}`
+        );
+        const unread = status.unread_messages || 0;
+        setSystemUnread(unread);
+        setUnreadSystemMessages(unread);
+        if (!status.has_seen_morning_brief) setShowMorningBriefBanner(true);
+        if (status.active_title) setActiveTitle(status.active_title);
+      } catch { /* ignore */ }
+    };
+    checkSystem();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Random time-limited task system - appears at random intervals
   useEffect(() => {
     // Don't start multiple schedulers
@@ -691,6 +731,47 @@ export default function HomePage({
   return (
     <div className="min-h-screen paper-bg page-enter pb-24">
       <div className="max-w-5xl mx-auto px-4 sm:px-8 py-6 sm:py-10 space-y-6">
+        {/* System: morning brief banner */}
+        {showMorningBriefBanner && (
+          <div
+            className="rpg-window flex items-center justify-between px-4 py-3 cursor-pointer"
+            style={{ borderColor: 'var(--accent-gold)', background: '#FFF9E6' }}
+            onClick={() => { navigate('/system'); setShowMorningBriefBanner(false); }}
+          >
+            <span className="text-sm text-ink">
+              <span className="font-semibold text-gold">[SYSTEM]</span>{' '}
+              Today's missions are ready — tap to view
+            </span>
+            <button
+              onClick={e => { e.stopPropagation(); setShowMorningBriefBanner(false); }}
+              className="text-ink-mute text-xs ml-2"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {/* System: punishment notification */}
+        {punishmentResult && (
+          <div
+            className="rpg-window px-4 py-3"
+            style={{ borderColor: 'var(--accent-rust)' }}
+          >
+            <div className="rpg-header text-xs" style={{ background: 'linear-gradient(180deg, var(--accent-rust) 0%, #8B2C1A 100%)' }}>
+              [SYSTEM] ▸ Penalty Applied
+            </div>
+            <div className="px-1 pt-3 pb-1">
+              <p className="text-sm text-ink font-mono">{punishmentResult.system_message}</p>
+              <button
+                onClick={() => setPunishmentResult(null)}
+                className="mt-2 text-xs text-ink-mute underline"
+              >
+                Acknowledged
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Page banner — diary title */}
         <header className="flex items-baseline justify-between gap-4 border-b-2 border-dotted border-[var(--frame)]/50 pb-3">
           <h1 className="font-display text-2xl sm:text-3xl text-ink tracking-wider">
@@ -775,6 +856,13 @@ export default function HomePage({
         <BottomNav
           onSettingsClick={handleSettingsClick}
           onTaskManagerClick={handleTaskManagerClick}
+          onHomeClick={() => {}}
+          currentPage="home"
+        />
+
+        <SystemAlert
+          unreadCount={systemUnread}
+          onDismiss={() => { setSystemUnread(0); setUnreadSystemMessages(0); }}
         />
 
         {/* Popups */}
