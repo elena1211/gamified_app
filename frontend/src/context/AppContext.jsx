@@ -89,9 +89,7 @@ export function AppProvider({ children }) {
   const loadUserData = async (username) => {
     try {
       debugLog("Loading user data for:", username);
-      const { data } = await apiRequest(
-        `${API_ENDPOINTS.userStats}?user=${username}`,
-      );
+      const { data } = await apiRequest(API_ENDPOINTS.userStats);
 
       // Merge DB attribute values with localStorage — keep the higher value
       // (protects against Render cold-starts returning stale zeros)
@@ -138,22 +136,27 @@ export function AppProvider({ children }) {
   // Initialize user state from localStorage on app start
   useEffect(() => {
     const savedUser = localStorage.getItem("currentUser");
-    if (savedUser) {
+    if (savedUser && localStorage.getItem("levelup_auth_token")) {
       setCurrentUser(savedUser);
       loadUserData(savedUser);
+    } else {
+      // Clear stale state if token is missing
+      localStorage.removeItem("currentUser");
     }
     setIsLoading(false);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleLoginSuccess = (username) => {
+  const handleLoginSuccess = (username, token) => {
     setCurrentUser(username);
     localStorage.setItem("currentUser", username);
+    if (token) localStorage.setItem("levelup_auth_token", token);
     loadUserData(username);
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
     localStorage.removeItem("currentUser");
+    localStorage.removeItem("levelup_auth_token");
     localStorage.removeItem("levelup_attributeStats");
     // Reset all state
     setTasks([]);

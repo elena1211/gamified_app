@@ -7,6 +7,27 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const handleGuest = async () => {
+    let guestId = localStorage.getItem('levelup_guest_id');
+    if (!guestId) {
+      guestId = 'guest_' + Math.random().toString(36).slice(2, 8);
+      localStorage.setItem('levelup_guest_id', guestId);
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const { data } = await apiRequest(API_ENDPOINTS.guest, {
+        method: 'POST',
+        body: JSON.stringify({ guest_id: guestId }),
+      });
+      onLoginSuccess(data.username, data.token);
+    } catch (err) {
+      setError('Failed to start guest session. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -25,7 +46,7 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
         method: 'POST',
         body: JSON.stringify({ username: formData.username, password: formData.password }),
       });
-      onLoginSuccess(data.username);
+      onLoginSuccess(data.username, data.token);
     } catch (err) {
       setError(err.message || 'Invalid username or password');
     } finally {
@@ -78,18 +99,11 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
                 Sign In
               </button>
               <button
-                onClick={() => {
-                  // Generate a per-browser guest username so each device has its own data.
-                  let guest = localStorage.getItem('levelup_guest_id');
-                  if (!guest) {
-                    guest = 'guest_' + Math.random().toString(36).slice(2, 8);
-                    localStorage.setItem('levelup_guest_id', guest);
-                  }
-                  onLoginSuccess(guest);
-                }}
+                onClick={handleGuest}
+                disabled={loading}
                 className="w-full text-xs text-ink-mute hover:text-ink underline transition-colors py-1"
               >
-                Continue as guest (no account needed)
+                {loading ? 'Starting guest session…' : 'Continue as guest (no account needed)'}
               </button>
             </div>
 

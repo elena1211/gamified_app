@@ -1,7 +1,9 @@
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
-from django.contrib.auth import authenticate, login
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.authtoken.models import Token
+from django.contrib.auth import authenticate
 from django.contrib.auth.hashers import make_password
 from django.http import HttpResponse
 from .models import Task, User, Goal, UserTaskLog, UserAttribute, SystemLog, UserTitle
@@ -198,11 +200,7 @@ class TaskListView(APIView):
     """API view that returns task data from database"""
 
     def get(self, request):
-        username = request.GET.get('user', 'tester')  # Default to 'tester'
-
-        # Get or create user automatically
-        user = get_or_create_user(username)
-
+        user = request.user
         today = date.today()
 
         completed_task_ids = UserTaskLog.objects.filter(
@@ -316,10 +314,8 @@ class TaskListView(APIView):
 
     def post(self, request):
         """Create a new task"""
-        username = request.data.get('user', 'tester')  # Default to 'tester'
-
+        user = request.user
         try:
-            user = get_or_create_user(username)
 
             # Set default deadline to 24 hours from now
             default_deadline = datetime.now() + timedelta(days=1)
@@ -360,7 +356,7 @@ class TaskDetailView(APIView):
     """API view for individual task details"""
     def get(self, request, pk):
         try:
-            task = Task.objects.get(pk=pk)
+            task = Task.objects.get(pk=pk, user=request.user)
             reward_attr = task.attribute.title()
             reward_str = f"+{task.reward_point//2} {reward_attr}"
 
@@ -389,11 +385,8 @@ class GoalView(APIView):
     }
 
     def get(self, request):
-        username = request.GET.get('user', 'tester')  # Default to 'tester'
-
+        user = request.user
         try:
-            user = User.objects.get(username=username)
-
             # Get user's main goal (first active goal)
             goal = Goal.objects.filter(user=user, is_completed=False).first()
 
@@ -409,10 +402,8 @@ class GoalView(APIView):
             else:
                 return Response(self.DEFAULT_GOAL)
 
-        except User.DoesNotExist:
-            return Response(self.DEFAULT_GOAL)
         except Exception as e:
-            logger.error(f"GoalView error for user '{username}': {e}")
+            logger.error(f"GoalView error for user '{user.username}': {e}")
             return Response(self.DEFAULT_GOAL)
 
 def calculate_task_exp(task):
@@ -441,12 +432,10 @@ def get_exp_for_level(level):
 class TaskCompleteView(APIView):
     """API view for marking tasks as complete or uncomplete"""
     def post(self, request):
-        username = request.data.get('user', 'tester')  # Default to 'tester'
-
+        user = request.user
         try:
             task_id = request.data.get('task_id')
-            user = get_or_create_user(username)
-            task = Task.objects.get(id=task_id)
+            task = Task.objects.get(id=task_id, user=user)
 
             # Check if task is already completed today
             today = date.today()
@@ -549,11 +538,8 @@ class UserStatsView(APIView):
     """API view for user statistics including streak"""
 
     def get(self, request):
-        username = request.GET.get('user', 'tester')  # Default to 'tester'
-
+        user = request.user
         try:
-            user = User.objects.get(username=username)
-
             # Build attribute values from database
             attr_data = {attr.name: attr.value for attr in user.attributes.all()}
 
@@ -577,18 +563,12 @@ class UserStatsView(APIView):
 
             return Response(stats)
 
-        except User.DoesNotExist:
-            return Response({
-                "level": 5,
-                "current_streak": 7,
-                "max_streak": 12,
-                "last_activity_date": None,
-                "total_completed_tasks": 0
-            })
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class RegisterView(APIView):
     """API view for user registration"""
-    permission_classes = []  # Allow anonymous access for registration
+    permission_classes = [AllowAny]
 
     def post(self, request):
         try:
@@ -698,10 +678,12 @@ class RegisterView(APIView):
                     deadline=timezone.now() + timedelta(days=365)  # 1 year deadline
                 )
 
+            token, _ = Token.objects.get_or_create(user=user)
             return Response({
                 "success": True,
                 "message": "User registered successfully",
                 "username": username,
+                "token": token.key,
                 "goal": goal_title
             }, status=status.HTTP_201_CREATED)
 
@@ -713,7 +695,7 @@ class RegisterView(APIView):
 
 class LoginView(APIView):
     """API view for user login"""
-    permission_classes = []  # Allow anonymous access for login
+    permission_classes = [AllowAny]
 
     def post(self, request):
         try:
@@ -725,20 +707,16 @@ class LoginView(APIView):
                     "error": "Username and password are required"
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Authenticate user
             user = authenticate(username=username, password=password)
 
             if user:
-                # Log the user in (creates session)
-                login(request, user)
-
-                # Update streak for login
                 user.update_streak()
-
+                token, _ = Token.objects.get_or_create(user=user)
                 return Response({
                     "success": True,
                     "message": "Login successful",
                     "username": username,
+                    "token": token.key,
                     "level": user.level,
                     "streak": user.current_streak
                 })
@@ -753,13 +731,50 @@ class LoginView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class GuestLoginView(APIView):
+    """Create or retrieve a guest session and return an auth token."""
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        guest_id = (request.data.get('guest_id') or '').strip()
+        if not re.match(r'^guest_[a-z0-9]{1,12}$', guest_id):
+            return Response({'error': 'Invalid guest ID'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user, created = User.objects.get_or_create(
+            username=guest_id,
+            defaults={
+                'password': make_password(secrets.token_urlsafe(16)),
+                'level': 1, 'exp': 0, 'current_streak': 0, 'max_streak': 0,
+            }
+        )
+        if created:
+            for attr_name in ['intelligence', 'discipline', 'energy', 'social', 'wellness', 'stress']:
+                UserAttribute.objects.create(user=user, name=attr_name, value=0)
+            Goal.objects.create(
+                user=user,
+                title='Getting Started',
+                description='Learn how to use the gamified productivity system',
+            )
+            default_deadline = timezone.now() + timedelta(days=3650)
+            for td in [
+                {'title': '🧹 Organise workspace',  'description': 'Clean and organise your desk',         'reward_point': 6, 'difficulty': 1, 'attribute': 'discipline'},
+                {'title': '📝 Write journal entry', 'description': "Reflect on today's experiences",      'reward_point': 5, 'difficulty': 1, 'attribute': 'discipline'},
+                {'title': '🏃 30-minute workout',   'description': 'Include cardio and strength training', 'reward_point': 9, 'difficulty': 2, 'attribute': 'energy'},
+                {'title': '💻 Practice coding',     'description': 'Solve a Leetcode problem',             'reward_point': 8, 'difficulty': 2, 'attribute': 'intelligence'},
+                {'title': '🧘 Meditation',          'description': '10 minutes of mindfulness',            'reward_point': 4, 'difficulty': 1, 'attribute': 'energy'},
+                {'title': '📚 Learn something new', 'description': 'Read an educational article',          'reward_point': 7, 'difficulty': 1, 'attribute': 'intelligence'},
+            ]:
+                Task.objects.create(user=user, deadline=default_deadline, **td)
+
+        token, _ = Token.objects.get_or_create(user=user)
+        return Response({'username': guest_id, 'token': token.key})
+
+
 class WeeklyStatsView(APIView):
     """API view for weekly task completion statistics"""
     def get(self, request):
-        username = request.GET.get('user', 'tester')
-
+        user = request.user
         try:
-            user = User.objects.get(username=username)
 
             # Calculate date range for current week (Monday to Sunday)
             today = date.today()
@@ -808,37 +823,14 @@ class WeeklyStatsView(APIView):
                 'daily_breakdown': daily_stats
             })
 
-        except User.DoesNotExist:
-            # Return default stats if user doesn't exist
-            today = date.today()
-            monday = today - timedelta(days=today.weekday())
-            sunday = monday + timedelta(days=6)
-
-            daily_stats = []
-            for i in range(7):
-                day = monday + timedelta(days=i)
-                day_name = day.strftime('%A')[:3]
-                daily_stats.append({
-                    'date': day.strftime('%Y-%m-%d'),
-                    'day_name': day_name,
-                    'completed_tasks': 0,
-                    'is_today': day == today
-                })
-
-            return Response({
-                'week_start': monday.strftime('%Y-%m-%d'),
-                'week_end': sunday.strftime('%Y-%m-%d'),
-                'total_completed_this_week': 0,
-                'total_available_tasks': 0,
-                'completion_percentage': 0,
-                'daily_breakdown': daily_stats
-            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class DynamicTaskCompleteView(APIView):
     """API view for completing dynamic tasks (daily tasks, time-limited tasks)"""
     def post(self, request):
-        username = request.data.get('user', 'tester')
+        user = request.user
         task_title = request.data.get('task_title', '')
         task_type = request.data.get('task_type', 'daily')  # 'daily' or 'time_limited'
         reward_points = request.data.get('reward_points', 1)
@@ -846,7 +838,6 @@ class DynamicTaskCompleteView(APIView):
         attribute = request.data.get('attribute', 'discipline')
 
         try:
-            user = get_or_create_user(username)
 
             # Store old level and exp for level-up detection
             old_level = user.level
@@ -1001,15 +992,14 @@ class DynamicTaskCompleteView(APIView):
 class DynamicTaskUncompleteView(APIView):
     """API view for uncompleting dynamic daily tasks"""
     def post(self, request):
-        username = request.data.get('user', 'tester')
+        user = request.user
         task_title = request.data.get('task_title', '')
         reward_string = request.data.get('reward_string', '')  # For reversing attribute changes
 
-        logger.info(f"DynamicTaskUncompleteView: Uncompleting task '{task_title}' for user '{username}'")
+        logger.info(f"DynamicTaskUncompleteView: Uncompleting task '{task_title}' for user '{user.username}'")
         logger.info(f"Request data: {request.data}")
 
         try:
-            user = User.objects.get(username=username)
             logger.info(f"Found user: {user.username}")
 
             # Find the task by title for this user (both random and regular tasks)
@@ -1145,11 +1135,6 @@ class DynamicTaskUncompleteView(APIView):
                     'streak': user.current_streak
                 })
 
-        except User.DoesNotExist:
-            return Response({
-                'success': False,
-                'error': 'User not found'
-            }, status=404)
         except Exception as e:
             return Response({
                 'success': False,
@@ -1160,13 +1145,12 @@ class DynamicTaskUncompleteView(APIView):
 class CompletedTasksHistoryView(APIView):
     """API view to get user's completed tasks history"""
     def get(self, request):
-        username = request.GET.get('user', 'tester')
+        user = request.user
         limit = int(request.GET.get('limit', 50))  # Default to 50 recent completed tasks
 
-        logger.info(f"CompletedTasksHistoryView: Fetching completed tasks for user '{username}' (limit: {limit})")
+        logger.info(f"CompletedTasksHistoryView: Fetching completed tasks for user '{user.username}' (limit: {limit})")
 
         try:
-            user = User.objects.get(username=username)
 
             # Get completed task logs with task details
             completed_logs = UserTaskLog.objects.filter(
@@ -1200,10 +1184,10 @@ class CompletedTasksHistoryView(APIView):
                 'total_count': len(completed_tasks)
             })
 
-        except User.DoesNotExist:
+        except Exception as e:
             return Response({
                 'success': False,
-                'error': 'User not found',
+                'error': str(e),
                 'completed_tasks': [],
                 'total_count': 0
             })
@@ -1212,11 +1196,10 @@ class CompletedTasksHistoryView(APIView):
 class ProgressStatsView(APIView):
     """API view to get user's progress statistics"""
     def get(self, request):
-        username = request.GET.get('user', 'tester')
+        user = request.user
         range_type = request.GET.get('range', 'today')  # today, week, month
 
         try:
-            user = User.objects.get(username=username)
             today = date.today()
 
             if range_type == 'today':
@@ -1276,7 +1259,7 @@ class ProgressStatsView(APIView):
 
 class RootView(APIView):
     """Root endpoint to verify the API is running"""
-    permission_classes = []  # Allow anonymous access
+    permission_classes = [AllowAny]
 
     def get(self, request):
         data = {
@@ -1406,7 +1389,7 @@ class RootView(APIView):
 
 class HealthView(APIView):
     """Health check endpoint for Render"""
-    permission_classes = []  # Allow anonymous access for health checks
+    permission_classes = [AllowAny]
 
     def get(self, request):
         return Response({
@@ -1564,11 +1547,9 @@ class SystemChatView(APIView):
         except ImportError:
             return Response({'error': 'anthropic package not installed'}, status=500)
 
-        username = request.data.get('user', 'tester')
+        user = request.user
         user_message = request.data.get('message', '')
         context_type = request.data.get('context_type', 'user_input')
-
-        user = get_or_create_user(username)
 
         api_key = os.environ.get('ANTHROPIC_API_KEY', '')
         if not api_key:
@@ -1659,10 +1640,9 @@ class SystemChatView(APIView):
 
 
 class SystemMessagesView(APIView):
-    """GET /api/system/messages/?user=X — last 10 system logs"""
+    """GET /api/system/messages/ — last 10 system logs"""
     def get(self, request):
-        username = request.GET.get('user', 'tester')
-        user = get_or_create_user(username)
+        user = request.user
         logs = SystemLog.objects.filter(user=user).order_by('-created_at')[:10]
         SystemLog.objects.filter(user=user, was_read=False).update(was_read=True)
         return Response([{
@@ -1676,10 +1656,9 @@ class SystemMessagesView(APIView):
 
 
 class SystemDailyStatusView(APIView):
-    """GET /api/system/daily-status/?user=X"""
+    """GET /api/system/daily-status/"""
     def get(self, request):
-        username = request.GET.get('user', 'tester')
-        user = get_or_create_user(username)
+        user = request.user
         today = date.today()
 
         has_brief_today = SystemLog.objects.filter(
@@ -1705,12 +1684,11 @@ class SystemDailyStatusView(APIView):
 
 class PunishmentCheckView(APIView):
     """
-    POST /api/system/punishment-check/?user=X
+    POST /api/system/punishment-check/
     Called once daily on app open. Applies attribute penalty if yesterday was poor.
     """
     def post(self, request):
-        username = request.data.get('user') or request.GET.get('user', 'tester')
-        user = get_or_create_user(username)
+        user = request.user
         today = date.today()
         yesterday = today - timedelta(days=1)
 

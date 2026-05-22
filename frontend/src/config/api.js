@@ -3,12 +3,13 @@ import { debugLog } from "../utils/logger";
 
 // Environment-based API configuration
 const API_BASE =
-  import.meta.env.VITE_API_URL || "https://gamified-app-p9ao.onrender.com/api";
+  import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 
 export const API_ENDPOINTS = {
   // Authentication
   login: `${API_BASE}/login/`,
   register: `${API_BASE}/register/`,
+  guest: `${API_BASE}/guest/`,
 
   // Tasks
   tasks: `${API_BASE}/tasks/`,
@@ -40,12 +41,20 @@ const RETRY_DELAYS_MS = [1000, 3000, 6000];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export const getAuthToken = () => localStorage.getItem('levelup_auth_token');
+
+export const getAuthHeaders = () => {
+  const token = getAuthToken();
+  return token ? { Authorization: `Token ${token}` } : {};
+};
+
 // API utility functions
 export const apiRequest = async (url, options = {}) => {
   const defaultOptions = {
     mode: "cors", // Enable CORS mode for cross-origin requests
     headers: {
       "Content-Type": "application/json",
+      ...getAuthHeaders(),
     },
   };
 

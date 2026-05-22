@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { API_ENDPOINTS, apiRequest } from "../config/api.js";
+import { API_ENDPOINTS, apiRequest, getAuthHeaders } from "../config/api.js";
 import BottomNav from "../components/BottomNav";
 import StatsPanel from "../components/StatsPanel";
 import UserProfileCard from "../components/UserProfileCard";
@@ -119,7 +119,7 @@ export default function HomePage({
   const [questSchedulerActive, setQuestSchedulerActive] = useState(false);
 
   const [user, setUser] = useState({
-    name: currentUser || "tester",
+    name: currentUser || "",
     level: 1, // Will be updated from API
     exp: 0, // Will be updated from API
     streak: 0, // Will be updated from API
@@ -135,9 +135,10 @@ export default function HomePage({
         // Call dynamic task completion API for time-limited tasks
         const response = await fetch(API_ENDPOINTS.dynamicTaskComplete, {
           method: "POST",
-          mode: "cors", // Use CORS mode for cross-origin requests
+          mode: "cors",
           headers: {
             "Content-Type": "application/json",
+            ...getAuthHeaders(),
           },
           body: JSON.stringify({
             task_title: currentTimeLimitedTask.title,
@@ -145,8 +146,7 @@ export default function HomePage({
             reward_points: parseInt(
               currentTimeLimitedTask.reward.match(/\+(\d+)/)?.[1] || "1",
             ),
-            attribute: "discipline", // Default attribute for time-limited tasks
-            user: currentUser || "tester",
+            attribute: "discipline",
           }),
         });
 
@@ -312,14 +312,13 @@ export default function HomePage({
         const res = await fetch(API_ENDPOINTS.dynamicTaskComplete, {
           method: "POST",
           mode: "cors",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
           body: JSON.stringify({
             task_title: task.title,
             task_type: "daily",
             reward_points: parseInt(task.reward?.match(/\+(\d+)/)?.[1] || "1"),
             reward_string: task.reward || "",
             attribute: task.attribute || "discipline",
-            user: currentUser || "tester",
           }),
         });
         if (res.ok) data = await res.json();
@@ -328,11 +327,10 @@ export default function HomePage({
         const res = await fetch(API_ENDPOINTS.dynamicTaskUncomplete, {
           method: "POST",
           mode: "cors",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
           body: JSON.stringify({
             task_title: task.title,
             reward_string: task.reward || "",
-            user: currentUser || "tester",
           }),
         });
         if (res.ok) data = await res.json();
@@ -426,7 +424,7 @@ export default function HomePage({
           setLoading(true);
         }
 
-        const url = `${API_ENDPOINTS.tasks}?user=${currentUser || "tester"}`;
+        const url = API_ENDPOINTS.tasks;
         debugLog("Fetching tasks from:", url);
         const { data } = await apiRequest(url);
         debugLog("All tasks fetched:", data);
@@ -534,7 +532,7 @@ export default function HomePage({
   const fetchUserStats = useCallback(async () => {
     debugLog("fetchUserStats called, currentUser:", currentUser);
     try {
-      const url = `${API_ENDPOINTS.userStats}?user=${currentUser || "tester"}`;
+      const url = API_ENDPOINTS.userStats;
       debugLog("Fetching user stats from:", url);
       const { data } = await apiRequest(url);
       debugLog("User stats fetched successfully:", data);
@@ -586,34 +584,34 @@ export default function HomePage({
 
   // System: punishment check + daily status on mount
   useEffect(() => {
+    if (!currentUser) return;
     const checkSystem = async () => {
-      const user = currentUser || 'tester';
       try {
-        // Daily punishment check
         const { data: punish } = await apiRequest(
-          `${API_ENDPOINTS.systemPunishmentCheck}?user=${user}`,
-          { method: 'POST', body: JSON.stringify({ user }) }
+          API_ENDPOINTS.systemPunishmentCheck,
+          { method: 'POST', body: JSON.stringify({}) }
         );
         if (punish.punishment_applied) {
           setPunishmentResult(punish);
           applyStatChanges(punish.penalty);
         }
-      } catch { /* ignore */ }
+      } catch (err) {
+        console.warn('System punishment check unavailable:', err.message);
+      }
 
       try {
-        // Daily status (unread count + morning brief flag)
-        const { data: status } = await apiRequest(
-          `${API_ENDPOINTS.systemDailyStatus}?user=${user}`
-        );
+        const { data: status } = await apiRequest(API_ENDPOINTS.systemDailyStatus);
         const unread = status.unread_messages || 0;
         setSystemUnread(unread);
         setUnreadSystemMessages(unread);
         if (!status.has_seen_morning_brief) setShowMorningBriefBanner(true);
         if (status.active_title) setActiveTitle(status.active_title);
-      } catch { /* ignore */ }
+      } catch (err) {
+        console.warn('System daily status unavailable:', err.message);
+      }
     };
     checkSystem();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentUser]); // re-run if user changes
 
   // Random time-limited task system - appears at random intervals
   useEffect(() => {

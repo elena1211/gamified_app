@@ -38,8 +38,8 @@ function AppRoutes() {
 
   debugLog('AppRoutes rendering, currentUser:', currentUser, 'isLoading:', isLoading);
 
-  const handleRegisterSuccess = (username) => {
-    handleLoginSuccess(username);
+  const handleRegisterSuccess = (username, token) => {
+    handleLoginSuccess(username, token);
   };
 
   const handleNavigateToRegister = () => {

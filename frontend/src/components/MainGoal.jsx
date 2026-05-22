@@ -18,9 +18,7 @@ export default function MainGoal({ currentUser }) {
   const fetchGoal = useCallback(async () => {
     try {
       setLoading(true);
-      const { data } = await apiRequest(
-        `${API_ENDPOINTS.goal}?user=${currentUser || "tester"}`,
-      );
+      const { data } = await apiRequest(API_ENDPOINTS.goal);
       setGoal(data);
       debugLog("✅ Goal loaded:", data);
     } catch (err) {
