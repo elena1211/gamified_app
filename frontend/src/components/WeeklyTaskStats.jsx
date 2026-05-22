@@ -13,9 +13,7 @@ export default function WeeklyTaskStats({ currentUser, refreshTrigger }) {
     setError(null);
 
     try {
-      const { data } = await apiRequest(
-        `${API_ENDPOINTS.weeklyStats}?user=${currentUser || "tester"}`,
-      );
+      const { data } = await apiRequest(API_ENDPOINTS.weeklyStats);
       setWeeklyStats(data);
     } catch (error) {
       console.error("Error fetching weekly stats:", error);

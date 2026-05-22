@@ -67,7 +67,7 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
           goal_description: formData.customGoalDescription,
         }),
       });
-      onRegisterSuccess(data.username);
+      onRegisterSuccess(data.username, data.token);
     } catch (err) {
       setError(err.message || 'Registration failed');
     } finally {

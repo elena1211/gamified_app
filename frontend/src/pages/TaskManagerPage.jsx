@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Edit, Trash2, CheckCircle, Save, X } from 'lucide-react';
-import { API_ENDPOINTS, apiRequest } from '../config/api.js';
+import { API_ENDPOINTS, apiRequest, getAuthHeaders } from '../config/api.js';
 import BottomNav from '../components/BottomNav';
 import RewardPopup from '../components/RewardPopup';
 import WeeklyTaskStats from '../components/WeeklyTaskStats';
@@ -241,8 +241,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
     setLoading(true);
     try {
       // Fetch tasks from backend
-      console.log('🔍 Fetching tasks from:', `${API_ENDPOINTS.tasks}?user=${currentUser}`);
-      const { data } = await apiRequest(`${API_ENDPOINTS.tasks}?user=${currentUser}`);
+      const { data } = await apiRequest(API_ENDPOINTS.tasks);
       console.log('✅ Successfully fetched', data.length, 'tasks from backend:', data);
 
       // Transform backend data to match our component structure
@@ -278,7 +277,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
   const fetchCompletedHistory = async () => {
     try {
       debugLog('🔍 Fetching completed tasks history from API...');
-      const { data } = await apiRequest(`${API_ENDPOINTS.completedHistory}?user=${currentUser}&limit=50`);
+      const { data } = await apiRequest(`${API_ENDPOINTS.completedHistory}?limit=50`);
 
       if (data.success && data.completed_tasks) {
         const transformedHistory = data.completed_tasks.map(task => ({
@@ -323,20 +322,10 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
     }
 
     try {
-      // Create task on backend
-      const taskData = {
-        ...newTask,
-        user: currentUser || 'tester'
-      };
-
-      console.log('🆕 Creating new task:', taskData);
-
       const response = await fetch(API_ENDPOINTS.tasks, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(taskData)
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify(newTask),
       });
 
       if (!response.ok) {
@@ -392,26 +381,12 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
       debugLog('🎯 Attempting to complete task:', task.id, task.title);
       console.log('🔗 API endpoint:', API_ENDPOINTS.taskComplete);
 
-      const requestBody = {
-        task_id: task.id,
-        user: currentUser || 'tester'
-      };
-      console.log('📤 Request body:', requestBody);
-      console.log('📤 Task ID being sent:', task.id);
-      console.log('📤 Task object:', JSON.stringify(task, null, 2));
-
-      // Call backend API to mark task as complete - use fetch instead of apiRequest for better error handling
       const response = await fetch(API_ENDPOINTS.taskComplete, {
         method: 'POST',
-        mode: 'cors',  // Use CORS mode for cross-origin requests
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody)
+        mode: 'cors',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ task_id: task.id }),
       });
-
-      console.log('📥 Response status:', response.status);
-      console.log('📥 Response headers:', [...response.headers.entries()]);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);

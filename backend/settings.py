@@ -26,7 +26,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-your-secret-key-here-change-in-production')
+SECRET_KEY = os.environ.get('SECRET_KEY')
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY environment variable is not set")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get("DEBUG", "0") == "1"
@@ -50,6 +52,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'corsheaders',  # For React frontend
     'rest_framework',  # For API
+    'rest_framework.authtoken',  # Token authentication
     'backend',  # Main app (contains models, views, etc.)
 ]
 
@@ -152,11 +155,15 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'backend.User'
 
 # CORS settings for React frontend
-# The API uses AllowAny permissions (no token auth), so allowing all origins is safe.
-# Previously this defaulted to [] in production when the env var wasn't set, blocking
-# every browser request with a CORS error.
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_CREDENTIALS = True
+_cors_raw = os.environ.get('CORS_ALLOWED_ORIGINS', '')
+CORS_ALLOWED_ORIGINS = (
+    [o.strip() for o in _cors_raw.split(',') if o.strip()]
+    if _cors_raw
+    else (
+        ["http://localhost:5173", "http://localhost:3000"] if DEBUG
+        else ["https://levelup-jet.vercel.app"]
+    )
+)
 
 # CSRF settings for cross-origin requests
 if not DEBUG:
@@ -167,7 +174,10 @@ if not DEBUG:
 
 # Django REST Framework settings
 REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+    ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny'  # TODO: Add proper authentication in production
-    ]
+        'rest_framework.permissions.IsAuthenticated',
+    ],
 }

@@ -17,9 +17,7 @@ export default function SystemPage({ onNavigateToHome, onNavigateToTaskManager, 
   useEffect(() => {
     const load = async () => {
       try {
-        const { data } = await apiRequest(
-          `${API_ENDPOINTS.systemMessages}?user=${currentUser || 'tester'}`
-        );
+        const { data } = await apiRequest(API_ENDPOINTS.systemMessages);
         setMessages(data.reverse());
       } catch {
         // history unavailable; fall back to empty list
@@ -44,7 +42,6 @@ export default function SystemPage({ onNavigateToHome, onNavigateToTaskManager, 
       const { data } = await apiRequest(API_ENDPOINTS.systemChat, {
         method: 'POST',
         body: JSON.stringify({
-          user: currentUser || 'tester',
           message: msg,
           context_type: contextType,
         }),

@@ -15,8 +15,8 @@ export default function ProgressPanel({ currentUser, onRefresh = null }) {
 
       // Fetch both today and week stats in parallel
       const [todayData, weekData] = await Promise.all([
-        apiRequest(`${API_ENDPOINTS.userProgress}?user=${currentUser || 'tester'}&range=today`),
-        apiRequest(`${API_ENDPOINTS.userProgress}?user=${currentUser || 'tester'}&range=week`)
+        apiRequest(`${API_ENDPOINTS.userProgress}?range=today`),
+        apiRequest(`${API_ENDPOINTS.userProgress}?range=week`),
       ]);
 
       setTodayStats(todayData.data);
