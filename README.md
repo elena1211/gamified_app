@@ -1,363 +1,345 @@
-# 🎯 LevelUp - Gamified Productivity App
+# LevelUp — Gamified Productivity App
 
-> Transform your daily tasks into an RPG-style adventure with character progression, skill building, and reward systems.
+> Reframe everyday productivity as an RPG-style journey. Complete real-world tasks, develop six core attributes, level up your character, and let the AI-powered System companion keep you accountable.
 
-## 🌐 Live Demo
+## Live Demo
 
-**Try the app now:** [https://levelup-jet.vercel.app/home](https://levelup-jet.vercel.app/home)
+**Try the app:** [https://levelup-jet.vercel.app/home](https://levelup-jet.vercel.app/home)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Django](https://img.shields.io/badge/Django-5.2.5-green.svg)](https://www.djangoproject.com/)
 [![React](https://img.shields.io/badge/React-19.1.0-blue.svg)](https://reactjs.org/)
 [![Python](https://img.shields.io/badge/Python-3.13-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## 📋 Table of Contents
+---
 
-- [Live Demo](#-live-demo)
-- [Screenshots](#-screenshots)
-- [Overview](#-overview)
-- [Features](#-features)
-- [Tech Stack](#-tech-stack)
-- [Installation](#-installation)
-- [Usage](#-usage)
-- [API Documentation](#-api-documentation)
-- [Project Structure](#-project-structure)
-- [Contributing](#-contributing)
-- [License](#-license)
+## Table of Contents
 
-## 📸 Screenshots
+- [Overview](#overview)
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Installation](#installation)
+- [Environment Variables](#environment-variables)
+- [API Reference](#api-reference)
+- [Project Structure](#project-structure)
+- [Deployment](#deployment)
+- [Known Limitations](#known-limitations)
 
-### Mobile Experience
+---
 
-<img src="docs/images/Homepage_mobile.png" alt="Homepage Mobile" width="300">
+## Overview
 
-_Mobile homepage with character progression and daily tasks_
+LevelUp is a web application that turns daily task management into a character-raising game. Every real task the user completes increases one of six character attributes and earns experience points. Missing tasks reduces attributes and can trigger penalties. The progression loop includes both reward and risk, making progress feel authentic rather than a one-way point accumulation.
 
-<img src="docs/images/Taskspage_mobile.png" alt="Tasks Page Mobile" width="300">
+The app is built on a modular Django + React architecture and ships with:
 
-_Mobile task management with attribute-based categorization_
+- A retro RPG visual design system (parchment palette, double-line window frames, JRPG-style stat bars)
+- An AI-powered **System companion** backed by the Anthropic Claude API, which generates contextual daily missions, evaluates evening performance, and applies stat penalties for inactivity
+- Goal-aware task selection that biases daily quests toward attributes aligned with the user's chosen goal
+- A first-run onboarding walkthrough and a guest mode that requires no registration
 
-### Web Experience
+---
 
-![Welcome Page](docs/images/Welcomepage_web.png)
-_Web welcome page and onboarding experience_
+## Features
 
-![Task Tracking & Statistics](docs/images/Tasktracking%20&%20statistics_web.png)
-_Comprehensive progress tracking and statistical analysis_
+### Task Management
 
-## 🎮 Overview
+- **Daily Quests** — 3–6 tasks drawn per day, weighted toward the attributes that match the user's goal
+- **Time-Limited Micro Quests** — short challenges with a countdown timer; a preview screen lets users read and accept before the timer starts
+- **Task Creation** — users can add their own tasks with custom titles, descriptions, and attribute focus
+- **Completion History** — full log of all completed activities
 
-LevelUp is a gamified productivity application that transforms mundane daily tasks into an engaging RPG-style experience. Users can level up their character, gain experience points, and develop six core attributes through completing real-world tasks.
+### Character Progression
 
-### Core Concept
+| Attribute | Represents |
+|---|---|
+| Intelligence | Learning, coding, problem-solving |
+| Discipline | Habits, consistency, self-control |
+| Energy | Exercise, movement, vitality |
+| Social | Communication, relationships |
+| Wellness | Mental health, mindfulness |
+| Stress | Managed separately — lower is better |
 
-- **Character Development**: Build your virtual character by completing real tasks
-- **Attribute System**: Develop Intelligence, Discipline, Energy, Social skills, Wellness, and manage Stress
-- **Dynamic Task Generation**: Daily tasks generated based on your personal goals
-- **Time-Limited Challenges**: Quick micro-tasks for instant motivation boosts
-- **Progress Tracking**: Visual progression with streaks, level-ups, and achievements
+- Experience points and level system with exponential scaling
+- Visual avatar that evolves across five milestone stages
+- Earned titles (Iron Will, Consistent Scholar, Overachiever, etc.)
+- Streak tracking with max-streak record
 
-## ✨ Features
+### System Companion (AI)
 
-### 💼 Task Management
+The System tab is a chat interface backed by the Anthropic Claude API:
 
-- **Daily Random Tasks**: 10 personalized tasks generated based on your main goal
-- **Time-Limited Quests**: Quick challenges that appear randomly for immediate motivation boosts
-- **Task Categorization**: Tasks organized by attribute focus (Intelligence, Discipline, etc.)
-- **Progress Tracking**: Visual completion rates and streak tracking
+- **Morning Brief** — generates 2–3 contextual missions for the day based on the user's goal, current stats, and recent completion rate
+- **Evening Evaluation** — reviews today's performance and issues a bonus or penalty mission
+- **Free Chat** — the user describes their current situation and the System generates relevant missions
+- **Punishment Check** — on app open, if yesterday's completion rate was below 30 %, the System applies a stat debuff and creates a Redemption Quest
+- **Personality Archetypes** — each user is randomly assigned a System personality (logical, mentor, tsundere, or drill sergeant) that shapes tone
 
-### 📈 Character Progression
+### Onboarding and Accessibility
 
-- **Six Core Attributes**:
-  - 🧠 **Intelligence**: Coding, learning, problem-solving
-  - 💪 **Discipline**: Habits, consistency, self-control
-  - ⚡ **Energy**: Exercise, movement, vitality
-  - 🤝 **Social**: Communication, networking, relationships
-  - 🌿 **Wellness**: Mental health, mindfulness, balance
-  - 😰 **Stress**: Managed separately (lower is better)
-- **Level System**: Character levels up based on experience points
-- **Experience Points**: Earned through task completion
-- **Visual Avatar**: Character appearance evolves with progression
+- 4-slide first-run tutorial that covers tasks, stats, time-limited quests, and the System companion
+- Tutorial can be replayed from the Settings page
+- Guest mode — one tap from the Welcome screen generates a local `guest_<id>` session with no registration required; Settings page prompts the guest to upgrade
 
-### 🎨 User Experience
+### Visual Design
 
-- **Mobile-First Design**: Responsive interface optimized for all devices
-- **Real-Time Updates**: Instant feedback on task completion
-- **Level-Up Celebrations**: Satisfying visual notifications for achievements
-- **Weekly Statistics**: Comprehensive progress tracking and analytics
-- **Streak System**: Motivation through consecutive day tracking
+- Retro RPG aesthetic: parchment background (`#FAF3E0`), double-line window frames, warm ink typography
+- Fonts: Klee One (body) + DM Serif Display (headings)
+- RPG-style CSS utility classes: `.rpg-window`, `.rpg-header`, `.exp-bar`, `.stat-gauge`, `.task-diamond`, `.paper-divider`
+- Responsive: two-column desktop layout (portrait + STATUS window) collapses to single column on mobile
 
-### 🔧 System Features
+---
 
-- **Goal Setting**: Set and track personal development objectives
-- **Task History**: Complete log of all completed activities
-- **Data Persistence**: Reliable data storage with SQLite database
-- **RESTful API**: Clean separation between frontend and backend
-- **Error Handling**: Robust error management and user feedback
-
-## 🛠 Tech Stack
+## Tech Stack
 
 ### Frontend
 
-- **React 19.1.0** - Modern UI framework with hooks
-- **Vite 7.0** - Fast build tool and development server
-- **Tailwind CSS 4.1** - Utility-first CSS framework
-- **React Router 7.7** - Client-side routing
-- **Lucide React** - Beautiful icon library
-- **JavaScript ES6+** - Modern JavaScript features
+| Technology | Version | Role |
+|---|---|---|
+| React | 19.1.0 | UI framework |
+| Vite | 7.0 | Build tool and dev server |
+| Tailwind CSS | 4.1 | Utility-first styling |
+| React Router | 7.7 | Client-side routing |
+| Lucide React | — | Icon library |
 
 ### Backend
 
-- **Django 5.2.5** - Python web framework
-- **Django REST Framework** - API development
-- **SQLite** - Lightweight database for development
-- **Python 3.13** - Latest Python features and performance
+| Technology | Version | Role |
+|---|---|---|
+| Django | 5.2.5 | Web framework |
+| Django REST Framework | 3.x | API layer |
+| PostgreSQL | — | Production database (Neon) |
+| SQLite | — | Local development database |
+| Anthropic Python SDK | ≥0.25.0 | Claude API integration |
+| Gunicorn | — | Production WSGI server |
+| WhiteNoise | — | Static file serving |
 
-### Development Tools
+### Infrastructure
 
-- **ESLint** - Code linting and formatting
-- **PostCSS** - CSS processing
-- **Git** - Version control
-- **VS Code** - Recommended IDE
+- **Backend hosting**: Render (free tier — wakes on first request after 15 min inactivity)
+- **Frontend hosting**: Vercel
+- **Database**: Neon (PostgreSQL)
+- **API retry logic**: automatic backoff on 502/503/504 to handle Render cold starts
 
-## 🚀 Installation
+---
+
+## Installation
 
 ### Prerequisites
 
-- **Python 3.13+**
-- **Node.js 18+**
-- **npm** or **yarn**
-- **Git**
+- Python 3.13+
+- Node.js 18+
+- npm
 
 ### Backend Setup
 
-1. **Clone the repository**
+```bash
+# 1. Clone the repository
+git clone https://github.com/elena1211/gamified_app.git
+cd LevelUp_Project
 
-   ```bash
-   git clone https://github.com/elena1211/gamified_app.git
-   cd LevelUp_Project
-   ```
+# 2. Create and activate a virtual environment
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 
-2. **Create virtual environment**
+# 3. Install Python dependencies
+pip install -r requirements.txt
 
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   ```
+# 4. Run migrations
+python manage.py migrate
 
-3. **Install Python dependencies**
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Database setup**
-
-   ```bash
-   python manage.py makemigrations
-   python manage.py migrate
-   ```
-
-5. **Create superuser (optional)**
-
-   ```bash
-   python manage.py createsuperuser
-   ```
-
-6. **Start Django development server**
-   ```bash
-   python manage.py runserver
-   ```
+# 5. Start the development server
+python manage.py runserver
+```
 
 ### Frontend Setup
 
-1. **Navigate to frontend directory**
+```bash
+# 1. Navigate to the frontend directory
+cd frontend
 
-   ```bash
-   cd frontend
-   ```
+# 2. Install dependencies
+npm install
 
-2. **Install dependencies**
+# 3. Start the development server
+npm run dev
+```
 
-   ```bash
-   npm install
-   ```
+The app will be available at `http://localhost:5173`.  
+The Django API runs at `http://localhost:8000/api`.
 
-3. **Configure environment variables (optional)**
+---
 
-   ```bash
-   # Copy the example file and modify if needed
-   cp .env.example .env.development
-   # The default settings should work for local development
-   ```
+## Environment Variables
 
-4. **Start development server**
+### Frontend (`frontend/.env.development`)
 
-   ```bash
-   npm run dev
-   ```
+```env
+VITE_API_URL=http://127.0.0.1:8000/api
+```
 
-5. **Open application**
-   ```
-   Frontend: http://localhost:5173
-   Backend API: http://localhost:8000
-   Django Admin: http://localhost:8000/admin
-   ```
+### Backend (`.env` or Render environment)
 
-## 🎯 Usage
+| Variable | Required | Description |
+|---|---|---|
+| `SECRET_KEY` | Yes | Django secret key |
+| `DEBUG` | No | Set `False` in production |
+| `DATABASE_URL` | Production | PostgreSQL connection string (Neon) |
+| `ANTHROPIC_API_KEY` | Yes (System feature) | Claude API key — get one at [console.anthropic.com](https://console.anthropic.com) |
+| `ALLOWED_HOSTS` | Production | Comma-separated list of allowed host names |
 
-### Getting Started
+> **Note:** Without `ANTHROPIC_API_KEY`, the System companion tab will return an error. All other features work without it.
 
-1. **Create Account**: Register with username and password
-2. **Set Main Goal**: Choose your primary focus area (e.g., "Software Engineer")
-3. **Complete Daily Tasks**: Start with the generated daily random tasks
-4. **Track Progress**: Watch your character grow and attributes develop
-5. **Level Up**: Celebrate achievements and unlock new features
+---
 
-### Daily Workflow
-
-1. **Morning**: Check your 10 daily random tasks
-2. **Throughout Day**: Complete time-limited quests for quick wins
-3. **Task Completion**: Tap tasks to mark complete and gain experience
-4. **Progress Review**: Check weekly stats and maintain streaks
-5. **Evening**: Reflect on daily achievements
-
-### Tips for Success
-
-- **Start Small**: Focus on completing easier tasks first
-- **Maintain Streaks**: Consistency is key for character development
-- **Balance Attributes**: Work on all six areas for well-rounded growth
-- **Use Time-Limited Tasks**: Perfect for motivation during low-energy moments
-- **Track Weekly Progress**: Use statistics to identify improvement areas
-
-## 📚 API Documentation
+## API Reference
 
 ### Base URL
 
 ```
-http://localhost:8000/api
+https://gamified-app-p9ao.onrender.com/api   # production
+http://localhost:8000/api                     # local
 ```
 
-### Authentication Endpoints
+All endpoints accept a `?user=<username>` query parameter. If the username does not exist it is created automatically.
 
-- `POST /api/register/` - User registration
-- `POST /api/login/` - User login
+### Authentication
 
-### Task Endpoints
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/register/` | Create a new account |
+| POST | `/login/` | Sign in |
 
-- `GET /api/tasks/` - Get user tasks
-- `POST /api/tasks/complete/` - Complete a task
-- `POST /api/tasks/complete-dynamic/` - Complete dynamic task
-- `POST /api/tasks/uncomplete-dynamic/` - Uncomplete dynamic task
-- `GET /api/tasks/completed-history/` - Get completion history
-- `GET /api/tasks/weekly-stats/` - Get weekly statistics
+### Tasks
 
-### User Endpoints
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/tasks/` | Retrieve today's daily tasks (goal-weighted) |
+| POST | `/tasks/` | Create a new task |
+| GET | `/tasks/<id>/` | Get a single task |
+| POST | `/tasks/complete/` | Toggle task completion |
+| POST | `/tasks/complete-dynamic/` | Complete a time-limited quest |
+| POST | `/tasks/uncomplete-dynamic/` | Undo a time-limited quest |
+| GET | `/tasks/completed-history/` | Full completion history |
+| GET | `/tasks/weekly-stats/` | 7-day completion breakdown |
 
-- `GET /api/user/stats/` - Get user statistics
-- `GET /api/user/progress/` - Get user progress data
+### User
 
-### Goal Endpoints
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/user/stats/` | Level, EXP, streak, attributes, join date |
+| GET | `/user/progress/` | Completion rate and task counts |
 
-- `GET /api/goal/` - Get user goals
-- `POST /api/goal/` - Create/update goals
+### Goals
 
-## 📁 Project Structure
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/goal/` | Retrieve the user's current goal |
+| POST | `/goal/` | Create or update the goal |
 
+### System (AI)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/system/chat/` | Generate missions via Claude API |
+| GET | `/system/messages/` | Last 10 system log entries |
+| GET | `/system/daily-status/` | Unread count, active title, morning-brief flag |
+| POST | `/system/punishment-check/` | Apply daily penalty if yesterday's rate < 30 % |
+
+#### `/system/chat/` request body
+
+```json
+{
+  "user": "elena",
+  "message": "I have a job interview tomorrow",
+  "context_type": "user_input"
+}
 ```
-LevelUp_Project/
-├── backend/                 # Django backend
-│   ├── __init__.py
-│   ├── admin.py            # Admin interface configuration
-│   ├── apps.py             # App configuration
-│   ├── models.py           # Database models
-│   ├── settings.py         # Django settings
-│   ├── urls.py             # URL routing
-│   ├── views.py            # API endpoints
-│   └── migrations/         # Database migrations
-├── frontend/               # React frontend
-│   ├── public/            # Static assets
-│   │   └── avatars/       # Character avatar images
-│   ├── src/
-│   │   ├── components/    # Reusable UI components
-│   │   ├── pages/         # Page components
-│   │   ├── context/       # React context for state management
-│   │   ├── config/        # API configuration
-│   │   └── utils/         # Utility functions
-│   ├── package.json       # Frontend dependencies
-│   └── vite.config.js     # Vite configuration
-├── db.sqlite3             # SQLite database
-├── manage.py              # Django management script
-└── README.md              # This file
-```
 
-### Key Components
-
-#### Backend Models
-
-- **User**: Extended Django user with game attributes
-- **Task**: Individual tasks with rewards and difficulty
-- **UserAttribute**: Character attribute tracking
-- **UserTaskLog**: Task completion history
-- **Goal**: User goal management
-
-#### Frontend Components
-
-- **HomePage**: Main dashboard with tasks and character
-- **TaskList**: Daily random tasks display
-- **StatsPanel**: Character attribute visualization
-- **UserProfileCard**: Character avatar and level display
-- **TimeLimitedTaskPopup**: Quick challenge interface
-- **WeeklyTaskStats**: Progress analytics
-
-## 🤝 Contributing
-
-We welcome contributions! Please follow these steps:
-
-1. **Fork the repository**
-2. **Create feature branch** (`git checkout -b feature/amazing-feature`)
-3. **Commit changes** (`git commit -m 'Add amazing feature'`)
-4. **Push to branch** (`git push origin feature/amazing-feature`)
-5. **Open Pull Request**
-
-### Development Guidelines
-
-- **Code Style**: Follow existing patterns and use ESLint
-- **Testing**: Add tests for new features
-- **Documentation**: Update README for significant changes
-- **Responsive Design**: Ensure mobile compatibility
-- **Performance**: Optimize for fast loading and smooth interactions
-
-## 🐛 Known Issues
-
-- Database currently uses SQLite (development only)
-- User authentication is basic (consider OAuth for production)
-- No automated testing suite yet
-- Avatar system has limited customization options
-
-## 🚀 Future Enhancements
-
-- [ ] **Social Features**: Friend systems and leaderboards
-- [ ] **Advanced Rewards**: More avatar customization options
-- [ ] **Task Templates**: User-created task categories
-- [ ] **Data Export**: Progress data backup and analysis
-- [ ] **Mobile App**: Native iOS/Android applications
-- [ ] **Team Challenges**: Collaborative goal achievement
-- [ ] **Integration**: Connect with fitness trackers and productivity tools
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- **Design Inspiration**: RPG progression systems and habit-tracking apps
-- **Icons**: Lucide React icon library
-- **Styling**: Tailwind CSS community and documentation
-- **Backend**: Django and DRF communities for excellent documentation
+`context_type` values: `morning_brief` | `evening_eval` | `user_input`
 
 ---
 
-**Happy Leveling Up!** 🎮✨
+## Project Structure
 
-_Transform your productivity journey into an adventure worth taking._
+```
+LevelUp_Project/
+├── backend/
+│   ├── models.py          # User, Task, Goal, UserAttribute,
+│   │                      # UserTaskLog, SystemLog, UserTitle
+│   ├── views.py           # All API views
+│   ├── urls.py            # Root URL conf
+│   ├── urls_api.py        # /api/* routes
+│   ├── settings.py        # Django settings (dev + prod)
+│   └── migrations/
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── BottomNav.jsx           # 4-tab navigation with System unread badge
+│   │   │   ├── OnboardingTutorial.jsx  # 4-slide first-run walkthrough
+│   │   │   ├── StatsPanel.jsx          # RPG attribute table with gauges
+│   │   │   ├── SystemAlert.jsx         # Floating unread-message nudge
+│   │   │   ├── SystemMessageBox.jsx    # Typewriter AI message display
+│   │   │   ├── TaskList.jsx            # Diamond-checkbox task list
+│   │   │   ├── TimeLimitedTaskPopup.jsx # Preview → countdown quest flow
+│   │   │   ├── UserProfileCard.jsx     # Portrait, level, streak, title
+│   │   │   ├── WeeklyTaskStats.jsx     # 7-day diary grid
+│   │   │   └── ...                     # Modal, LevelUpModal, RewardPopup, etc.
+│   │   ├── pages/
+│   │   │   ├── HomePage.jsx            # Main dashboard (2-col RPG layout)
+│   │   │   ├── SystemPage.jsx          # AI System companion chat
+│   │   │   ├── TaskManagerPage.jsx     # Task CRUD
+│   │   │   ├── SystemSettingsPage.jsx  # Account and preferences
+│   │   │   ├── WelcomePage.jsx         # Login + guest mode
+│   │   │   └── RegisterPage.jsx        # 2-step registration
+│   │   ├── context/
+│   │   │   └── AppContext.jsx          # Global state (stats, system, auth)
+│   │   ├── config/
+│   │   │   └── api.js                  # API endpoints + cold-start retry logic
+│   │   └── utils/
+│   │       ├── avatar.js               # Level → stage/title/EXP helpers
+│   │       └── taskUtils.js            # Title cleaning utilities
+│   ├── index.html
+│   └── index.css                       # Design tokens + RPG utility classes
+├── requirements.txt
+├── manage.py
+└── README.md
+```
+
+---
+
+## Deployment
+
+### Render (backend)
+
+1. Connect the GitHub repository to a new Render Web Service.
+2. Set the build command: `pip install -r requirements.txt`
+3. Set the start command: `gunicorn backend.wsgi --workers 2`
+4. Add environment variables: `SECRET_KEY`, `DATABASE_URL`, `ANTHROPIC_API_KEY`, `ALLOWED_HOSTS`.
+5. After the first deploy, open the Render Shell and run:
+
+   ```bash
+   python manage.py migrate
+   ```
+
+### Vercel (frontend)
+
+1. Connect the GitHub repository to a new Vercel project.
+2. Set the root directory to `frontend`.
+3. Add the environment variable `VITE_API_URL=https://gamified-app-p9ao.onrender.com/api`.
+4. Deploy.
+
+---
+
+## Known Limitations
+
+- The Render free tier sleeps after 15 minutes of inactivity; the first request after sleep can take 30–60 seconds. The app retries automatically with exponential backoff.
+- The System companion requires a valid `ANTHROPIC_API_KEY`. Without one, the System tab will surface an error message.
+- User authentication uses session-based login without OAuth; not recommended for sensitive data.
+- No automated test suite; all verification has been manual.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE) for details.
