@@ -13,6 +13,42 @@
 
 ---
 
+## Screenshots
+
+### Welcome page
+
+![Welcome page desktop](docs/images/welcome_desktop.png)
+
+<img src="docs/images/welcome_mobile.png" alt="Welcome page mobile" width="280">
+
+---
+
+### Home — character dashboard
+
+![Home desktop](docs/images/home_desktop.png)
+
+<img src="docs/images/home_mobile.png" alt="Home mobile" width="280">
+
+*Two-column layout on desktop (portrait + STATUS window). Stacks to single column on mobile.*
+
+---
+
+### System — AI companion
+
+![System page](docs/images/system_desktop.png)
+
+*Morning Brief shows AI-generated missions. The chat input lets the host describe their current situation to receive tailored quests.*
+
+---
+
+### Quest Log — task management
+
+![Quest Log](docs/images/tasks_desktop.png)
+
+*Weekly diary grid, active quests with attribute tags, and completed-history tab.*
+
+---
+
 ## Table of Contents
 
 - [Overview](#overview)
