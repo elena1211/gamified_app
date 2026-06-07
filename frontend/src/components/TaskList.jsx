@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { cleanTaskTitle } from "../utils/taskUtils";
+import Modal from "./Modal";
 
 export default function TaskList({ tasks: initialTasks, onTaskComplete }) {
   const [tasks, setTasks] = useState(initialTasks);
+  const [pendingTask, setPendingTask] = useState(null);
 
   useEffect(() => {
     const validTasks = initialTasks.filter((task) => {
@@ -24,7 +26,20 @@ export default function TaskList({ tasks: initialTasks, onTaskComplete }) {
 
   const toggleTask = (id) => {
     const task = tasks.find((t) => t.id === id);
-    if (onTaskComplete) onTaskComplete(task);
+    if (!task) return;
+
+    // Only confirm when marking a task as complete — un-completing (to fix
+    // a mis-tap) should stay frictionless.
+    if (!task.completed) {
+      setPendingTask(task);
+    } else if (onTaskComplete) {
+      onTaskComplete(task);
+    }
+  };
+
+  const confirmComplete = () => {
+    if (pendingTask && onTaskComplete) onTaskComplete(pendingTask);
+    setPendingTask(null);
   };
 
   return (
@@ -73,6 +88,24 @@ export default function TaskList({ tasks: initialTasks, onTaskComplete }) {
           </li>
         )}
       </ul>
+
+      <Modal
+        isOpen={!!pendingTask}
+        onClose={() => setPendingTask(null)}
+        onConfirm={confirmComplete}
+        title="Complete Quest?"
+        message={
+          pendingTask
+            ? `Mark "${cleanTaskTitle(pendingTask.title)}" as complete${
+                pendingTask.reward ? ` and claim ${pendingTask.reward}` : ""
+              }?`
+            : ""
+        }
+        confirmText="Complete"
+        cancelText="Not yet"
+        type="success"
+        variant="confirmation"
+      />
     </div>
   );
 }
