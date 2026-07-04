@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from "react";
+
 const STAT_ROWS = [
   { key: "intelligence", label: "Intelligence", color: "#8B6F47" },
   { key: "discipline",   label: "Discipline",   color: "#6B4F2C" },
@@ -9,6 +11,33 @@ const STAT_ROWS = [
 
 const StatsPanel = ({ stats = {} }) => {
   const getMaxValue = (statKey) => (statKey === "stress" ? 100 : 1000);
+
+  // When a stat changes, float its delta next to the number for a moment so
+  // the gain (or loss) is visibly earned rather than silently swapped.
+  const prevStats = useRef(stats);
+  const [deltas, setDeltas] = useState({});
+  const clearTimer = useRef(null);
+
+  useEffect(() => {
+    const diffs = {};
+    for (const { key } of STAT_ROWS) {
+      const delta = (stats?.[key] || 0) - (prevStats.current?.[key] || 0);
+      if (delta !== 0) diffs[key] = delta;
+    }
+    prevStats.current = stats;
+    if (Object.keys(diffs).length > 0) {
+      // Merge rather than replace, so a change to one stat doesn't cut off
+      // another stat's delta that's still mid-animation.
+      setDeltas((prev) => ({ ...prev, ...diffs }));
+      clearTimeout(clearTimer.current);
+      clearTimer.current = setTimeout(() => setDeltas({}), 1500);
+    }
+  }, [stats]);
+
+  useEffect(() => () => clearTimeout(clearTimer.current), []);
+
+  // For stress, a decrease is the good outcome
+  const isGoodChange = (key, delta) => (key === "stress" ? delta < 0 : delta > 0);
 
   return (
     <div className="px-5 py-4">
@@ -24,7 +53,17 @@ const StatsPanel = ({ stats = {} }) => {
                 <span className="text-sm text-ink font-semibold tracking-wide">
                   {label}
                 </span>
-                <span className="text-sm text-ink-soft tabular-nums">
+                <span className="relative text-sm text-ink-soft tabular-nums">
+                  {deltas[key] !== undefined && (
+                    <span
+                      className={`float-gain absolute -top-1 right-0 text-xs font-bold ${
+                        isGoodChange(key, deltas[key]) ? "text-sage" : "text-rust"
+                      }`}
+                      aria-hidden
+                    >
+                      {deltas[key] > 0 ? `+${deltas[key]}` : deltas[key]}
+                    </span>
+                  )}
                   <span className="font-semibold text-ink">{value}</span>
                   <span className="text-ink-mute"> / {maxValue}</span>
                 </span>

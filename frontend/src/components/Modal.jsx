@@ -39,10 +39,10 @@ export default function Modal({
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4"
+      className="backdrop-enter fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4"
       style={{ zIndex: isGamePenalty ? 9999 : 10001 }}
     >
-      <div className="rpg-window max-w-sm w-full">
+      <div className="rpg-window modal-enter max-w-sm w-full">
         {showCloseButton && (
           <div className="flex justify-end px-4 pt-3">
             <button

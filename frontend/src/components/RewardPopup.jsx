@@ -27,7 +27,10 @@ export default function RewardPopup({ isVisible, onClose, taskTitle = '', reward
   const meta = ATTR_META[attribute] ?? ATTR_META.discipline;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+    <div className="backdrop-enter fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+      {/* Keeps its own showAnimation-driven transition instead of .modal-enter:
+          it needs to stay mounted (for the 5s auto-dismiss timer above) and
+          animate via a prop change, not via mount/unmount like the other modals. */}
       <div
         className={`rpg-window max-w-sm w-full text-center transition-all duration-500 ${
           showAnimation ? 'scale-100 opacity-100' : 'scale-90 opacity-0'

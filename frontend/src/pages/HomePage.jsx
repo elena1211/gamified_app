@@ -682,10 +682,46 @@ export default function HomePage({
   debugLog("Homepage about to render, loading:", loading, "error:", error);
 
   if (loading) {
+    // Skeleton mirrors the real layout so the page doesn't "jump" when data
+    // arrives — and gives the ~30 s Render cold start something to show.
     return (
-      <div className="min-h-screen paper-bg flex items-center justify-center">
-        <div className="font-display text-xl text-ink-soft tracking-wide animate-pulse">
-          Opening your diary…
+      <div
+        className="min-h-screen paper-bg pb-24"
+        role="status"
+        aria-live="polite"
+        aria-label="Opening your diary, please wait"
+      >
+        <div className="max-w-5xl mx-auto px-4 sm:px-8 py-6 sm:py-10 space-y-6">
+          <p className="text-center font-display text-lg text-ink-soft tracking-wide animate-pulse">
+            Opening your diary…
+          </p>
+          <p className="text-center text-xs text-ink-mute">
+            First visit after a while? The server can take up to 30 seconds to wake.
+          </p>
+          <div className="grid gap-6 sm:grid-cols-2">
+            <div className="rpg-window p-5 space-y-3">
+              <div className="skeleton h-20 w-20 mx-auto" />
+              <div className="skeleton h-4 w-1/2 mx-auto" />
+              <div className="skeleton h-3 w-2/3 mx-auto" />
+              <div className="skeleton h-3 w-full" />
+            </div>
+            <div className="rpg-window p-5 space-y-4">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="skeleton h-3 w-20" />
+                  <div className="skeleton h-3 flex-1" />
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rpg-window p-5 space-y-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <div className="skeleton h-4 w-4" />
+                <div className="skeleton h-4 flex-1" />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
