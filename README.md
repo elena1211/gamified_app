@@ -356,6 +356,7 @@ LevelUp_Project/
 
    ```bash
    python manage.py migrate
+   python manage.py createcachetable   # backs the API rate limiting
    ```
 
 ### Vercel (frontend)

@@ -33,10 +33,11 @@ export default function SystemPage({ onNavigateToHome, onNavigateToTaskManager, 
   }, [messages]);
 
   const sendToSystem = async (contextType = 'user_input', customMessage = null) => {
-    const msg = customMessage ?? inputText.trim();
+    // Briefs/evals ignore the message, so don't send whatever is sitting in
+    // the textarea — it could even fail the backend's length check.
+    const msg = customMessage ?? (contextType === 'user_input' ? inputText.trim() : '');
     if (contextType === 'user_input' && !msg) return;
     setLoading(true);
-    if (contextType === 'user_input') setInputText('');
 
     try {
       const { data } = await apiRequest(API_ENDPOINTS.systemChat, {
@@ -61,6 +62,8 @@ export default function SystemPage({ onNavigateToHome, onNavigateToTaskManager, 
       };
 
       setMessages(prev => [...prev, newEntry]);
+      // Clear the input only on success so a failed send keeps the draft
+      if (contextType === 'user_input') setInputText('');
 
       if (data.titles_awarded?.length > 0) {
         setNewTitles(data.titles_awarded);
@@ -70,7 +73,7 @@ export default function SystemPage({ onNavigateToHome, onNavigateToTaskManager, 
       setMessages(prev => [...prev, {
         id: Date.now(),
         message_type: 'alert',
-        content: `[SYSTEM ERROR] ${err.message}. The AI backend may be unavailable. Please try again in a moment.`,
+        content: `[SYSTEM ERROR] ${err.message}`,
         missions_issued: [],
         created_at: new Date().toISOString(),
         isNew: true,
@@ -178,6 +181,7 @@ export default function SystemPage({ onNavigateToHome, onNavigateToTaskManager, 
             onKeyDown={handleKeyDown}
             placeholder="Report your current situation to the System…"
             rows={2}
+            maxLength={1000}
             className="rpg-input flex-1 resize-none text-sm"
             disabled={loading}
           />
