@@ -6,6 +6,7 @@
 
 **Try the app:** [https://levelup-jet.vercel.app/home](https://levelup-jet.vercel.app/home)
 
+[![CI](https://github.com/elena1211/gamified_app/actions/workflows/ci.yml/badge.svg)](https://github.com/elena1211/gamified_app/actions/workflows/ci.yml)
 [![Django](https://img.shields.io/badge/Django-5.2.5-green.svg)](https://www.djangoproject.com/)
 [![React](https://img.shields.io/badge/React-19.1.0-blue.svg)](https://reactjs.org/)
 [![Python](https://img.shields.io/badge/Python-3.13-blue.svg)](https://www.python.org/)
@@ -55,6 +56,7 @@
 - [Features](#features)
 - [Tech Stack](#tech-stack)
 - [Installation](#installation)
+- [Testing](#testing)
 - [Environment Variables](#environment-variables)
 - [API Reference](#api-reference)
 - [Project Structure](#project-structure)
@@ -203,6 +205,21 @@ npm run dev
 
 The app will be available at `http://localhost:5173`.  
 The Django API runs at `http://localhost:8000/api`.
+
+---
+
+## Testing
+
+```bash
+# Backend (Django test runner)
+python manage.py test backend
+
+# Frontend (Vitest + React Testing Library)
+cd frontend
+npm test
+```
+
+Both suites run automatically on every push and pull request via [GitHub Actions](.github/workflows/ci.yml).
 
 ---
 
@@ -373,7 +390,7 @@ LevelUp_Project/
 - The Render free tier sleeps after 15 minutes of inactivity; the first request after sleep can take 30–60 seconds. The app retries automatically with exponential backoff.
 - The System companion requires a valid `ANTHROPIC_API_KEY`. Without one, the System tab will surface an error message.
 - User authentication uses session-based login without OAuth; not recommended for sensitive data.
-- No automated test suite; all verification has been manual.
+- Automated tests cover core models and API views (backend) and key components (frontend) — see [Testing](#testing). Coverage is not exhaustive.
 
 ---
 

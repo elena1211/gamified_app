@@ -99,7 +99,13 @@ DATABASES = {
     "default": dj_database_url.parse(
         DATABASE_URL,
         conn_max_age=0,
-        ssl_require=True,
+        # Only enforce SSL in production — local/CI runs (DEBUG=1) commonly
+        # point at plain sqlite or an unencrypted test database. This is a
+        # fallback only: if DATABASE_URL itself has ?sslmode=require (as the
+        # production Neon URL does), that takes precedence regardless of
+        # DEBUG, so a DEBUG=1 slip in production does not by itself turn
+        # off SSL there.
+        ssl_require=not DEBUG,
     )
 }
 
