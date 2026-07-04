@@ -2,7 +2,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.authtoken.models import Token
+from .throttles import SystemChatIPThrottle
 from django.contrib.auth import authenticate
 from django.contrib.auth.hashers import make_password
 from django.http import HttpResponse
@@ -569,6 +571,9 @@ class UserStatsView(APIView):
 class RegisterView(APIView):
     """API view for user registration"""
     permission_classes = [AllowAny]
+    # Account creation is IP-throttled: unlimited free accounts would let one
+    # client dodge every per-account rate limit (see SystemChatView).
+    throttle_scope = 'account_create'
 
     def post(self, request):
         try:
@@ -734,6 +739,9 @@ class LoginView(APIView):
 class GuestLoginView(APIView):
     """Create or retrieve a guest session and return an auth token."""
     permission_classes = [AllowAny]
+    # Same IP throttle as RegisterView — guest accounts are the cheapest way
+    # to mint fresh identities.
+    throttle_scope = 'account_create'
 
     def post(self, request):
         guest_id = (request.data.get('guest_id') or '').strip()
@@ -1538,18 +1546,49 @@ class SystemChatView(APIView):
     """
     POST /api/system/chat/
     Calls Claude API and returns a System message + missions.
-    Body: { user, message, context_type }
+    Body: { message, context_type }
     """
+    # Two throttle layers: per-account (scoped) plus per-IP, so rotating
+    # guest accounts cannot dodge the cap on this paid endpoint.
+    throttle_classes = [ScopedRateThrottle, SystemChatIPThrottle]
+    throttle_scope = 'system_chat'
+
+    # Chat input goes straight into the Claude prompt, so it must be bounded.
+    MAX_MESSAGE_LENGTH = 1000
+
+    VALID_CONTEXT_TYPES = ('morning_brief', 'evening_eval', 'user_input')
+
     def post(self, request):
         import json, os
-        try:
-            import anthropic as _anthropic
-        except ImportError:
-            return Response({'error': 'anthropic package not installed'}, status=500)
 
         user = request.user
         user_message = request.data.get('message', '')
         context_type = request.data.get('context_type', 'user_input')
+
+        if not isinstance(user_message, str):
+            return Response({'error': 'Message must be a string'}, status=400)
+        user_message = user_message.strip()
+        if len(user_message) > self.MAX_MESSAGE_LENGTH:
+            return Response(
+                {'error': f'Message too long (max {self.MAX_MESSAGE_LENGTH} characters)'},
+                status=400,
+            )
+        if context_type not in self.VALID_CONTEXT_TYPES:
+            return Response(
+                {'error': f"Invalid context_type. Expected one of: {', '.join(self.VALID_CONTEXT_TYPES)}"},
+                status=400,
+            )
+        # Briefs and evaluations ignore the message text, so empty is fine
+        # there — but an empty user_input would just waste a Claude call.
+        if context_type == 'user_input' and not user_message:
+            return Response({'error': 'Message is required'}, status=400)
+
+        # Server-side prerequisites come after request validation so clients
+        # get accurate 400s even on a misconfigured server.
+        try:
+            import anthropic as _anthropic
+        except ImportError:
+            return Response({'error': 'anthropic package not installed'}, status=500)
 
         api_key = os.environ.get('ANTHROPIC_API_KEY', '')
         if not api_key:
@@ -1573,32 +1612,49 @@ class SystemChatView(APIView):
                 raw = re.sub(r'^```\w*\n?', '', raw)
                 raw = re.sub(r'\n?```$', '', raw)
             parsed = json.loads(raw)
+            if not isinstance(parsed, dict):
+                raise ValueError('model returned non-object JSON')
         except Exception as e:
+            # Log the detail but keep it out of the response — SDK errors can
+            # include request IDs and upstream bodies the client shouldn't see.
             logger.error(f"Claude API error: {e}")
-            return Response({'error': f'AI generation failed: {str(e)}'}, status=500)
+            return Response({'error': 'AI generation failed. Please try again'}, status=500)
 
         system_message = parsed.get('system_message', '')
         missions_data = parsed.get('missions', [])
         evaluation = parsed.get('evaluation', '')
+        if not isinstance(missions_data, list):
+            missions_data = []
 
-        # Persist missions as Tasks
+        # Persist missions as Tasks. Every model-supplied field is validated
+        # or clamped — the model's output is not trusted to fit the schema.
         deadline = timezone.now() + timedelta(days=1)
         created_missions = []
         for m in missions_data:
+            if not isinstance(m, dict):
+                continue
             attr = m.get('attribute', 'discipline')
             if attr not in [c[0] for c in Task.ATTRIBUTE_CHOICES]:
                 attr = 'discipline'
+            mission_type = m.get('mission_type', 'system_generated')
+            if mission_type not in [c[0] for c in Task.MISSION_TYPE_CHOICES]:
+                mission_type = 'system_generated'
+            try:
+                difficulty = int(m.get('difficulty', 1))
+            except (TypeError, ValueError):
+                difficulty = 1
+            difficulty = max(1, min(3, difficulty))
             task = Task.objects.create(
                 user=user,
-                title=m.get('title', 'System Mission')[:150],
-                description=m.get('description', ''),
+                title=str(m.get('title') or 'System Mission')[:150],
+                description=str(m.get('description') or ''),
                 attribute=attr,
-                difficulty=max(1, min(3, int(m.get('difficulty', 1)))),
-                reward_point=max(3, min(15, int(m.get('difficulty', 1)) * 4 + 2)),
+                difficulty=difficulty,
+                reward_point=max(3, min(15, difficulty * 4 + 2)),
                 deadline=deadline,
                 is_random=False,
-                mission_type=m.get('mission_type', 'system_generated'),
-                system_flavor=m.get('flavor_text', ''),
+                mission_type=mission_type,
+                system_flavor=str(m.get('flavor_text') or ''),
             )
             created_missions.append({
                 'id': task.id,
@@ -1623,9 +1679,12 @@ class SystemChatView(APIView):
         log_content = system_message
         if evaluation:
             log_content += f'\n\n[Evaluation] {evaluation}'
+        # message_type drives the label in the chat history — 'daily_brief'
+        # renders as "Morning Brief" in SystemMessageBox.
+        log_type_map = {'morning_brief': 'daily_brief', 'evening_eval': 'evening_eval'}
         SystemLog.objects.create(
             user=user,
-            message_type=context_type if context_type in ['daily_brief', 'evening_eval', 'punishment'] else 'chat_response',
+            message_type=log_type_map.get(context_type, 'chat_response'),
             content=log_content,
             missions_issued=created_missions,
         )

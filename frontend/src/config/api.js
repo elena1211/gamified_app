@@ -87,7 +87,8 @@ export const apiRequest = async (url, options = {}) => {
         let errorMessage = `HTTP error! status: ${response.status}`;
         try {
           const errorData = await response.json();
-          errorMessage = errorData.error || errorMessage;
+          // DRF puts throttle/auth messages under "detail", our views use "error"
+          errorMessage = errorData.error || errorData.detail || errorMessage;
         } catch (parseError) {
           console.error("Failed to parse error response:", parseError);
         }

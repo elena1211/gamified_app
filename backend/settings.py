@@ -180,4 +180,33 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+    # ScopedRateThrottle only affects views that declare a throttle_scope,
+    # so regular task/stat endpoints stay unthrottled.
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.ScopedRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        # The System chat endpoint calls the Claude API, which costs money
+        # per request — capped per account AND per IP, because guest accounts
+        # are free to create and could otherwise be rotated past a per-account
+        # limit.
+        'system_chat': '15/hour',
+        'system_chat_ip': '30/hour',
+        # Account creation (register + guest login) is IP-throttled for the
+        # same reason.
+        'account_create': '10/hour',
+    },
+    # Render sits behind one reverse proxy; without this, every client would
+    # share the proxy's IP and IP throttles would lump all users together.
+    'NUM_PROXIES': 1,
+}
+
+# Throttle counters must be shared across workers and survive restarts, so
+# they live in the database rather than the default per-process memory cache.
+# Requires the cache table: python manage.py createcachetable
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'django_cache',
+    }
 }
