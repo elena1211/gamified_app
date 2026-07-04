@@ -77,6 +77,20 @@ const TIME_LIMITED_TASKS = [
   },
 ];
 
+// Time-limited quests fire on a random interval to feel like a surprise,
+// not a scheduled interruption — but how often is a surprise vs. a nuisance
+// depends heavily on how long the tab stays open. Guest sessions are almost
+// always someone trying the demo for a couple of minutes, so they get a
+// fast cadence tuned to actually trigger during that window. Registered
+// users may leave the tab open for hours of real use, so they get a cadence
+// spread out enough that an all-day session sees only a handful.
+const GUEST_INITIAL_DELAY_RANGE_MS = [10_000, 15_000]; // 10-15s after load
+const GUEST_REPEAT_RANGE_MS = [30_000, 120_000]; // 30s-2min between quests
+const REGISTERED_INITIAL_DELAY_RANGE_MS = [30 * 60_000, 90 * 60_000]; // 30-90min after load
+const REGISTERED_REPEAT_RANGE_MS = [3 * 3_600_000, 8 * 3_600_000]; // 3-8h between quests
+
+const randomInRange = ([min, max]) => Math.random() * (max - min) + min;
+
 export default function HomePage({
   currentUser,
   onNavigateToSettings,
@@ -620,9 +634,16 @@ export default function HomePage({
 
     setQuestSchedulerActive(true);
 
+    // No currentUser (shouldn't happen here, but defensively) falls back to
+    // the slower registered-user cadence, not the frequent demo one.
+    const isGuest = currentUser?.startsWith("guest_") ?? false;
+    const repeatRange = isGuest ? GUEST_REPEAT_RANGE_MS : REGISTERED_REPEAT_RANGE_MS;
+    const initialDelayRange = isGuest
+      ? GUEST_INITIAL_DELAY_RANGE_MS
+      : PRODUCTION_INITIAL_DELAY_RANGE_MS;
+
     const scheduleNextTimeLimitedTask = () => {
-      // Random interval between 30 seconds - 2 minutes (30000-120000ms) for better UX
-      const randomDelay = Math.random() * (120000 - 30000) + 30000;
+      const randomDelay = randomInRange(repeatRange);
 
       debugLog(
         `⏰ Next time-limited quest scheduled in ${Math.round(randomDelay / 1000)} seconds`,
@@ -651,8 +672,8 @@ export default function HomePage({
       return timer;
     };
 
-    // Start the first scheduled task with initial delay (10-15 seconds after page load)
-    const initialDelay = Math.random() * (15000 - 10000) + 10000;
+    // Start the first scheduled task after an initial delay
+    const initialDelay = randomInRange(initialDelayRange);
     debugLog(
       `🎮 Time-limited quest system starting, first quest in ${Math.round(initialDelay / 1000)} seconds`,
     );
