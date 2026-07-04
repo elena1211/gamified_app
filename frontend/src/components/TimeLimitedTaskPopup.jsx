@@ -44,8 +44,8 @@ export default function TimeLimitedTaskPopup({ task, onAccept, onReject, onTimeU
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[9999] p-4">
-      <div className="rpg-window max-w-sm w-full">
+    <div className="backdrop-enter fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[9999] p-4">
+      <div className="rpg-window modal-enter max-w-sm w-full">
         <div
           className="rpg-header justify-center text-sm"
           style={{ background: headerBg }}

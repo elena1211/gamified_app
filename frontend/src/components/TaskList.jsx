@@ -1,10 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { cleanTaskTitle } from "../utils/taskUtils";
 import Modal from "./Modal";
 
 export default function TaskList({ tasks: initialTasks, onTaskComplete }) {
   const [tasks, setTasks] = useState(initialTasks);
   const [pendingTask, setPendingTask] = useState(null);
+  // The task the user just completed, kept briefly so the diamond pops and
+  // the reward floats up once — then cleared.
+  const [justCompleted, setJustCompleted] = useState(null);
+  const feedbackTimer = useRef(null);
+
+  useEffect(() => () => clearTimeout(feedbackTimer.current), []);
 
   useEffect(() => {
     const validTasks = initialTasks.filter((task) => {
@@ -38,7 +44,12 @@ export default function TaskList({ tasks: initialTasks, onTaskComplete }) {
   };
 
   const confirmComplete = () => {
-    if (pendingTask && onTaskComplete) onTaskComplete(pendingTask);
+    if (pendingTask && onTaskComplete) {
+      onTaskComplete(pendingTask);
+      setJustCompleted(pendingTask);
+      clearTimeout(feedbackTimer.current);
+      feedbackTimer.current = setTimeout(() => setJustCompleted(null), 1500);
+    }
     setPendingTask(null);
   };
 
@@ -46,20 +57,32 @@ export default function TaskList({ tasks: initialTasks, onTaskComplete }) {
     <div className="px-5 py-4">
       <ul className="divide-y divide-[var(--frame)]/30">
         {tasks.map((task) => (
-          <li key={task.id}>
+          <li key={task.id} className="stagger-item">
             <button
               type="button"
               onClick={() => toggleTask(task.id)}
-              className={`w-full text-left flex items-start gap-3 py-3 px-1 transition-colors ${
+              className={`relative w-full text-left flex items-start gap-3 py-3 px-1 transition-colors ${
                 task.completed
                   ? "opacity-60"
                   : "hover:bg-[var(--paper)]/50"
               }`}
             >
               <span
-                className={`task-diamond mt-1 ${task.completed ? "checked" : ""}`}
+                className={`task-diamond mt-1 ${task.completed ? "checked" : ""} ${
+                  justCompleted?.id === task.id ? "just-checked" : ""
+                }`}
                 aria-hidden
               />
+              {/* Floats a duplicate of the permanent reward text below,
+                  timed to fade before that text settles into view. */}
+              {justCompleted?.id === task.id && justCompleted.reward && (
+                <span
+                  className="float-gain absolute right-2 top-1 text-sm font-bold text-gold"
+                  aria-hidden
+                >
+                  {justCompleted.reward}
+                </span>
+              )}
               <div className="flex-1 min-w-0">
                 <div
                   className={`text-base font-semibold leading-snug ${

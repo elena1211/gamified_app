@@ -13,8 +13,8 @@ export default function LevelUpModal({ isOpen, onClose, oldLevel, newLevel, newE
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-      <div className="rpg-window max-w-sm w-full text-center">
+    <div className="backdrop-enter fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+      <div className="rpg-window level-pulse max-w-sm w-full text-center">
         <div
           className="rpg-header justify-center text-base"
           style={{ background: 'linear-gradient(180deg, var(--accent-gold) 0%, var(--accent-gold-deep) 100%)', color: 'var(--frame-deep)' }}
