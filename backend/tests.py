@@ -8,13 +8,16 @@ Requires SECRET_KEY and DATABASE_URL to be set (see .env.example) — the
 suite doesn't touch those tables directly, Django's test runner creates and
 tears down an isolated test database around them.
 """
+import os
+from unittest import mock
+
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
 from rest_framework.authtoken.models import Token
 
 from .models import User, UserAttribute, Task, Goal
-from .views import calculate_level_from_exp, get_exp_for_level, calculate_task_exp
+from .views import calculate_level_from_exp, get_exp_for_level, calculate_task_exp, _call_ai_provider
 
 # Throttled views (RegisterView, GuestLoginView, SystemChatView) read/write
 # the throttle cache. Tests use an in-memory cache instead of the production
@@ -222,6 +225,61 @@ class TaskCompleteViewTests(TestCase):
     def test_unknown_task_id_returns_404(self):
         response = self.client.post(self.url, {"task_id": 999999}, format="json")
         self.assertEqual(response.status_code, 404)
+
+
+class AIProviderTests(TestCase):
+    """_call_ai_provider() branches on AI_PROVIDER; each branch needs its
+    own client mocked out so these run without a real API key or network call."""
+
+    @mock.patch.dict(os.environ, {}, clear=True)
+    def test_defaults_to_nvidia_and_requires_its_key(self):
+        with self.assertRaises(RuntimeError):
+            _call_ai_provider("sys", "user")
+
+    @mock.patch.dict(os.environ, {"AI_PROVIDER": "anthropic"}, clear=True)
+    def test_anthropic_provider_requires_its_key(self):
+        with self.assertRaises(RuntimeError):
+            _call_ai_provider("sys", "user")
+
+    @mock.patch.dict(os.environ, {"NVIDIA_API_KEY": "test-key"}, clear=True)
+    @mock.patch("openai.OpenAI")
+    def test_nvidia_provider_calls_openai_compatible_client(self, mock_openai_cls):
+        mock_client = mock_openai_cls.return_value
+        # Shape of a real OpenAI-compatible response: .choices[0].message.content
+        mock_client.chat.completions.create.return_value.choices = [
+            mock.Mock(message=mock.Mock(content='{"system_message": "hi"}'))
+        ]
+
+        result = _call_ai_provider("sys prompt", "user prompt")
+
+        self.assertEqual(result, '{"system_message": "hi"}')
+        mock_openai_cls.assert_called_once_with(
+            api_key="test-key", base_url="https://integrate.api.nvidia.com/v1"
+        )
+        _, kwargs = mock_client.chat.completions.create.call_args
+        self.assertEqual(
+            kwargs["messages"],
+            [
+                {"role": "system", "content": "sys prompt"},
+                {"role": "user", "content": "user prompt"},
+            ],
+        )
+
+    @mock.patch.dict(
+        os.environ, {"AI_PROVIDER": "anthropic", "ANTHROPIC_API_KEY": "test-key"}, clear=True
+    )
+    @mock.patch("anthropic.Anthropic")
+    def test_anthropic_provider_calls_claude_client(self, mock_anthropic_cls):
+        mock_client = mock_anthropic_cls.return_value
+        mock_client.messages.create.return_value.content = [mock.Mock(text="hi")]
+
+        result = _call_ai_provider("sys prompt", "user prompt")
+
+        self.assertEqual(result, "hi")
+        mock_anthropic_cls.assert_called_once_with(api_key="test-key")
+        _, kwargs = mock_client.messages.create.call_args
+        self.assertEqual(kwargs["system"], "sys prompt")
+        self.assertEqual(kwargs["messages"], [{"role": "user", "content": "user prompt"}])
 
 
 @override_settings(CACHES=TEST_CACHES)

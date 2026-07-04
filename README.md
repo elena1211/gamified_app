@@ -148,7 +148,8 @@ The System tab is a chat interface backed by the Anthropic Claude API:
 | Django REST Framework | 3.x | API layer |
 | PostgreSQL | — | Production database (Neon) |
 | SQLite | — | Local development database |
-| Anthropic Python SDK | ≥0.25.0 | Claude API integration |
+| OpenAI Python SDK | ≥1.0.0 | System companion — default provider (NVIDIA NIM, OpenAI-compatible) |
+| Anthropic Python SDK | ≥0.25.0 | System companion — optional provider (`AI_PROVIDER=anthropic`) |
 | Gunicorn | — | Production WSGI server |
 | WhiteNoise | — | Static file serving |
 
@@ -238,10 +239,13 @@ VITE_API_URL=http://127.0.0.1:8000/api
 | `SECRET_KEY` | Yes | Django secret key |
 | `DEBUG` | No | Set `False` in production |
 | `DATABASE_URL` | Production | PostgreSQL connection string (Neon) |
-| `ANTHROPIC_API_KEY` | Yes (System feature) | Claude API key — get one at [console.anthropic.com](https://console.anthropic.com) |
+| `AI_PROVIDER` | No | `nvidia` (default) or `anthropic` — selects the System companion's AI backend |
+| `NVIDIA_API_KEY` | Yes, if using the default `nvidia` provider | Free API key from [build.nvidia.com](https://build.nvidia.com) |
+| `NVIDIA_MODEL` | No | NVIDIA NIM model slug (default: `meta/llama-3.1-70b-instruct`) |
+| `ANTHROPIC_API_KEY` | Yes, if `AI_PROVIDER=anthropic` | Claude API key — get one at [console.anthropic.com](https://console.anthropic.com) |
 | `ALLOWED_HOSTS` | Production | Comma-separated list of allowed host names |
 
-> **Note:** Without `ANTHROPIC_API_KEY`, the System companion tab will return an error. All other features work without it.
+> **Note:** Without a configured AI provider key, the System companion tab will return an error. All other features work without it. The default `nvidia` provider is free (rate-limited); `anthropic` is billed per request but generally gives higher-quality output.
 
 ---
 
@@ -368,7 +372,7 @@ LevelUp_Project/
 1. Connect the GitHub repository to a new Render Web Service.
 2. Set the build command: `pip install -r requirements.txt`
 3. Set the start command: `gunicorn backend.wsgi --workers 2`
-4. Add environment variables: `SECRET_KEY`, `DATABASE_URL`, `ANTHROPIC_API_KEY`, `ALLOWED_HOSTS`.
+4. Add environment variables: `SECRET_KEY`, `DATABASE_URL`, `NVIDIA_API_KEY` (or `AI_PROVIDER=anthropic` + `ANTHROPIC_API_KEY`), `ALLOWED_HOSTS`.
 5. After the first deploy, open the Render Shell and run:
 
    ```bash
@@ -388,7 +392,8 @@ LevelUp_Project/
 ## Known Limitations
 
 - The Render free tier sleeps after 15 minutes of inactivity; the first request after sleep can take 30–60 seconds. The app retries automatically with exponential backoff.
-- The System companion requires a valid `ANTHROPIC_API_KEY`. Without one, the System tab will surface an error message.
+- The System companion requires a configured AI provider key (`NVIDIA_API_KEY` by default, or `ANTHROPIC_API_KEY` if `AI_PROVIDER=anthropic`). Without one, the System tab will surface an error message.
+- NVIDIA's free NIM API (the default provider) is rate-limited (~40 requests/minute) and positioned by NVIDIA for prototyping rather than guaranteed production traffic.
 - User authentication uses session-based login without OAuth; not recommended for sensitive data.
 - Automated tests cover core models and API views (backend) and key components (frontend) — see [Testing](#testing). Coverage is not exhaustive.
 
