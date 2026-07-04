@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef } from "react";
 import { cleanTaskTitle } from "../utils/taskUtils";
-import Modal from "./Modal";
 
 export default function TaskList({ tasks: initialTasks, onTaskComplete }) {
   const [tasks, setTasks] = useState(initialTasks);
-  const [pendingTask, setPendingTask] = useState(null);
   // The task the user just completed, kept briefly so the diamond pops and
   // the reward floats up once — then cleared.
   const [justCompleted, setJustCompleted] = useState(null);
   const feedbackTimer = useRef(null);
+  // Ids currently mid-toggle — blocks a rapid double-tap from firing
+  // onTaskComplete twice before the optimistic update re-renders this list.
+  const pendingIds = useRef(new Set());
 
   useEffect(() => () => clearTimeout(feedbackTimer.current), []);
 
@@ -30,27 +31,25 @@ export default function TaskList({ tasks: initialTasks, onTaskComplete }) {
     setTasks(validTasks);
   }, [initialTasks]);
 
-  const toggleTask = (id) => {
+  const toggleTask = async (id) => {
+    if (pendingIds.current.has(id)) return;
     const task = tasks.find((t) => t.id === id);
-    if (!task) return;
+    if (!task || !onTaskComplete) return;
 
-    // Only confirm when marking a task as complete — un-completing (to fix
-    // a mis-tap) should stay frictionless.
-    if (!task.completed) {
-      setPendingTask(task);
-    } else if (onTaskComplete) {
-      onTaskComplete(task);
+    pendingIds.current.add(id);
+    try {
+      await onTaskComplete(task);
+    } finally {
+      pendingIds.current.delete(id);
     }
-  };
 
-  const confirmComplete = () => {
-    if (pendingTask && onTaskComplete) {
-      onTaskComplete(pendingTask);
-      setJustCompleted(pendingTask);
+    // Only flash the pop/reward feedback when checking a task off, not
+    // when un-checking it to fix a mis-tap.
+    if (!task.completed) {
+      setJustCompleted(task);
       clearTimeout(feedbackTimer.current);
       feedbackTimer.current = setTimeout(() => setJustCompleted(null), 1500);
     }
-    setPendingTask(null);
   };
 
   return (
@@ -111,24 +110,6 @@ export default function TaskList({ tasks: initialTasks, onTaskComplete }) {
           </li>
         )}
       </ul>
-
-      <Modal
-        isOpen={!!pendingTask}
-        onClose={() => setPendingTask(null)}
-        onConfirm={confirmComplete}
-        title="Complete Quest?"
-        message={
-          pendingTask
-            ? `Mark "${cleanTaskTitle(pendingTask.title)}" as complete${
-                pendingTask.reward ? ` and claim ${pendingTask.reward}` : ""
-              }?`
-            : ""
-        }
-        confirmText="Complete"
-        cancelText="Not yet"
-        type="success"
-        variant="confirmation"
-      />
     </div>
   );
 }
