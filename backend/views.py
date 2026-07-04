@@ -1542,24 +1542,77 @@ def _check_and_award_titles(user) -> list:
     return awarded
 
 
+def _call_ai_provider(system_prompt, user_prompt):
+    """Call the configured AI provider and return its raw text response.
+
+    AI_PROVIDER selects the backend ('nvidia' by default, or 'anthropic').
+    NVIDIA's hosted NIM API (sign up at build.nvidia.com, calls served from
+    integrate.api.nvidia.com) is free and rate-limited rather than billed
+    per token, which is why it's the default for a guest-accessible
+    endpoint — 'anthropic' stays available as an opt-in for higher-quality
+    output once that cost is worth paying for.
+    """
+    import os
+    provider = os.environ.get('AI_PROVIDER', 'nvidia').lower()
+
+    if provider == 'anthropic':
+        try:
+            import anthropic as _anthropic
+        except ImportError:
+            raise RuntimeError('anthropic package not installed')
+        api_key = os.environ.get('ANTHROPIC_API_KEY', '')
+        if not api_key:
+            raise RuntimeError('ANTHROPIC_API_KEY not configured')
+        client = _anthropic.Anthropic(api_key=api_key)
+        response = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=1024,
+            system=system_prompt,
+            messages=[{'role': 'user', 'content': user_prompt}],
+        )
+        return response.content[0].text
+
+    # Default: NVIDIA NIM — OpenAI-compatible endpoint, free tier.
+    try:
+        from openai import OpenAI
+    except ImportError:
+        raise RuntimeError('openai package not installed')
+    api_key = os.environ.get('NVIDIA_API_KEY', '')
+    if not api_key:
+        raise RuntimeError('NVIDIA_API_KEY not configured')
+    client = OpenAI(api_key=api_key, base_url='https://integrate.api.nvidia.com/v1')
+    model = os.environ.get('NVIDIA_MODEL', 'meta/llama-3.1-70b-instruct')
+    response = client.chat.completions.create(
+        model=model,
+        max_tokens=1024,
+        messages=[
+            {'role': 'system', 'content': system_prompt},
+            {'role': 'user', 'content': user_prompt},
+        ],
+    )
+    return response.choices[0].message.content
+
+
 class SystemChatView(APIView):
     """
     POST /api/system/chat/
-    Calls Claude API and returns a System message + missions.
+    Calls the configured AI provider (see _call_ai_provider) and returns a
+    System message + missions.
     Body: { message, context_type }
     """
     # Two throttle layers: per-account (scoped) plus per-IP, so rotating
-    # guest accounts cannot dodge the cap on this paid endpoint.
+    # guest accounts cannot dodge the cap on this endpoint. Even the free
+    # NVIDIA tier is rate-limited, and the optional Anthropic path is billed.
     throttle_classes = [ScopedRateThrottle, SystemChatIPThrottle]
     throttle_scope = 'system_chat'
 
-    # Chat input goes straight into the Claude prompt, so it must be bounded.
+    # Chat input goes straight into the AI prompt, so it must be bounded.
     MAX_MESSAGE_LENGTH = 1000
 
     VALID_CONTEXT_TYPES = ('morning_brief', 'evening_eval', 'user_input')
 
     def post(self, request):
-        import json, os
+        import json
 
         user = request.user
         user_message = request.data.get('message', '')
@@ -1583,30 +1636,11 @@ class SystemChatView(APIView):
         if context_type == 'user_input' and not user_message:
             return Response({'error': 'Message is required'}, status=400)
 
-        # Server-side prerequisites come after request validation so clients
-        # get accurate 400s even on a misconfigured server.
-        try:
-            import anthropic as _anthropic
-        except ImportError:
-            return Response({'error': 'anthropic package not installed'}, status=500)
-
-        api_key = os.environ.get('ANTHROPIC_API_KEY', '')
-        if not api_key:
-            return Response({'error': 'ANTHROPIC_API_KEY not configured'}, status=500)
-
-        client = _anthropic.Anthropic(api_key=api_key)
-
         system_prompt = _build_system_prompt(user.system_personality or 'logical')
         user_prompt = _build_user_prompt(user, context_type, user_message)
 
         try:
-            response = client.messages.create(
-                model='claude-haiku-4-5-20251001',
-                max_tokens=1024,
-                system=system_prompt,
-                messages=[{'role': 'user', 'content': user_prompt}],
-            )
-            raw = response.content[0].text.strip()
+            raw = _call_ai_provider(system_prompt, user_prompt).strip()
             # Strip markdown fences if present
             if raw.startswith('```'):
                 raw = re.sub(r'^```\w*\n?', '', raw)
@@ -1617,7 +1651,7 @@ class SystemChatView(APIView):
         except Exception as e:
             # Log the detail but keep it out of the response — SDK errors can
             # include request IDs and upstream bodies the client shouldn't see.
-            logger.error(f"Claude API error: {e}")
+            logger.error(f"AI provider error: {e}")
             return Response({'error': 'AI generation failed. Please try again'}, status=500)
 
         system_message = parsed.get('system_message', '')
@@ -1647,14 +1681,16 @@ class SystemChatView(APIView):
             task = Task.objects.create(
                 user=user,
                 title=str(m.get('title') or 'System Mission')[:150],
-                description=str(m.get('description') or ''),
+                # Capped like title — an open model is more likely than Claude
+                # to ignore the "one sentence" instruction in the prompt.
+                description=str(m.get('description') or '')[:500],
                 attribute=attr,
                 difficulty=difficulty,
                 reward_point=max(3, min(15, difficulty * 4 + 2)),
                 deadline=deadline,
                 is_random=False,
                 mission_type=mission_type,
-                system_flavor=str(m.get('flavor_text') or ''),
+                system_flavor=str(m.get('flavor_text') or '')[:500],
             )
             created_missions.append({
                 'id': task.id,
