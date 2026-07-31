@@ -375,6 +375,17 @@ class TaskDetailView(APIView):
         except Task.DoesNotExist:
             return Response({"error": "Task not found"}, status=404)
 
+    def delete(self, request, pk):
+        try:
+            task = Task.objects.get(pk=pk, user=request.user)
+        except Task.DoesNotExist:
+            return Response({"error": "Task not found"}, status=404)
+
+        # Cascades to this task's UserTaskLog entries, so completion history
+        # and weekly stats stop counting a deleted task.
+        task.delete()
+        return Response({"success": True})
+
 class GoalView(APIView):
     """API view for user's main goal"""
 
