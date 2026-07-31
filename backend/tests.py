@@ -235,6 +235,155 @@ class TaskDeleteTests(TestCase):
         self.assertFalse(UserTaskLog.objects.filter(pk=log.pk).exists())
 
 
+class TaskEditTests(TestCase):
+    def setUp(self):
+        from django.utils import timezone
+        from datetime import timedelta
+
+        self.user = User.objects.create_user(username="editor", password="pw12345")
+        self.token = Token.objects.create(user=self.user)
+        self.client = APIClient()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
+        self.task = Task.objects.create(
+            user=self.user, title="Original title", description="Original tip",
+            attribute="discipline", difficulty=1, reward_point=10,
+            deadline=timezone.now() + timedelta(days=1),
+        )
+        self.url = reverse("task-detail", args=[self.task.id])
+
+    def test_editing_own_task_persists_changes(self):
+        response = self.client.put(self.url, {
+            "title": "Updated title",
+            "description": "Updated tip",
+            "reward_point": 4,
+            "difficulty": 3,
+            "attribute": "wellness",
+        }, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["reward"], "+2 Wellness, +2 Discipline")
+
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.title, "Updated title")
+        self.assertEqual(self.task.description, "Updated tip")
+        self.assertEqual(self.task.reward_point, 4)
+        self.assertEqual(self.task.difficulty, 3)
+        self.assertEqual(self.task.attribute, "wellness")
+
+    def test_partial_update_only_changes_given_fields(self):
+        response = self.client.put(self.url, {"title": "Only title changed"}, format="json")
+        self.assertEqual(response.status_code, 200)
+
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.title, "Only title changed")
+        self.assertEqual(self.task.description, "Original tip")
+        self.assertEqual(self.task.reward_point, 10)
+
+    def test_rejects_empty_title(self):
+        response = self.client.put(self.url, {"title": "   "}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.title, "Original title")
+
+    def test_rejects_null_title_instead_of_crashing(self):
+        response = self.client.put(self.url, {"title": None}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.title, "Original title")
+
+    def test_rejects_invalid_attribute(self):
+        response = self.client.put(self.url, {"attribute": "not-a-real-attribute"}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.attribute, "discipline")
+
+    def test_rejects_out_of_range_reward_point(self):
+        response = self.client.put(self.url, {"reward_point": 999}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.reward_point, 10)
+
+    def test_rejects_out_of_range_difficulty(self):
+        response = self.client.put(self.url, {"difficulty": 0}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.difficulty, 1)
+
+    def test_cannot_edit_punishment_task(self):
+        from django.utils import timezone
+
+        punishment = Task.objects.create(
+            user=self.user, title="Punishment quest", description="", attribute="discipline",
+            difficulty=2, reward_point=8, mission_type="punishment",
+            deadline=timezone.now(),
+        )
+        response = self.client.put(
+            reverse("task-detail", args=[punishment.id]),
+            {"reward_point": 1}, format="json",
+        )
+        self.assertEqual(response.status_code, 403)
+        punishment.refresh_from_db()
+        self.assertEqual(punishment.reward_point, 8)
+
+    def test_cannot_edit_time_limited_task(self):
+        from django.utils import timezone
+
+        timed = Task.objects.create(
+            user=self.user, title="Time-limited quest", description="", attribute="discipline",
+            is_random=True, deadline=timezone.now(),
+        )
+        response = self.client.put(
+            reverse("task-detail", args=[timed.id]),
+            {"title": "Renamed"}, format="json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_cannot_change_reward_fields_after_completing_today(self):
+        from django.utils import timezone
+        from .models import UserTaskLog
+
+        UserTaskLog.objects.create(
+            user=self.user, task=self.task, status="completed",
+            completed_at=timezone.now(),
+        )
+        response = self.client.put(self.url, {"reward_point": 3}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.reward_point, 10)
+
+    def test_can_still_rename_a_task_completed_today(self):
+        from django.utils import timezone
+        from .models import UserTaskLog
+
+        UserTaskLog.objects.create(
+            user=self.user, task=self.task, status="completed",
+            completed_at=timezone.now(),
+        )
+        response = self.client.put(self.url, {"title": "Renamed after completion"}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.title, "Renamed after completion")
+
+    def test_cannot_edit_another_users_task(self):
+        other = User.objects.create_user(username="editor-victim", password="pw12345")
+        other_task = Task.objects.create(
+            user=other, title="Not yours", description="", attribute="discipline",
+            deadline=self.task.deadline,
+        )
+        response = self.client.put(
+            reverse("task-detail", args=[other_task.id]),
+            {"title": "Hijacked"}, format="json",
+        )
+        self.assertEqual(response.status_code, 404)
+        other_task.refresh_from_db()
+        self.assertEqual(other_task.title, "Not yours")
+
+    def test_requires_authentication(self):
+        response = APIClient().put(self.url, {"title": "Hijacked"}, format="json")
+        self.assertEqual(response.status_code, 401)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.title, "Original title")
+
+
 class TaskCompleteViewTests(TestCase):
     def setUp(self):
         from django.utils import timezone

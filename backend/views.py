@@ -361,6 +361,8 @@ class TaskDetailView(APIView):
             task = Task.objects.get(pk=pk, user=request.user)
             reward_attr = task.attribute.title()
             reward_str = f"+{task.reward_point//2} {reward_attr}"
+            if task.difficulty > 1:
+                reward_str += f", +{task.difficulty-1} Discipline"
 
             task_data = {
                 "id": task.id,
@@ -374,6 +376,89 @@ class TaskDetailView(APIView):
             return Response(task_data)
         except Task.DoesNotExist:
             return Response({"error": "Task not found"}, status=404)
+
+    def put(self, request, pk):
+        try:
+            task = Task.objects.get(pk=pk, user=request.user)
+        except Task.DoesNotExist:
+            return Response({"error": "Task not found"}, status=404)
+
+        # Punishment/system-generated quests are system-controlled — letting a
+        # user edit their own penalty would defeat the reward/risk loop.
+        if task.mission_type in ('punishment', 'system_generated') or task.is_random:
+            return Response({"error": "This quest cannot be edited"}, status=403)
+
+        reward_fields = {'reward_point', 'difficulty', 'attribute'}
+        if reward_fields & set(request.data.keys()):
+            # The reward string is recomputed from the task's current fields
+            # whenever it's uncompleted, not snapshotted at completion time —
+            # changing them while today's completion is still in effect would
+            # desync the XP/attribute reversal from what was actually granted.
+            completed_today = UserTaskLog.objects.filter(
+                task=task, user=request.user, status='completed',
+                completed_at__date=date.today()
+            ).exists()
+            if completed_today:
+                return Response(
+                    {"error": "Uncomplete this quest before changing its reward, difficulty or attribute"},
+                    status=400
+                )
+
+        if 'title' in request.data:
+            title = (request.data.get('title') or '').strip()
+            if not title:
+                return Response({"error": "Title cannot be empty"}, status=400)
+            if len(title) > 150:
+                return Response({"error": "Title must be 150 characters or fewer"}, status=400)
+            task.title = title
+
+        if 'description' in request.data:
+            description = request.data.get('description') or ''
+            if len(description) > 500:
+                return Response({"error": "Description must be 500 characters or fewer"}, status=400)
+            task.description = description
+
+        if 'reward_point' in request.data:
+            try:
+                reward_point = int(request.data.get('reward_point'))
+            except (TypeError, ValueError):
+                return Response({"error": "reward_point must be a number"}, status=400)
+            if not 1 <= reward_point <= 5:
+                return Response({"error": "reward_point must be between 1 and 5"}, status=400)
+            task.reward_point = reward_point
+
+        if 'difficulty' in request.data:
+            try:
+                difficulty = int(request.data.get('difficulty'))
+            except (TypeError, ValueError):
+                return Response({"error": "difficulty must be a number"}, status=400)
+            if not 1 <= difficulty <= 3:
+                return Response({"error": "difficulty must be between 1 and 3"}, status=400)
+            task.difficulty = difficulty
+
+        if 'attribute' in request.data:
+            attribute = request.data.get('attribute')
+            if attribute not in dict(Task.ATTRIBUTE_CHOICES):
+                return Response({"error": "Invalid attribute"}, status=400)
+            task.attribute = attribute
+
+        task.save()
+
+        reward_attr = task.attribute.title()
+        reward_str = f"+{task.reward_point//2} {reward_attr}"
+        if task.difficulty > 1:
+            reward_str += f", +{task.difficulty-1} Discipline"
+
+        task_data = {
+            "id": task.id,
+            "title": task.title,
+            "tip": task.description,
+            "reward": reward_str,
+            "completed": False,
+            "difficulty": task.difficulty,
+            "attribute": task.attribute
+        }
+        return Response(task_data)
 
     def delete(self, request, pk):
         try:

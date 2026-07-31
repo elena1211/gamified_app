@@ -210,6 +210,9 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
   // Ids with a DELETE in flight — blocks a double-click from sending a second
   // request that would 404 and show a misleading failure alert.
   const deletingIds = useRef(new Set());
+  // Ids with a PUT in flight — blocks a double Save click from firing a
+  // second concurrent edit request for the same task.
+  const savingIds = useRef(new Set());
 
   const [newTask, setNewTask] = useState({
     title: '',
@@ -361,14 +364,28 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
   };
 
   const handleEditTask = async (taskId, updatedData) => {
+    if (savingIds.current.has(taskId)) return;
+    savingIds.current.add(taskId);
     try {
-      updateTasksState(tasks.map(task =>
+      // Persist first, then update the list — a locally-only edit used to
+      // reappear as the pre-edit version on the next reload.
+      await apiRequest(`${API_ENDPOINTS.tasks}${taskId}/`, {
+        method: 'PUT',
+        body: JSON.stringify(updatedData),
+      });
+      // Functional update — a concurrent delete of another task (which reads
+      // live state) could otherwise be clobbered by this request resolving
+      // against the stale `tasks` snapshot captured when editing started.
+      updateTasksState(prev => prev.map(task =>
         task.id === taskId ? { ...task, ...updatedData } : task
       ));
       setEditingTask(null);
       setEditData(null);
     } catch (error) {
       console.error('Error editing task:', error);
+      alert(`Failed to save changes: ${error.message}. Please try again.`);
+    } finally {
+      savingIds.current.delete(taskId);
     }
   };
 
