@@ -186,6 +186,55 @@ class TaskListViewTests(TestCase):
         self.assertNotIn("Not mine", titles)
 
 
+class TaskDeleteTests(TestCase):
+    def setUp(self):
+        from django.utils import timezone
+        from datetime import timedelta
+
+        self.user = User.objects.create_user(username="deleter", password="pw12345")
+        self.token = Token.objects.create(user=self.user)
+        self.client = APIClient()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
+        self.task = Task.objects.create(
+            user=self.user, title="Doomed task", description="", attribute="discipline",
+            deadline=timezone.now() + timedelta(days=1),
+        )
+        self.url = reverse("task-detail", args=[self.task.id])
+
+    def test_deleting_own_task_removes_it(self):
+        response = self.client.delete(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Task.objects.filter(id=self.task.id).exists())
+
+    def test_cannot_delete_another_users_task(self):
+        other = User.objects.create_user(username="victim", password="pw12345")
+        other_task = Task.objects.create(
+            user=other, title="Not yours", description="", attribute="discipline",
+            deadline=self.task.deadline,
+        )
+        response = self.client.delete(reverse("task-detail", args=[other_task.id]))
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Task.objects.filter(id=other_task.id).exists())
+
+    def test_requires_authentication(self):
+        response = APIClient().delete(self.url)
+        self.assertEqual(response.status_code, 401)
+        self.assertTrue(Task.objects.filter(id=self.task.id).exists())
+
+    def test_deleting_a_completed_task_removes_its_history(self):
+        from django.utils import timezone
+        from .models import UserTaskLog
+
+        log = UserTaskLog.objects.create(
+            user=self.user, task=self.task, status="completed",
+            completed_at=timezone.now(),
+        )
+        self.client.delete(self.url)
+        # Assert by the log's own pk — the row must be gone entirely
+        # (CASCADE), not merely detached from the task.
+        self.assertFalse(UserTaskLog.objects.filter(pk=log.pk).exists())
+
+
 class TaskCompleteViewTests(TestCase):
     def setUp(self):
         from django.utils import timezone

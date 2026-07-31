@@ -207,6 +207,9 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
   });
 
   const addFormRef = useRef(null);
+  // Ids with a DELETE in flight — blocks a double-click from sending a second
+  // request that would 404 and show a misleading failure alert.
+  const deletingIds = useRef(new Set());
 
   const [newTask, setNewTask] = useState({
     title: '',
@@ -479,12 +482,27 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
       e.stopPropagation();
     }
 
+    if (deletingIds.current.has(taskId)) return;
     if (!confirm('Are you sure you want to delete this task?')) return;
 
+    deletingIds.current.add(taskId);
     try {
+      // Persist first, then update the list — a delete that only touched
+      // local state used to reappear on the next reload.
+      await apiRequest(`${API_ENDPOINTS.tasks}${taskId}/`, { method: 'DELETE' });
       updateTasksState(tasks.filter(task => task.id !== taskId));
     } catch (error) {
-      console.error('Error deleting task:', error);
+      // "Task not found" means it's already gone server-side (e.g. the
+      // cold-start retry resent a DELETE that had in fact succeeded) —
+      // that's a completed deletion, not a failure.
+      if (error.message === 'Task not found') {
+        updateTasksState(tasks.filter(task => task.id !== taskId));
+      } else {
+        console.error('Error deleting task:', error);
+        alert(`Failed to delete task: ${error.message}. Please try again.`);
+      }
+    } finally {
+      deletingIds.current.delete(taskId);
     }
   };
 
