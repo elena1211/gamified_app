@@ -640,7 +640,7 @@ export default function HomePage({
     const repeatRange = isGuest ? GUEST_REPEAT_RANGE_MS : REGISTERED_REPEAT_RANGE_MS;
     const initialDelayRange = isGuest
       ? GUEST_INITIAL_DELAY_RANGE_MS
-      : PRODUCTION_INITIAL_DELAY_RANGE_MS;
+      : REGISTERED_INITIAL_DELAY_RANGE_MS;
 
     const scheduleNextTimeLimitedTask = () => {
       const randomDelay = randomInRange(repeatRange);
@@ -919,8 +919,18 @@ export default function HomePage({
         />
 
         {/* Popups */}
+        {/* CSS-hidden (not unmounted) while showDismissConfirm is open.
+            Otherwise this stays mounted underneath the confirm dialog with
+            its Accept/Decline buttons still in the DOM and focusable, so Tab
+            or a stray click could act on the very quest being declined —
+            but unmounting it instead would reset TimeLimitedTaskPopup's own
+            phase/timeLeft state, so a user who's mid-countdown, clicks Give
+            Up, then Continue Quest would see the popup jump back to the
+            initial "Accept Challenge" screen instead of resuming. display:
+            none removes it from layout, focus and the a11y tree without
+            touching component state. */}
         {showTimeLimitedTask && currentTimeLimitedTask && (
-          <div style={{ position: "relative", zIndex: 9999 }}>
+          <div style={{ position: "relative", zIndex: 9999, display: showDismissConfirm ? "none" : undefined }}>
             <TimeLimitedTaskPopup
               task={currentTimeLimitedTask}
               onAccept={handleAcceptTask}
