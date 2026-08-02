@@ -186,6 +186,103 @@ class TaskListViewTests(TestCase):
         self.assertNotIn("Not mine", titles)
 
 
+class TaskCreateValidationTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="creator", password="pw12345")
+        self.token = Token.objects.create(user=self.user)
+        self.client = APIClient()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
+        self.url = reverse("task-list")
+
+    def test_valid_task_is_created(self):
+        response = self.client.post(self.url, {
+            "title": "Read a chapter",
+            "description": "Any nonfiction chapter",
+            "reward_point": 4,
+            "difficulty": 2,
+            "attribute": "intelligence",
+        }, format="json")
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["title"], "Read a chapter")
+        self.assertEqual(response.data["difficulty"], 2)
+        self.assertEqual(response.data["attribute"], "intelligence")
+
+        task = Task.objects.get(user=self.user, title="Read a chapter")
+        self.assertEqual(task.reward_point, 4)
+        self.assertEqual(task.difficulty, 2)
+
+    def test_rejects_empty_title(self):
+        response = self.client.post(self.url, {"title": "   "}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Task.objects.filter(user=self.user).exists())
+
+    def test_rejects_oversized_title(self):
+        response = self.client.post(self.url, {"title": "x" * 151}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Task.objects.filter(user=self.user).exists())
+
+    def test_rejects_oversized_description(self):
+        response = self.client.post(self.url, {
+            "title": "Valid title",
+            "description": "x" * 501,
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Task.objects.filter(user=self.user).exists())
+
+    def test_rejects_out_of_range_reward_point(self):
+        response = self.client.post(self.url, {"title": "Valid title", "reward_point": 999}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Task.objects.filter(user=self.user).exists())
+
+    def test_rejects_out_of_range_difficulty(self):
+        response = self.client.post(self.url, {"title": "Valid title", "difficulty": 0}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Task.objects.filter(user=self.user).exists())
+
+    def test_rejects_invalid_attribute(self):
+        response = self.client.post(self.url, {"title": "Valid title", "attribute": "not-a-real-attribute"}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Task.objects.filter(user=self.user).exists())
+
+    def test_requires_authentication(self):
+        response = APIClient().post(self.url, {"title": "Valid title"}, format="json")
+        self.assertEqual(response.status_code, 401)
+        self.assertFalse(Task.objects.filter(user=self.user).exists())
+
+    def test_omitted_fields_fall_back_to_defaults(self):
+        response = self.client.post(self.url, {"title": "Bare minimum quest"}, format="json")
+        self.assertEqual(response.status_code, 201)
+        task = Task.objects.get(user=self.user, title="Bare minimum quest")
+        self.assertEqual(task.reward_point, 3)
+        self.assertEqual(task.difficulty, 1)
+        self.assertEqual(task.attribute, "discipline")
+
+    def test_blank_reward_point_and_difficulty_fall_back_to_defaults(self):
+        # The create form's number input can be cleared to an empty string
+        # rather than omitting the key entirely — must not 400.
+        response = self.client.post(self.url, {
+            "title": "Cleared fields quest", "reward_point": "", "difficulty": "",
+        }, format="json")
+        self.assertEqual(response.status_code, 201)
+        task = Task.objects.get(user=self.user, title="Cleared fields quest")
+        self.assertEqual(task.reward_point, 3)
+        self.assertEqual(task.difficulty, 1)
+
+    def test_title_and_description_at_exact_length_limit_are_accepted(self):
+        response = self.client.post(self.url, {
+            "title": "x" * 150, "description": "y" * 500,
+        }, format="json")
+        self.assertEqual(response.status_code, 201)
+
+    def test_client_supplied_deadline_is_ignored(self):
+        response = self.client.post(self.url, {
+            "title": "Deadline test quest", "deadline": "not-a-real-date",
+        }, format="json")
+        self.assertEqual(response.status_code, 201)
+        task = Task.objects.get(user=self.user, title="Deadline test quest")
+        self.assertIsNotNone(task.deadline)
+
+
 class TaskDeleteTests(TestCase):
     def setUp(self):
         from django.utils import timezone
