@@ -5,6 +5,7 @@ import BottomNav from '../components/BottomNav';
 import RewardPopup from '../components/RewardPopup';
 import WeeklyTaskStats from '../components/WeeklyTaskStats';
 import LevelUpModal from '../components/LevelUpModal';
+import Modal from '../components/Modal';
 import { useAppContext } from '../context/AppContext';
 import { getAvatarStage } from '../utils/avatar';
 import { debugLog } from '../utils/logger';
@@ -119,6 +120,7 @@ const TaskCard = ({
                 className="p-1 rounded transition-colors hover:bg-[var(--paper-shadow)]"
                 style={{ color: 'var(--accent-sage)' }}
                 title="Complete quest"
+                aria-label="Complete quest"
               >
                 <CheckCircle size={16} />
               </button>
@@ -128,15 +130,17 @@ const TaskCard = ({
                 className="p-1 rounded transition-colors hover:bg-[var(--paper-shadow)]"
                 style={{ color: 'var(--ink-soft)' }}
                 title="Edit quest"
+                aria-label="Edit quest"
               >
                 <Edit size={16} />
               </button>
               <button
                 type="button"
-                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(task.id, e); }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(task, e); }}
                 className="p-1 rounded transition-colors hover:bg-[var(--paper-shadow)]"
                 style={{ color: 'var(--accent-rust)' }}
                 title="Delete quest"
+                aria-label="Delete quest"
               >
                 <Trash2 size={16} />
               </button>
@@ -187,6 +191,12 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
   const [activeTab, setActiveTab] = useState('active');
   const [refreshTrigger, setRefreshTrigger] = useState(0); // Add refresh trigger for weekly stats
 
+  // In-app confirmation for Complete/Delete — replaces window.confirm(),
+  // which is a native browser dialog that looks nothing like the rest of
+  // the app and blocks all page interaction (including unrelated buttons)
+  // until it's dismissed, easy to miss and mistake for the page being stuck.
+  const [confirmModal, setConfirmModal] = useState(null); // { type: 'complete' | 'delete', task }
+
   // RewardPopup state
   const [showRewardPopup, setShowRewardPopup] = useState(false);
   const [rewardData, setRewardData] = useState({
@@ -210,6 +220,9 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
   // Ids with a DELETE in flight — blocks a double-click from sending a second
   // request that would 404 and show a misleading failure alert.
   const deletingIds = useRef(new Set());
+  // Ids with a complete POST in flight — same double-submit guard as
+  // deletingIds, needed now that the confirm modal doesn't block the thread.
+  const completingIds = useRef(new Set());
   // Ids with a PUT in flight — blocks a double Save click from firing a
   // second concurrent edit request for the same task.
   const savingIds = useRef(new Set());
@@ -388,17 +401,26 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
     }
   };
 
-  const handleCompleteTask = async (task, e) => {
+  const handleCompleteTask = (task, e) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
+    if (completingIds.current.has(task.id)) return;
+    setConfirmModal({ type: 'complete', task });
+  };
 
-    if (!confirm(`Complete "${cleanTaskTitle(task.title)}"?`)) return;
-
+  const performCompleteTask = async (task) => {
+    // The confirm modal closes as soon as it's clicked (unlike the old
+    // blocking window.confirm()), so a fast second click could otherwise
+    // fire a second POST while the first is still in flight — and the
+    // backend endpoint toggles completion on/off, so a second call doesn't
+    // just double the reward, it silently reverses it server-side while the
+    // UI shows two "completed" entries.
+    if (completingIds.current.has(task.id)) return;
+    completingIds.current.add(task.id);
     try {
       debugLog('🎯 Attempting to complete task:', task.id, task.title);
-      console.log('🔗 API endpoint:', API_ENDPOINTS.taskComplete);
 
       const response = await fetch(API_ENDPOINTS.taskComplete, {
         method: 'POST',
@@ -466,12 +488,14 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
         });
         setShowRewardPopup(true);
 
-        // Update task lists - move task from active to completed
-        const updatedActiveTasks = tasks.filter(t => t.id !== task.id);
-        const updatedCompletedTasks = [completedTask, ...completedTasks];
-
-        updateTasksState(updatedActiveTasks);
-        updateCompletedTasksState(updatedCompletedTasks);
+        // Update task lists - move task from active to completed.
+        // Functional updates — this fires from an unawaited async call
+        // (the confirm modal closes immediately), so another task's
+        // complete/delete could resolve first and change `tasks`/
+        // `completedTasks` before this one finishes; reading the closure
+        // value here would silently clobber that change.
+        updateTasksState(prev => prev.filter(t => t.id !== task.id));
+        updateCompletedTasksState(prev => [completedTask, ...prev]);
 
         debugLog('✅ Task completed successfully, refreshing weekly stats in 0.5s');
 
@@ -482,37 +506,40 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
         }, 500);
 
         debugLog('📈 Applied stat changes:', rewardString);
-        debugLog('📋 Updated task lists - Active:', updatedActiveTasks.length, 'Completed:', updatedCompletedTasks.length);
       } else {
         throw new Error(data.message || 'Failed to complete task');
       }
     } catch (error) {
-      console.error('❌ Error completing task:', error);
+      console.error('Error completing task:', error);
       alert(`Failed to complete task: ${error.message}. Please try again.`);
+    } finally {
+      completingIds.current.delete(task.id);
     }
   };
 
-  const handleDeleteTask = async (taskId, e) => {
+  const handleDeleteTask = (task, e) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
+    if (deletingIds.current.has(task.id)) return;
+    setConfirmModal({ type: 'delete', task });
+  };
 
+  const performDeleteTask = async (taskId) => {
     if (deletingIds.current.has(taskId)) return;
-    if (!confirm('Are you sure you want to delete this task?')) return;
-
     deletingIds.current.add(taskId);
     try {
       // Persist first, then update the list — a delete that only touched
       // local state used to reappear on the next reload.
       await apiRequest(`${API_ENDPOINTS.tasks}${taskId}/`, { method: 'DELETE' });
-      updateTasksState(tasks.filter(task => task.id !== taskId));
+      updateTasksState(prev => prev.filter(task => task.id !== taskId));
     } catch (error) {
       // "Task not found" means it's already gone server-side (e.g. the
       // cold-start retry resent a DELETE that had in fact succeeded) —
       // that's a completed deletion, not a failure.
       if (error.message === 'Task not found') {
-        updateTasksState(tasks.filter(task => task.id !== taskId));
+        updateTasksState(prev => prev.filter(task => task.id !== taskId));
       } else {
         console.error('Error deleting task:', error);
         alert(`Failed to delete task: ${error.message}. Please try again.`);
@@ -761,6 +788,27 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
         oldStage={levelUpData.oldStage}
         newStage={levelUpData.newStage}
       />
+
+      {/* Complete/Delete confirmation — in-app modal instead of window.confirm() */}
+      {confirmModal && (
+        <Modal
+          isOpen={true}
+          onClose={() => setConfirmModal(null)}
+          onConfirm={() => {
+            if (confirmModal.type === 'complete') performCompleteTask(confirmModal.task);
+            else performDeleteTask(confirmModal.task.id);
+            setConfirmModal(null);
+          }}
+          title={confirmModal.type === 'complete' ? 'Complete Quest?' : 'Delete Quest?'}
+          message={
+            confirmModal.type === 'complete'
+              ? `Complete "${cleanTaskTitle(confirmModal.task.title)}"?`
+              : `Are you sure you want to delete "${cleanTaskTitle(confirmModal.task.title)}"?`
+          }
+          confirmText={confirmModal.type === 'complete' ? 'Complete' : 'Delete'}
+          type={confirmModal.type === 'complete' ? 'success' : 'danger'}
+        />
+      )}
     </div>
   );
 }
