@@ -213,6 +213,9 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
   // Ids with a PUT in flight — blocks a double Save click from firing a
   // second concurrent edit request for the same task.
   const savingIds = useRef(new Set());
+  // True while a POST to create a task is in flight — blocks a double
+  // "Create Quest" click from creating two identical tasks.
+  const addingTask = useRef(false);
 
   const [newTask, setNewTask] = useState({
     title: '',
@@ -316,30 +319,24 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
   }, [currentUser]); // Remove function dependencies to prevent infinite re-renders
 
   const handleAddTask = async (e) => {
-    console.log('🔘 Create Task button clicked!');
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
 
-    if (!newTask.title.trim()) {
-      console.log('⚠️ Task title is empty');
+    if (!newTask.title.trim() || addingTask.current) {
       return;
     }
 
+    addingTask.current = true;
     try {
-      const response = await fetch(API_ENDPOINTS.tasks, {
+      // apiRequest (not raw fetch) so a validation failure's specific
+      // message (e.g. "Title must be 150 characters or fewer") reaches the
+      // alert below instead of a bare HTTP status code.
+      const { data: createdTask } = await apiRequest(API_ENDPOINTS.tasks, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(newTask),
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const createdTask = await response.json();
-      console.log('✅ Task created successfully:', createdTask);
 
       // Transform the response to match our component structure
       const transformedTask = {
@@ -351,15 +348,17 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
         attribute: createdTask.attribute || 'discipline'
       };
 
-      updateTasksState([...tasks, transformedTask]);
+      updateTasksState(prev => [...prev, transformedTask]);
       setNewTask({ title: '', description: '', reward_point: '', difficulty: 1, attribute: 'discipline' });
       setShowAddForm(false);
 
     } catch (error) {
-      console.error('❌ Error adding task:', error);
+      console.error('Error adding task:', error);
       // Show user-friendly error message
       alert(`Error creating task: ${error.message}`);
       // Don't hide the form so user can try again
+    } finally {
+      addingTask.current = false;
     }
   };
 
@@ -624,6 +623,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
                     onChange={(e) => setNewTask(prev => ({ ...prev, title: e.target.value }))}
                     className="rpg-input"
                     placeholder="Quest title (e.g., 30-minute workout)"
+                    maxLength={150}
                   />
                   <input
                     type="text"
@@ -631,6 +631,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
                     onChange={(e) => setNewTask(prev => ({ ...prev, description: e.target.value }))}
                     className="rpg-input"
                     placeholder="Description or tip"
+                    maxLength={500}
                   />
                   <input
                     type="number"

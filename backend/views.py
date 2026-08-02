@@ -317,19 +317,57 @@ class TaskListView(APIView):
     def post(self, request):
         """Create a new task"""
         user = request.user
-        try:
 
-            # Set default deadline to 24 hours from now
-            default_deadline = datetime.now() + timedelta(days=1)
+        title = (request.data.get('title') or '').strip()
+        if not title:
+            return Response({"error": "Title cannot be empty"}, status=400)
+        if len(title) > 150:
+            return Response({"error": "Title must be 150 characters or fewer"}, status=400)
+
+        description = request.data.get('description') or ''
+        if len(description) > 500:
+            return Response({"error": "Description must be 500 characters or fewer"}, status=400)
+
+        # The create form's reward-point field can be submitted as an empty
+        # string (it allows clearing the input), which is present-but-falsy —
+        # `.get(key, default)` only falls back on a *missing* key, so an
+        # explicit '' would otherwise reach int('') and 400 instead of
+        # applying the documented default.
+        reward_point_raw = request.data.get('reward_point')
+        try:
+            reward_point = 3 if reward_point_raw in (None, '') else int(reward_point_raw)
+        except (TypeError, ValueError):
+            return Response({"error": "reward_point must be a number"}, status=400)
+        if not 1 <= reward_point <= 5:
+            return Response({"error": "reward_point must be between 1 and 5"}, status=400)
+
+        difficulty_raw = request.data.get('difficulty')
+        try:
+            difficulty = 1 if difficulty_raw in (None, '') else int(difficulty_raw)
+        except (TypeError, ValueError):
+            return Response({"error": "difficulty must be a number"}, status=400)
+        if not 1 <= difficulty <= 3:
+            return Response({"error": "difficulty must be between 1 and 3"}, status=400)
+
+        attribute = request.data.get('attribute') or 'discipline'
+        if attribute not in dict(Task.ATTRIBUTE_CHOICES):
+            return Response({"error": "Invalid attribute"}, status=400)
+
+        try:
+            # Deadline isn't client-writable (mirrors TaskDetailView.put,
+            # which doesn't expose it for editing either) — always 24 hours
+            # from creation, so a malformed value can't reach Task.objects.create
+            # and bubble a raw exception string back to the client.
+            deadline = datetime.now() + timedelta(days=1)
 
             # Create new task
             task = Task.objects.create(
-                title=request.data.get('title', ''),
-                description=request.data.get('description', ''),
-                reward_point=int(request.data.get('reward_point', 3)),
-                difficulty=int(request.data.get('difficulty', 1)),
-                attribute=request.data.get('attribute', 'discipline'),
-                deadline=request.data.get('deadline', default_deadline),
+                title=title,
+                description=description,
+                reward_point=reward_point,
+                difficulty=difficulty,
+                attribute=attribute,
+                deadline=deadline,
                 user=user
             )
 
