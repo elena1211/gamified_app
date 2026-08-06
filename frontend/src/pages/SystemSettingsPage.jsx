@@ -1,11 +1,18 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { User, Bell } from 'lucide-react';
 import Modal from '../components/Modal.jsx';
 import BottomNav from '../components/BottomNav.jsx';
+import { API_ENDPOINTS, apiRequest } from '../config/api.js';
 
-export default function SystemSettingsPage({ currentUser, onLogout, onNavigateToHome, onNavigateToTaskManager }) {
+export default function SystemSettingsPage({ currentUser, onLogout, onUpgradeSuccess, onNavigateToHome, onNavigateToTaskManager }) {
   const [activeSection, setActiveSection] = useState('account');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showUpgradeForm, setShowUpgradeForm] = useState(false);
+  const [upgradeData, setUpgradeData] = useState({ username: '', email: '', password: '', confirmPassword: '' });
+  const [upgradeError, setUpgradeError] = useState('');
+  const [upgrading, setUpgrading] = useState(false);
+  const [justUpgraded, setJustUpgraded] = useState(false);
+  const upgradeSuccessRef = useRef(null);
   const [preferences, setPreferences] = useState({
     notifications: localStorage.getItem('notifications') !== 'false',
     soundEffects: localStorage.getItem('soundEffects') !== 'false',
@@ -24,6 +31,56 @@ export default function SystemSettingsPage({ currentUser, onLogout, onNavigateTo
 
   const isGuest = typeof currentUser === 'string' && currentUser.startsWith('guest_');
 
+  // Move focus to the success confirmation once the guest banner/form
+  // unmounts — otherwise a keyboard/AT user's focus is silently dropped to
+  // <body> with no indication the upgrade worked.
+  useEffect(() => {
+    if (justUpgraded && !isGuest) upgradeSuccessRef.current?.focus();
+  }, [justUpgraded, isGuest]);
+
+  const handleUpgradeInputChange = (e) => {
+    const { name, value } = e.target;
+    setUpgradeData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleUpgradeSubmit = async (e) => {
+    e.preventDefault();
+    if (!upgradeData.username.trim() || !upgradeData.password) {
+      setUpgradeError('Username and password are required');
+      return;
+    }
+    if (upgradeData.password.length < 6) {
+      setUpgradeError('Password must be at least 6 characters');
+      return;
+    }
+    if (upgradeData.password !== upgradeData.confirmPassword) {
+      setUpgradeError('Passwords do not match');
+      return;
+    }
+    setUpgrading(true);
+    setUpgradeError('');
+    try {
+      const { data } = await apiRequest(API_ENDPOINTS.upgradeGuest, {
+        method: 'POST',
+        body: JSON.stringify({
+          username: upgradeData.username.trim(),
+          email: upgradeData.email,
+          password: upgradeData.password,
+        }),
+      });
+      // This browser's cached guest id now belongs to a password-protected
+      // account — drop it so a future "Continue as guest" click mints a
+      // fresh guest identity instead of colliding with it.
+      localStorage.removeItem('levelup_guest_id');
+      setJustUpgraded(true);
+      onUpgradeSuccess?.(data.username, data.token);
+    } catch (err) {
+      setUpgradeError(err.message || 'Upgrade failed');
+    } finally {
+      setUpgrading(false);
+    }
+  };
+
   const renderAccountSection = () => (
     <div className="space-y-3">
       <h3 className="font-display text-base text-ink mb-3">Account Information</h3>
@@ -41,6 +98,20 @@ export default function SystemSettingsPage({ currentUser, onLogout, onNavigateTo
         ))}
       </div>
 
+      {justUpgraded && !isGuest && (
+        <div
+          ref={upgradeSuccessRef}
+          tabIndex={-1}
+          role="status"
+          className="rpg-window px-4 py-3 mt-3"
+          style={{ borderColor: 'var(--accent-sage)', background: '#F0F7EC' }}
+        >
+          <p className="text-sm text-sage font-medium">
+            ✓ Account saved — your level, quests and streak carried over.
+          </p>
+        </div>
+      )}
+
       {isGuest && (
         <div
           className="rpg-window px-4 py-3 mt-3"
@@ -50,14 +121,108 @@ export default function SystemSettingsPage({ currentUser, onLogout, onNavigateTo
             You are using LevelUp as a guest. Your progress is stored only on this device
             and may be lost if you clear browser data.
           </p>
-          <button
-            onClick={() => {
-              if (onLogout) onLogout();
-            }}
-            className="rpg-btn-primary text-xs"
-          >
-            Create a Real Account
-          </button>
+
+          {!showUpgradeForm ? (
+            <button
+              onClick={() => setShowUpgradeForm(true)}
+              className="rpg-btn-primary text-xs"
+            >
+              Create a Real Account
+            </button>
+          ) : (
+            <form onSubmit={handleUpgradeSubmit} className="space-y-2 mt-2" aria-busy={upgrading}>
+              <p className="text-xs text-ink-mute mb-1">
+                Set a username and password to keep your level, quests and streak — nothing is reset.
+              </p>
+
+              {upgradeError && (
+                <div
+                  role="alert"
+                  className="px-3 py-2 text-xs text-ink border-2 rounded-sm"
+                  style={{ background: 'var(--paper-deep)', borderColor: 'var(--accent-rust)' }}
+                >
+                  {upgradeError}
+                </div>
+              )}
+
+              <div>
+                <label htmlFor="upgrade-username" className="block text-xs text-ink-soft uppercase tracking-wider mb-1">
+                  Username
+                </label>
+                <input
+                  id="upgrade-username"
+                  type="text"
+                  name="username"
+                  value={upgradeData.username}
+                  onChange={handleUpgradeInputChange}
+                  className="rpg-input text-sm"
+                  placeholder="Choose a username"
+                  autoComplete="username"
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="upgrade-email" className="block text-xs text-ink-soft uppercase tracking-wider mb-1">
+                  Email (optional)
+                </label>
+                <input
+                  id="upgrade-email"
+                  type="email"
+                  name="email"
+                  value={upgradeData.email}
+                  onChange={handleUpgradeInputChange}
+                  className="rpg-input text-sm"
+                  placeholder="your@email.com"
+                  autoComplete="email"
+                />
+              </div>
+              <div>
+                <label htmlFor="upgrade-password" className="block text-xs text-ink-soft uppercase tracking-wider mb-1">
+                  Password
+                </label>
+                <input
+                  id="upgrade-password"
+                  type="password"
+                  name="password"
+                  value={upgradeData.password}
+                  onChange={handleUpgradeInputChange}
+                  className="rpg-input text-sm"
+                  placeholder="At least 6 characters"
+                  autoComplete="new-password"
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="upgrade-confirm-password" className="block text-xs text-ink-soft uppercase tracking-wider mb-1">
+                  Confirm Password
+                </label>
+                <input
+                  id="upgrade-confirm-password"
+                  type="password"
+                  name="confirmPassword"
+                  value={upgradeData.confirmPassword}
+                  onChange={handleUpgradeInputChange}
+                  className="rpg-input text-sm"
+                  placeholder="Repeat your password"
+                  autoComplete="new-password"
+                  required
+                />
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => { setShowUpgradeForm(false); setUpgradeError(''); }}
+                  className="rpg-btn-secondary text-xs flex-1"
+                >
+                  Cancel
+                </button>
+                <button type="submit" disabled={upgrading} className="rpg-btn-primary text-xs flex-1">
+                  {upgrading ? 'Saving…' : 'Save Account'}
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       )}
     </div>

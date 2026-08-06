@@ -10,6 +10,7 @@ export const API_ENDPOINTS = {
   login: `${API_BASE}/login/`,
   register: `${API_BASE}/register/`,
   guest: `${API_BASE}/guest/`,
+  upgradeGuest: `${API_BASE}/upgrade-guest/`,
 
   // Tasks
   tasks: `${API_BASE}/tasks/`,
