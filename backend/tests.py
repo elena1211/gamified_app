@@ -104,6 +104,15 @@ class RegisterViewTests(TestCase):
         }, format="json")
         self.assertEqual(response.status_code, 400)
 
+    def test_register_rejects_guest_prefixed_username(self):
+        response = self.client.post(self.url, {
+            "username": "guest_sneaky",
+            "password": "strongpass123",
+            "goal_title": "Get fit",
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(User.objects.filter(username="guest_sneaky").exists())
+
 
 class LoginViewTests(TestCase):
     def setUp(self):
@@ -150,6 +159,102 @@ class GuestLoginViewTests(TestCase):
         second = self.client.post(self.url, {"guest_id": "guest_repeat1"}, format="json")
         self.assertEqual(User.objects.filter(username="guest_repeat1").count(), 1)
         self.assertEqual(first.data["token"], second.data["token"])
+
+
+@override_settings(CACHES=TEST_CACHES)
+class UpgradeGuestViewTests(TestCase):
+    def setUp(self):
+        self.guest = User.objects.create_user(username="guest_upgrader", password="throwaway")
+        self.guest_token = Token.objects.create(user=self.guest)
+        self.client = APIClient()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.guest_token.key}")
+        self.url = reverse("upgrade-guest")
+
+    def test_upgrade_preserves_all_existing_progress(self):
+        from django.utils import timezone
+        from datetime import timedelta
+
+        goal = Goal.objects.create(user=self.guest, title="Getting Started", description="")
+        task = Task.objects.create(
+            user=self.guest, title="Meditate", description="", attribute="wellness",
+            deadline=timezone.now() + timedelta(days=1),
+        )
+        self.guest.level = 5
+        self.guest.exp = 240
+        self.guest.save()
+
+        response = self.client.post(self.url, {
+            "username": "realplayer", "password": "strongpass123", "email": "a@example.com",
+        }, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["username"], "realplayer")
+        self.assertIn("token", response.data)
+
+        # Same row, same pk -- this is the whole point of the fix.
+        self.guest.refresh_from_db()
+        self.assertEqual(self.guest.username, "realplayer")
+        self.assertEqual(self.guest.level, 5)
+        self.assertEqual(self.guest.exp, 240)
+        self.assertTrue(self.guest.check_password("strongpass123"))
+
+        goal.refresh_from_db()
+        task.refresh_from_db()
+        self.assertEqual(goal.user_id, self.guest.pk)
+        self.assertEqual(task.user_id, self.guest.pk)
+
+    def test_token_still_works_after_username_change(self):
+        response = self.client.post(self.url, {
+            "username": "realplayer2", "password": "strongpass123",
+        }, format="json")
+        new_token = response.data["token"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {new_token}")
+        stats_response = self.client.get(reverse("user-stats"))
+        self.assertEqual(stats_response.status_code, 200)
+
+    def test_repeat_call_with_same_target_username_is_idempotent(self):
+        # Simulates apiRequest retrying the same request after a lost
+        # response (e.g. a Render cold-start blip): the token is unchanged
+        # (not rotated), so the retry reaches this same account, which is
+        # already upgraded. It must report success again, not the
+        # "only guest accounts can be upgraded" error the guest-only check
+        # would otherwise now (correctly, but confusingly) produce.
+        first = self.client.post(self.url, {
+            "username": "realplayer5", "password": "strongpass123",
+        }, format="json")
+        self.assertEqual(first.status_code, 200)
+
+        second = self.client.post(self.url, {
+            "username": "realplayer5", "password": "strongpass123",
+        }, format="json")
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second.data["username"], "realplayer5")
+
+    def test_rejects_non_guest_account(self):
+        real_user = User.objects.create_user(username="alreadyregistered", password="pw12345")
+        token = Token.objects.create(user=real_user)
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        response = client.post(self.url, {"username": "newname", "password": "strongpass123"}, format="json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_rejects_duplicate_username(self):
+        User.objects.create_user(username="taken", password="pw12345")
+        response = self.client.post(self.url, {"username": "taken", "password": "strongpass123"}, format="json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_rejects_guest_prefixed_username(self):
+        response = self.client.post(self.url, {"username": "guest_sneaky", "password": "strongpass123"}, format="json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_rejects_short_password(self):
+        response = self.client.post(self.url, {"username": "realplayer3", "password": "abc"}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.guest.refresh_from_db()
+        self.assertEqual(self.guest.username, "guest_upgrader")
+
+    def test_requires_authentication(self):
+        response = APIClient().post(self.url, {"username": "realplayer4", "password": "strongpass123"}, format="json")
+        self.assertEqual(response.status_code, 401)
 
 
 class TaskListViewTests(TestCase):

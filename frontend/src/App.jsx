@@ -144,6 +144,7 @@ function AppRoutes() {
               <SystemSettingsPage
                 currentUser={currentUser}
                 onLogout={handleLogoutAndNavigate}
+                onUpgradeSuccess={handleLoginSuccess}
                 onNavigateToHome={handleNavigateToHome}
                 onNavigateToTaskManager={handleNavigateToTaskManager}
               />

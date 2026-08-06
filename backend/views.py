@@ -7,6 +7,7 @@ from rest_framework.authtoken.models import Token
 from .throttles import SystemChatIPThrottle
 from django.contrib.auth import authenticate
 from django.contrib.auth.hashers import make_password
+from django.db import IntegrityError
 from django.http import HttpResponse
 from .models import Task, User, Goal, UserTaskLog, UserAttribute, SystemLog, UserTitle
 from django.utils import timezone
@@ -723,6 +724,14 @@ class RegisterView(APIView):
                     "error": "Username, password, and goal title are required"
                 }, status=status.HTTP_400_BAD_REQUEST)
 
+            if username.startswith('guest_'):
+                # Reserved for GuestLoginView's generated ids — a real account
+                # with this prefix would be treated as an ephemeral guest by
+                # every "is this a guest?" check in the app.
+                return Response({
+                    "error": "Username cannot start with \"guest_\""
+                }, status=status.HTTP_400_BAD_REQUEST)
+
             # Check if username already exists
             if User.objects.filter(username=username).exists():
                 return Response({
@@ -830,6 +839,80 @@ class RegisterView(APIView):
             return Response({
                 "error": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class UpgradeGuestView(APIView):
+    """Convert the authenticated guest account into a real, password-protected
+    account in place. A guest is already a normal User row — every Task,
+    Goal, UserAttribute and UserTaskLog is a foreign key to that row's id,
+    not to the username — so setting a real username/password/email on the
+    SAME row preserves all of it automatically. No data to migrate.
+
+    Not IP-throttled like RegisterView/GuestLoginView: this doesn't create a
+    new account (the caller already holds an authenticated guest token, which
+    was itself throttled to obtain), and a shared IP scope here would let one
+    other guest session on the same network block a legitimate upgrade.
+    """
+
+    def post(self, request):
+        user = request.user
+
+        username = (request.data.get('username') or '').strip()
+        password = request.data.get('password') or ''
+        email = request.data.get('email', '')
+
+        if not username or not password:
+            return Response(
+                {"error": "Username and password are required"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        if len(username) > 150:
+            return Response(
+                {"error": "Username must be 150 characters or fewer"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        if len(password) < 6:
+            return Response(
+                {"error": "Password must be at least 6 characters"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        if username.startswith('guest_'):
+            # Would make this account indistinguishable from a fresh guest
+            # session to every "is this a guest?" check in the app.
+            return Response(
+                {"error": "Username cannot start with \"guest_\""}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if user.username == username and not user.username.startswith('guest_'):
+            # Idempotent retry: this exact upgrade already succeeded (e.g. the
+            # response was lost to a Render cold-start blip and apiRequest
+            # resent the same request with the same still-valid token) —
+            # the account is already in the target state, so confirm success
+            # again instead of re-running the guest-only check below, which
+            # would now fail and wrongly look like the upgrade never happened.
+            token, _ = Token.objects.get_or_create(user=user)
+            return Response({"success": True, "username": user.username, "token": token.key})
+
+        if not user.username.startswith('guest_'):
+            return Response(
+                {"error": "Only guest accounts can be upgraded"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        if User.objects.exclude(pk=user.pk).filter(username=username).exists():
+            return Response({"error": "Username already exists"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user.username = username
+            user.email = email
+            user.set_password(password)
+            user.save()
+        except IntegrityError:
+            # Another request claimed this username between the check above
+            # and this save (two guests racing for the same name).
+            return Response({"error": "Username already exists"}, status=status.HTTP_400_BAD_REQUEST)
+
+        token, _ = Token.objects.get_or_create(user=user)
+        return Response({
+            "success": True,
+            "username": username,
+            "token": token.key,
+        })
 
 
 class LoginView(APIView):
