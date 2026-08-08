@@ -156,7 +156,10 @@ const TaskCard = ({
           <span className="text-ink-mute">{difficulty?.label}</span>
           <span className="text-ink-mute">{attribute?.emoji} {attribute?.label}</span>
           <span className="ml-auto font-semibold" style={{ color: 'var(--accent-sage)' }}>
-            +{task.reward_point} {attribute?.label}
+            {/* Completed-history items never carry a `reward` string (only
+                TaskListView/TaskDetailView do) — fall back to the same
+                reward_point // 2 math the backend uses, not the raw value. */}
+            {task.reward || `+${Math.floor((task.reward_point || 0) / 2)} ${attribute?.label}`}
           </span>
         </div>
 
@@ -264,16 +267,26 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
     try {
       // Fetch tasks from backend
       const { data } = await apiRequest(API_ENDPOINTS.tasks);
-      console.log('✅ Successfully fetched', data.length, 'tasks from backend:', data);
+      debugLog('✅ Successfully fetched', data.length, 'tasks from backend:', data);
 
-      // Transform backend data to match our component structure
+      // Transform backend data to match our component structure.
+      // reward_point is the raw, editable value straight from the backend —
+      // it must NOT be reconstructed from the "reward" display string, which
+      // is already halved (reward_point // 2, the amount actually granted to
+      // the primary attribute; the other half is implicit "budget", plus a
+      // difficulty-based Discipline bonus). Regex-extracting a number back
+      // out of that string and treating it as the raw value used to silently
+      // halve the stored reward_point every time an edit was saved after a
+      // fetch — a real, compounding data-corruption bug. `reward` (the
+      // display string) is kept as-is for showing/applying the actual grant.
       const transformedTasks = data
         .filter(task => !task.completed) // Only get uncompleted tasks for active tab
         .map(task => ({
           id: task.id,
           title: task.title,
           description: task.tip || '',
-          reward_point: task.reward?.match(/\+(\d+)/)?.[1] || '0', // Extract points from reward string
+          reward_point: task.reward_point ?? 0,
+          reward: task.reward || '',
           difficulty: task.difficulty || 1,
           attribute: task.attribute || 'discipline'
         }));
@@ -285,11 +298,11 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
       console.log('🔄 Falling back to static task data');
       // Fallback to static data if API fails
       updateTasksState([
-        {id: 1, title: "🧹 Organise workspace", description: "Clean and organise your desk", reward_point: "4", difficulty: 1, attribute: "discipline"},
-        {id: 2, title: "📝 Write journal entry", description: "Reflect on today's experiences", reward_point: "3", difficulty: 1, attribute: "discipline"},
-        {id: 3, title: "🏃‍♂️ 30-minute workout", description: "Include cardio and strength training", reward_point: "5", difficulty: 2, attribute: "energy"},
-        {id: 4, title: "📚 Learn something new", description: "Read an educational article or watch a tutorial", reward_point: "4", difficulty: 1, attribute: "intelligence"},
-        {id: 5, title: "🧘‍♀️ Meditation session", description: "10 minutes of mindfulness meditation", reward_point: "3", difficulty: 1, attribute: "energy"}
+        {id: 1, title: "🧹 Organise workspace", description: "Clean and organise your desk", reward_point: 4, reward: "+2 Discipline", difficulty: 1, attribute: "discipline"},
+        {id: 2, title: "📝 Write journal entry", description: "Reflect on today's experiences", reward_point: 3, reward: "+1 Discipline", difficulty: 1, attribute: "discipline"},
+        {id: 3, title: "🏃‍♂️ 30-minute workout", description: "Include cardio and strength training", reward_point: 5, reward: "+2 Energy, +1 Discipline", difficulty: 2, attribute: "energy"},
+        {id: 4, title: "📚 Learn something new", description: "Read an educational article or watch a tutorial", reward_point: 4, reward: "+2 Intelligence", difficulty: 1, attribute: "intelligence"},
+        {id: 5, title: "🧘‍♀️ Meditation session", description: "10 minutes of mindfulness meditation", reward_point: 3, reward: "+1 Energy", difficulty: 1, attribute: "energy"}
       ]);
     } finally {
       setLoading(false);
@@ -351,12 +364,15 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
         body: JSON.stringify(newTask),
       });
 
-      // Transform the response to match our component structure
+      // Transform the response to match our component structure. Use the
+      // raw reward_point the backend echoes back, not a reconstruction from
+      // the (already halved) display string — see fetchAllTasks for why.
       const transformedTask = {
         id: createdTask.id,
         title: createdTask.title,
         description: createdTask.tip || '',
-        reward_point: createdTask.reward?.match(/\+(\d+)/)?.[1] || '0',
+        reward_point: createdTask.reward_point ?? 0,
+        reward: createdTask.reward || '',
         difficulty: createdTask.difficulty || 1,
         attribute: createdTask.attribute || 'discipline'
       };
@@ -381,15 +397,20 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
     try {
       // Persist first, then update the list — a locally-only edit used to
       // reappear as the pre-edit version on the next reload.
-      await apiRequest(`${API_ENDPOINTS.tasks}${taskId}/`, {
+      const { data } = await apiRequest(`${API_ENDPOINTS.tasks}${taskId}/`, {
         method: 'PUT',
         body: JSON.stringify(updatedData),
       });
+      // Merge the server's response, not the raw form data — it recomputes
+      // `reward` (the display string) from the edited values, which a plain
+      // merge of updatedData would leave stale until the next full fetch.
       // Functional update — a concurrent delete of another task (which reads
       // live state) could otherwise be clobbered by this request resolving
       // against the stale `tasks` snapshot captured when editing started.
       updateTasksState(prev => prev.map(task =>
-        task.id === taskId ? { ...task, ...updatedData } : task
+        task.id === taskId
+          ? { ...task, title: data.title, description: data.tip || '', reward_point: data.reward_point ?? 0, reward: data.reward || '', difficulty: data.difficulty, attribute: data.attribute }
+          : task
       ));
       setEditingTask(null);
       setEditData(null);
@@ -442,10 +463,17 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
           completedAt: new Date().toISOString().split('T')[0]
         };
 
-        // Create reward string based on task attributes
-        const rewardString = `+${task.reward_point} ${task.attribute}`;
-
-        // Apply stat changes to global context
+        // Use the backend's own reward string — it's already the exact
+        // amount granted (reward_point // 2 to the primary attribute, plus
+        // any difficulty-based Discipline bonus), matching what the server
+        // actually applied. Reconstructing "+{reward_point} {attribute}"
+        // from the raw value here would overstate the grant (reward_point
+        // is a budget, not the granted amount) and silently drop the
+        // difficulty bonus. Every task now carries `reward` from the
+        // backend, so the fallback only matters for the static mock data
+        // used when the API is unreachable — mirror the same //2 math there
+        // rather than the raw value, to stay consistent.
+        const rewardString = task.reward || `+${Math.floor((task.reward_point || 0) / 2)} ${task.attribute}`;
         applyStatChanges(rewardString);
 
         // Check for level up from API response
@@ -475,13 +503,16 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
           updateUserStats({ currentStreak: data.streak || 0 });
         }
 
-        // Use context function to get current points for attribute
-        const newTotalPoints = getAttributePoints(task.attribute) + parseInt(task.reward_point || 0);
+        // RewardPopup shows a single number for the primary attribute —
+        // reward_point // 2 is what's actually granted to it (see the note
+        // on applyStatChanges above), not the raw reward_point.
+        const primaryAttrGrant = Math.floor((task.reward_point || 0) / 2);
+        const newTotalPoints = getAttributePoints(task.attribute) + primaryAttrGrant;
 
         // Show reward popup with updated stats
         setRewardData({
           taskTitle: task.title,
-          rewardPoints: parseInt(task.reward_point || 0),
+          rewardPoints: primaryAttrGrant,
           attribute: task.attribute,
           totalPoints: newTotalPoints,
           currentStreak: data.streak || 0

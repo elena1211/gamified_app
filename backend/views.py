@@ -308,6 +308,7 @@ class TaskListView(APIView):
                 "title": task.title,
                 "tip": task.description,
                 "reward": reward_str,
+                "reward_point": task.reward_point,
                 "completed": is_completed,
                 "difficulty": task.difficulty,
                 "attribute": task.attribute
@@ -383,6 +384,7 @@ class TaskListView(APIView):
                 "title": task.title,
                 "tip": task.description,
                 "reward": reward_str,
+                "reward_point": task.reward_point,
                 "completed": False,
                 "difficulty": task.difficulty,
                 "attribute": task.attribute
@@ -408,6 +410,7 @@ class TaskDetailView(APIView):
                 "title": task.title,
                 "tip": task.description,
                 "reward": reward_str,
+                "reward_point": task.reward_point,
                 "completed": False,
                 "difficulty": task.difficulty,
                 "attribute": task.attribute
@@ -493,6 +496,7 @@ class TaskDetailView(APIView):
             "title": task.title,
             "tip": task.description,
             "reward": reward_str,
+            "reward_point": task.reward_point,
             "completed": False,
             "difficulty": task.difficulty,
             "attribute": task.attribute
