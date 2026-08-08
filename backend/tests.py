@@ -290,6 +290,24 @@ class TaskListViewTests(TestCase):
         self.assertIn("Mine", titles)
         self.assertNotIn("Not mine", titles)
 
+    def test_response_includes_raw_reward_point_alongside_display_string(self):
+        # The frontend used to reconstruct reward_point by regex-parsing the
+        # "reward" display string, which is already halved (reward_point//2)
+        # -- silently corrupting the stored value on every edit-after-fetch.
+        # The raw field must be present and must NOT match the halved string.
+        from django.utils import timezone
+        from datetime import timedelta
+
+        Task.objects.create(
+            user=self.user, title="Solo task", description="", attribute="discipline",
+            reward_point=5, difficulty=1, deadline=timezone.now() + timedelta(days=1),
+        )
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        task_data = next(t for t in response.data if t["title"] == "Solo task")
+        self.assertEqual(task_data["reward_point"], 5)
+        self.assertEqual(task_data["reward"], "+2 Discipline")
+
 
 class TaskCreateValidationTests(TestCase):
     def setUp(self):
@@ -311,6 +329,7 @@ class TaskCreateValidationTests(TestCase):
         self.assertEqual(response.data["title"], "Read a chapter")
         self.assertEqual(response.data["difficulty"], 2)
         self.assertEqual(response.data["attribute"], "intelligence")
+        self.assertEqual(response.data["reward_point"], 4)
 
         task = Task.objects.get(user=self.user, title="Read a chapter")
         self.assertEqual(task.reward_point, 4)
@@ -463,6 +482,7 @@ class TaskEditTests(TestCase):
         }, format="json")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["reward"], "+2 Wellness, +2 Discipline")
+        self.assertEqual(response.data["reward_point"], 4)
 
         self.task.refresh_from_db()
         self.assertEqual(self.task.title, "Updated title")
