@@ -78,6 +78,34 @@ def get_or_create_user(username):
         logger.info(f"Auto-created new user: {username}")
         return user
 
+REWARD_STRING_MAX_SEGMENTS = 5
+REWARD_STRING_MAX_DELTA = 10
+
+def validate_reward_string(reward_string):
+    """Check a client-supplied reward_string before it's allowed to reach
+    apply_attribute_changes. Real reward strings only ever come from a small,
+    fixed set of frontend-defined quests granting a few points to real
+    attributes (see TIME_LIMITED_TASKS in HomePage.jsx), so anything outside
+    that shape is treated as adversarial rather than clamped and applied."""
+    if not reward_string:
+        return True
+
+    segments = [s.strip() for s in reward_string.split(',') if s.strip()]
+    if not segments or len(segments) > REWARD_STRING_MAX_SEGMENTS:
+        return False
+
+    valid_attrs = dict(Task.ATTRIBUTE_CHOICES)
+    for segment in segments:
+        match = re.match(r'^([+-]\d+)\s+(\w+)$', segment)
+        if not match:
+            return False
+        value_str, attr_name = match.groups()
+        if attr_name.lower() not in valid_attrs:
+            return False
+        if not 1 <= abs(int(value_str)) <= REWARD_STRING_MAX_DELTA:
+            return False
+    return True
+
 def apply_attribute_changes(user, reward_string):
     """Helper function to parse reward string and apply attribute changes"""
     if not reward_string:
@@ -1062,15 +1090,26 @@ class DynamicTaskCompleteView(APIView):
         user = request.user
         task_title = request.data.get('task_title', '')
         task_type = request.data.get('task_type', 'daily')  # 'daily' or 'time_limited'
-        reward_points = request.data.get('reward_points', 1)
         reward_string = request.data.get('reward_string', '')  # Full reward string for attribute processing
+
+        # reward_points/attribute are only ever used as defaults when a brand
+        # new Task row has to be created below (no existing task with this
+        # title yet) — validate them so a malformed or adversarial request
+        # can't store an out-of-range value or a made-up attribute name.
+        try:
+            reward_points = int(request.data.get('reward_points', 1))
+        except (TypeError, ValueError):
+            reward_points = 1
+        if not 1 <= reward_points <= 5:
+            reward_points = 3
         attribute = request.data.get('attribute', 'discipline')
+        if attribute not in dict(Task.ATTRIBUTE_CHOICES):
+            attribute = 'discipline'
 
         try:
 
-            # Store old level and exp for level-up detection
+            # Store old level for level-up detection
             old_level = user.level
-            old_exp = user.exp
 
             # For time-limited tasks, create unique task each time to allow multiple completions
             if task_type == 'time_limited':
@@ -1099,6 +1138,25 @@ class DynamicTaskCompleteView(APIView):
                 # Add EXP when completing time-limited task
                 exp_gained = calculate_task_exp(task)
                 user.exp += exp_gained
+
+                # Time-limited quests can reward multiple attributes at once
+                # (e.g. "+3 Intelligence, +2 Discipline"). This used to only
+                # be applied to local browser state via the frontend's own
+                # applyStatChanges call and was never persisted server-side
+                # at all — every attribute point earned this way was lost on
+                # a new device or cleared storage. Persist it here too, same
+                # as the daily-task path already does below.
+                #
+                # Unlike reward_points/attribute (validated above and only
+                # ever used for the Task row), reward_string is what actually
+                # drives the stat change, so it's validated the same way
+                # before being trusted — otherwise a request could name any
+                # attribute with any magnitude, bypassing the validation done
+                # on the other two fields entirely.
+                if reward_string and validate_reward_string(reward_string):
+                    apply_attribute_changes(user, reward_string)
+                elif reward_string:
+                    logger.warning(f"Rejected malformed/out-of-range reward_string for user '{user.username}': {reward_string!r}")
 
                 # Update level based on new EXP
                 new_level = calculate_level_from_exp(user.exp)
@@ -1131,19 +1189,22 @@ class DynamicTaskCompleteView(APIView):
                 })
 
             else:
-                # For daily tasks, use existing logic (prevent duplicates per day)
-                task, created = Task.objects.get_or_create(
-                    title=task_title,
-                    user=user,
-                    defaults={
-                        'description': f'Dynamic {task_type} task',
-                        'reward_point': reward_points,
-                        'attribute': attribute,
-                        'difficulty': 1,
-                        'deadline': timezone.now() + timedelta(days=1),
-                        'is_random': True
-                    }
-                )
+                # For daily tasks, use existing logic (prevent duplicates per day).
+                # Looked up explicitly (not get_or_create with a reward_point
+                # default) so an existing task is never re-parameterized by
+                # whatever the client happened to send this time.
+                task = Task.objects.filter(title=task_title, user=user).first()
+                if not task:
+                    task = Task.objects.create(
+                        title=task_title,
+                        user=user,
+                        description=f'Dynamic {task_type} task',
+                        reward_point=reward_points,
+                        attribute=attribute,
+                        difficulty=1,
+                        deadline=timezone.now() + timedelta(days=1),
+                        is_random=True
+                    )
 
                 today = date.today()
                 existing_log = UserTaskLog.objects.filter(
@@ -1165,9 +1226,19 @@ class DynamicTaskCompleteView(APIView):
                     exp_gained = calculate_task_exp(task)
                     user.exp += exp_gained
 
-                    # Apply attribute changes from reward string
-                    if reward_string:
-                        apply_attribute_changes(user, reward_string)
+                    # Derive the applied reward from the task's own stored
+                    # values (same formula as TaskCompleteView), never from
+                    # the client-supplied reward_string — that string can be
+                    # stale, or (for the frontend's offline-fallback task
+                    # list, shown when /api/tasks/ fails) entirely made up
+                    # and unrelated to what this task actually grants, which
+                    # would otherwise let a request apply an arbitrary
+                    # mismatched reward to a real task.
+                    reward_attr = task.attribute.title()
+                    computed_reward_string = f"+{task.reward_point // 2} {reward_attr}"
+                    if task.difficulty > 1:
+                        computed_reward_string += f", +{task.difficulty - 1} Discipline"
+                    apply_attribute_changes(user, computed_reward_string)
 
                     # Update level based on new EXP
                     new_level = calculate_level_from_exp(user.exp)
@@ -1223,7 +1294,6 @@ class DynamicTaskUncompleteView(APIView):
     def post(self, request):
         user = request.user
         task_title = request.data.get('task_title', '')
-        reward_string = request.data.get('reward_string', '')  # For reversing attribute changes
 
         logger.info(f"DynamicTaskUncompleteView: Uncompleting task '{task_title}' for user '{user.username}'")
         logger.info(f"Request data: {request.data}")
@@ -1320,9 +1390,20 @@ class DynamicTaskUncompleteView(APIView):
                 exp_lost = calculate_task_exp(task)
                 user.exp = max(0, user.exp - exp_lost)
 
-                # Reverse attribute changes
-                if reward_string:
-                    reverse_attribute_changes(user, reward_string)
+                # Reverse exactly what the complete path would have applied,
+                # derived from the task's own stored values rather than the
+                # client's reward_string. DynamicTaskCompleteView computes
+                # the daily-task reward server-side the same way (see the
+                # comment there) — reversing from a client-supplied string
+                # instead would drift out of sync whenever it doesn't match
+                # what was actually granted (e.g. the frontend's offline-
+                # fallback task list reuses real task titles with invented,
+                # unrelated reward text).
+                reward_attr = task.attribute.title()
+                computed_reward_string = f"+{task.reward_point // 2} {reward_attr}"
+                if task.difficulty > 1:
+                    computed_reward_string += f", +{task.difficulty - 1} Discipline"
+                reverse_attribute_changes(user, computed_reward_string)
 
                 # Update level based on new EXP
                 new_level = calculate_level_from_exp(user.exp)

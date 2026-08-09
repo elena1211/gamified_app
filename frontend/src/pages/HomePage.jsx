@@ -160,6 +160,10 @@ export default function HomePage({
             reward_points: parseInt(
               currentTimeLimitedTask.reward.match(/\+(\d+)/)?.[1] || "1",
             ),
+            // Full reward string (e.g. "+3 Intelligence, +2 Discipline") so
+            // the backend can persist every attribute in it, not just the
+            // single reward_points number — see apply_attribute_changes.
+            reward_string: currentTimeLimitedTask.reward || "",
             attribute: "discipline",
           }),
         });
@@ -331,20 +335,20 @@ export default function HomePage({
             task_title: task.title,
             task_type: "daily",
             reward_points: parseInt(task.reward?.match(/\+(\d+)/)?.[1] || "1"),
-            reward_string: task.reward || "",
             attribute: task.attribute || "discipline",
           }),
         });
         if (res.ok) data = await res.json();
       } else {
-        // Uncomplete: use dynamicTaskUncomplete which reverses attribute changes in DB
+        // Uncomplete: use dynamicTaskUncomplete which reverses attribute changes in DB.
+        // reward_string isn't sent — the backend derives the exact reversal from the
+        // task's own stored fields so it always matches what complete actually applied.
         const res = await fetch(API_ENDPOINTS.dynamicTaskUncomplete, {
           method: "POST",
           mode: "cors",
           headers: { "Content-Type": "application/json", ...getAuthHeaders() },
           body: JSON.stringify({
             task_title: task.title,
-            reward_string: task.reward || "",
           }),
         });
         if (res.ok) data = await res.json();

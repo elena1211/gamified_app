@@ -647,6 +647,231 @@ class TaskCompleteViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+class DynamicTaskCompleteViewTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="dynamiccompleter", password="pw12345")
+        for attr_name in ["intelligence", "discipline", "energy", "social", "wellness", "stress"]:
+            UserAttribute.objects.create(user=self.user, name=attr_name, value=0)
+        self.token = Token.objects.create(user=self.user)
+        self.client = APIClient()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
+        self.url = reverse("dynamic-task-complete")
+
+    def test_time_limited_task_persists_every_attribute_in_reward_string(self):
+        # Previously only reached the frontend's local AppContext state —
+        # never written to UserAttribute at all.
+        response = self.client.post(self.url, {
+            "task_title": "Click VS Code Tab",
+            "task_type": "time_limited",
+            "reward_points": 3,
+            "reward_string": "+3 Intelligence, +2 Discipline",
+            "attribute": "intelligence",
+        }, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["task_completed"])
+
+        intelligence = UserAttribute.objects.get(user=self.user, name="intelligence")
+        discipline = UserAttribute.objects.get(user=self.user, name="discipline")
+        self.assertEqual(intelligence.value, 3)
+        self.assertEqual(discipline.value, 2)
+
+    def test_time_limited_task_without_reward_string_does_not_crash(self):
+        response = self.client.post(self.url, {
+            "task_title": "Press Ctrl+S",
+            "task_type": "time_limited",
+            "reward_points": 2,
+            "attribute": "discipline",
+        }, format="json")
+        self.assertEqual(response.status_code, 200)
+        # No reward_string given -- no attribute change to apply, but the
+        # request must still succeed (EXP/level still awarded).
+        discipline = UserAttribute.objects.get(user=self.user, name="discipline")
+        self.assertEqual(discipline.value, 0)
+
+    def test_time_limited_reward_points_out_of_range_falls_back_to_default(self):
+        response = self.client.post(self.url, {
+            "task_title": "Open Terminal",
+            "task_type": "time_limited",
+            "reward_points": 9999,
+            "attribute": "not-a-real-attribute",
+        }, format="json")
+        self.assertEqual(response.status_code, 200)
+        task = Task.objects.filter(user=self.user, title__startswith="Open Terminal").first()
+        self.assertEqual(task.reward_point, 3)
+        self.assertEqual(task.attribute, "discipline")
+
+    def test_time_limited_oversized_reward_string_is_rejected(self):
+        # reward_points/attribute are validated, but reward_string is what
+        # actually drives the stat grant -- a request can't use a valid
+        # reward_points/attribute pair to smuggle an unbounded reward_string.
+        response = self.client.post(self.url, {
+            "task_title": "Open Terminal",
+            "task_type": "time_limited",
+            "reward_points": 3,
+            "attribute": "discipline",
+            "reward_string": "+9999 Intelligence, -1000 Stress",
+        }, format="json")
+        self.assertEqual(response.status_code, 200)
+        intelligence = UserAttribute.objects.get(user=self.user, name="intelligence")
+        stress = UserAttribute.objects.get(user=self.user, name="stress")
+        self.assertEqual(intelligence.value, 0)
+        self.assertEqual(stress.value, 0)
+
+    def test_time_limited_reward_string_with_unknown_attribute_is_rejected(self):
+        response = self.client.post(self.url, {
+            "task_title": "Open Terminal",
+            "task_type": "time_limited",
+            "reward_points": 3,
+            "attribute": "discipline",
+            "reward_string": "+3 NotARealAttribute",
+        }, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(UserAttribute.objects.filter(user=self.user, name="notarealattribute").exists())
+
+    def test_time_limited_reward_string_within_bounds_is_still_applied(self):
+        response = self.client.post(self.url, {
+            "task_title": "Navigate to GitHub",
+            "task_type": "time_limited",
+            "reward_points": 3,
+            "attribute": "intelligence",
+            "reward_string": "+3 Intelligence, +2 Social",
+        }, format="json")
+        self.assertEqual(response.status_code, 200)
+        intelligence = UserAttribute.objects.get(user=self.user, name="intelligence")
+        social = UserAttribute.objects.get(user=self.user, name="social")
+        self.assertEqual(intelligence.value, 3)
+        self.assertEqual(social.value, 2)
+
+    def test_daily_task_reward_is_derived_from_stored_task_not_client_string(self):
+        from django.utils import timezone
+        from datetime import timedelta
+
+        # A real task already exists with a small, single-attribute reward...
+        Task.objects.create(
+            user=self.user, title="Organise workspace", description="", attribute="discipline",
+            reward_point=6, difficulty=1, deadline=timezone.now() + timedelta(days=1),
+        )
+        # ...but the client sends a wildly different, made-up multi-attribute
+        # string (as the frontend's offline-fallback task list would, if the
+        # user completes a task while /api/tasks/ is failing to load).
+        response = self.client.post(self.url, {
+            "task_title": "Organise workspace",
+            "task_type": "daily",
+            "reward_points": 6,
+            "reward_string": "+6 Discipline, +8 Wellness, +2 Energy",
+            "attribute": "discipline",
+        }, format="json")
+        self.assertEqual(response.status_code, 200)
+
+        # Only what the real stored task actually grants (reward_point // 2
+        # to its own attribute) is applied -- not the client's string.
+        discipline = UserAttribute.objects.get(user=self.user, name="discipline")
+        wellness = UserAttribute.objects.get(user=self.user, name="wellness")
+        energy = UserAttribute.objects.get(user=self.user, name="energy")
+        self.assertEqual(discipline.value, 3)
+        self.assertEqual(wellness.value, 0)
+        self.assertEqual(energy.value, 0)
+
+    def test_daily_task_creates_new_task_with_validated_defaults(self):
+        response = self.client.post(self.url, {
+            "task_title": "Brand new daily quest",
+            "task_type": "daily",
+            "reward_points": 999,
+            "attribute": "not-a-real-attribute",
+        }, format="json")
+        self.assertEqual(response.status_code, 200)
+        task = Task.objects.get(user=self.user, title="Brand new daily quest")
+        self.assertEqual(task.reward_point, 3)
+        self.assertEqual(task.attribute, "discipline")
+
+    def test_completing_same_daily_task_twice_in_one_day_does_not_double_grant(self):
+        from django.utils import timezone
+        from datetime import timedelta
+
+        Task.objects.create(
+            user=self.user, title="Write journal entry", description="", attribute="discipline",
+            reward_point=5, difficulty=1, deadline=timezone.now() + timedelta(days=1),
+        )
+        payload = {
+            "task_title": "Write journal entry", "task_type": "daily",
+            "reward_points": 5, "attribute": "discipline",
+        }
+        self.client.post(self.url, payload, format="json")
+        response = self.client.post(self.url, payload, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["message"], "Daily task already completed today")
+
+        discipline = UserAttribute.objects.get(user=self.user, name="discipline")
+        self.assertEqual(discipline.value, 2)  # 5 // 2, granted once
+
+
+class DynamicTaskUncompleteViewTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="dynamicuncompleter", password="pw12345")
+        for attr_name in ["intelligence", "discipline", "energy", "social", "wellness", "stress"]:
+            UserAttribute.objects.create(user=self.user, name=attr_name, value=0)
+        self.token = Token.objects.create(user=self.user)
+        self.client = APIClient()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
+        self.complete_url = reverse("dynamic-task-complete")
+        self.uncomplete_url = reverse("dynamic-task-uncomplete")
+
+    def test_uncomplete_reverses_exactly_what_complete_applied_even_with_mismatched_client_string(self):
+        from django.utils import timezone
+        from datetime import timedelta
+
+        # Real stored task grants a small, single-attribute reward...
+        Task.objects.create(
+            user=self.user, title="Organise workspace", description="", attribute="discipline",
+            reward_point=6, difficulty=1, deadline=timezone.now() + timedelta(days=1),
+        )
+        self.client.post(self.complete_url, {
+            "task_title": "Organise workspace",
+            "task_type": "daily",
+            "reward_points": 6,
+            "attribute": "discipline",
+        }, format="json")
+        discipline = UserAttribute.objects.get(user=self.user, name="discipline")
+        self.assertEqual(discipline.value, 3)  # 6 // 2
+
+        # ...but the client sends a wildly different string when uncompleting
+        # (e.g. the frontend's offline-fallback task list, or simply a stale
+        # cached value). It must be ignored: the reversal is derived from the
+        # same stored task, so it always undoes exactly what was granted.
+        response = self.client.post(self.uncomplete_url, {
+            "task_title": "Organise workspace",
+            "reward_string": "+6 Discipline, +8 Wellness, +2 Energy",
+        }, format="json")
+        self.assertEqual(response.status_code, 200)
+
+        discipline.refresh_from_db()
+        wellness = UserAttribute.objects.get(user=self.user, name="wellness")
+        energy = UserAttribute.objects.get(user=self.user, name="energy")
+        self.assertEqual(discipline.value, 0)
+        self.assertEqual(wellness.value, 0)
+        self.assertEqual(energy.value, 0)
+
+    def test_uncomplete_without_reward_string_still_reverses_correctly(self):
+        from django.utils import timezone
+        from datetime import timedelta
+
+        Task.objects.create(
+            user=self.user, title="Meditation", description="", attribute="energy",
+            reward_point=4, difficulty=1, deadline=timezone.now() + timedelta(days=1),
+        )
+        self.client.post(self.complete_url, {
+            "task_title": "Meditation", "task_type": "daily",
+            "reward_points": 4, "attribute": "energy",
+        }, format="json")
+        energy = UserAttribute.objects.get(user=self.user, name="energy")
+        self.assertEqual(energy.value, 2)  # 4 // 2
+
+        response = self.client.post(self.uncomplete_url, {"task_title": "Meditation"}, format="json")
+        self.assertEqual(response.status_code, 200)
+        energy.refresh_from_db()
+        self.assertEqual(energy.value, 0)
+
+
 class AIProviderTests(TestCase):
     """_call_ai_provider() branches on AI_PROVIDER; each branch needs its
     own client mocked out so these run without a real API key or network call."""
