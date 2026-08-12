@@ -258,11 +258,15 @@ export function AppProvider({ children }) {
     setUserGoal(newGoal);
   };
 
-  // Calculate total points for a specific attribute
+  // Calculate total points for a specific attribute. reward_point is the raw
+  // 1-5 task "budget", but completing a task only ever grants half of that
+  // (reward_point // 2) to its primary attribute — see TaskCompleteView on
+  // the backend. Halve here too, or this total reads ~2x what the user
+  // actually has.
   const getAttributePoints = (attribute) => {
     return completedTasks
       .filter((task) => task.attribute === attribute)
-      .reduce((sum, task) => sum + parseInt(task.reward_point || 0), 0);
+      .reduce((sum, task) => sum + Math.floor(parseInt(task.reward_point || 0) / 2), 0);
   };
 
   const value = {
