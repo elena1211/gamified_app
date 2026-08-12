@@ -185,6 +185,7 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
                         onChange={handleInputChange}
                         className="rpg-input"
                         placeholder="Enter your goal title"
+                        maxLength={150}
                         required
                       />
                     </div>
@@ -197,6 +198,7 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
                         rows="3"
                         className="rpg-input resize-none"
                         placeholder="Describe your goal in detail"
+                        maxLength={500}
                       />
                     </div>
                   </div>

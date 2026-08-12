@@ -747,13 +747,37 @@ class RegisterView(APIView):
             username = request.data.get('username')
             password = request.data.get('password')
             email = request.data.get('email', '')
-            goal_title = request.data.get('goal_title')
-            goal_description = request.data.get('goal_description', '')
+            goal_title = (request.data.get('goal_title') or '').strip()
+            goal_description = request.data.get('goal_description') or ''
 
             # Validation
             if not username or not password or not goal_title:
                 return Response({
                     "error": "Username, password, and goal title are required"
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Matches the check UpgradeGuestView already applies to username —
+            # without it, an overlong value hits User's DB-level constraint
+            # and surfaces as a raw 500 via the except clause below instead
+            # of a clean 400.
+            if len(username) > 150:
+                return Response({
+                    "error": "Username must be 150 characters or fewer"
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # goal_title/description are read back into the System companion's
+            # AI prompt on every chat request (see _build_user_prompt), so an
+            # unbounded value is both a Postgres CharField-constraint 500
+            # waiting to happen (title) and an unbounded-injection surface
+            # (description) — same limits TaskListView.post applies to Task
+            # title/description.
+            if len(goal_title) > 150:
+                return Response({
+                    "error": "Goal title must be 150 characters or fewer"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            if len(goal_description) > 500:
+                return Response({
+                    "error": "Goal description must be 500 characters or fewer"
                 }, status=status.HTTP_400_BAD_REQUEST)
 
             if username.startswith('guest_'):
@@ -1088,9 +1112,23 @@ class DynamicTaskCompleteView(APIView):
     """API view for completing dynamic tasks (daily tasks, time-limited tasks)"""
     def post(self, request):
         user = request.user
-        task_title = request.data.get('task_title', '')
         task_type = request.data.get('task_type', 'daily')  # 'daily' or 'time_limited'
         reward_string = request.data.get('reward_string', '')  # Full reward string for attribute processing
+
+        # Unlike TaskListView.post/TaskDetailView.put, this endpoint used to
+        # take task_title completely unvalidated — it's stored as Task.title
+        # (max_length=150) and later read back into the System companion's
+        # AI prompt (see _build_user_prompt's recent_titles), so an
+        # unbounded value is both a DB-constraint 500 waiting to happen and
+        # a prompt-injection surface. Capped at 150 to match every other
+        # Task.title write path (TaskListView, TaskDetailView, SystemChatView)
+        # — a stricter cap here would silently break completing a
+        # legitimately-created 140-150 char task.
+        task_title = (request.data.get('task_title') or '').strip()
+        if not task_title:
+            return Response({"error": "task_title cannot be empty"}, status=400)
+        if len(task_title) > 150:
+            return Response({"error": "task_title must be 150 characters or fewer"}, status=400)
 
         # reward_points/attribute are only ever used as defaults when a brand
         # new Task row has to be created below (no existing task with this
@@ -1113,8 +1151,12 @@ class DynamicTaskCompleteView(APIView):
 
             # For time-limited tasks, create unique task each time to allow multiple completions
             if task_type == 'time_limited':
-                # Add timestamp to make each time-limited task unique (for database uniqueness)
-                unique_title = f"{task_title} - {timezone.now().strftime('%H:%M:%S')}"
+                # Add timestamp to make each time-limited task unique (for
+                # database uniqueness). The " - HH:MM:SS" suffix is 11 chars,
+                # so truncate task_title to keep the result within
+                # Task.title's max_length=150 regardless of how close to the
+                # 150 cap above task_title itself is.
+                unique_title = f"{task_title[:139]} - {timezone.now().strftime('%H:%M:%S')}"
 
                 # Create a new task record for each time-limited task completion
                 task = Task.objects.create(
@@ -1357,10 +1399,10 @@ class DynamicTaskUncompleteView(APIView):
                 logger.info(f"Found task ID: {task.id}, Title: '{task.title}'")
 
             if not task:
-                logger.warning(f"Task '{task_title}' not found for user '{username}'")
+                logger.warning(f"Task '{task_title}' not found for user '{user.username}'")
                 # List all tasks for debugging
                 all_tasks = Task.objects.filter(user=user)
-                logger.info(f"Available tasks for user '{username}':")
+                logger.info(f"Available tasks for user '{user.username}':")
                 for t in all_tasks:
                     logger.info(f"  ID: {t.id}, Title: '{t.title}'")
                 return Response({
@@ -1769,8 +1811,13 @@ You MUST respond with valid JSON only — no markdown fences, no extra text. Sch
 def _build_user_prompt(user, context_type: str, user_message: str) -> str:
     attrs = {a.name: a.value for a in UserAttribute.objects.filter(user=user)}
     goal = Goal.objects.filter(user=user).first()
-    goal_title = goal.title if goal else 'No goal set'
-    goal_desc = goal.description if goal else ''
+    # Every field interpolated below reaches the AI provider raw, so each is
+    # truncated here too, as a second line of defense on top of the length
+    # limits already enforced where these values are written (RegisterView,
+    # TaskListView, TaskDetailView, DynamicTaskCompleteView) — in case a
+    # future write path forgets to validate.
+    goal_title = (goal.title if goal else 'No goal set')[:150]
+    goal_desc = (goal.description if goal else '')[:500]
 
     week_ago = date.today() - timedelta(days=7)
     recent_logs = UserTaskLog.objects.filter(
@@ -1780,11 +1827,12 @@ def _build_user_prompt(user, context_type: str, user_message: str) -> str:
     completed = recent_logs.filter(status='completed').count()
     completion_rate = round((completed / total * 100) if total > 0 else 0)
 
-    recent_titles = list(
+    recent_titles = [
+        t[:150] for t in
         UserTaskLog.objects.filter(user=user, status='completed')
         .order_by('-completed_at')
         .values_list('task__title', flat=True)[:3]
-    )
+    ]
 
     context_instructions = {
         'morning_brief': (
@@ -1982,7 +2030,12 @@ class SystemChatView(APIView):
             difficulty = max(1, min(3, difficulty))
             task = Task.objects.create(
                 user=user,
-                title=str(m.get('title') or 'System Mission')[:150],
+                # Stripped like TaskListView.post/TaskDetailView.put already
+                # strip user-supplied titles — DynamicTaskCompleteView's
+                # lookup strips the incoming title before comparing, so an
+                # un-stripped stored title here would never match and the
+                # mission could never be found/completed again.
+                title=str(m.get('title') or 'System Mission').strip()[:150],
                 # Capped like title — an open model is more likely than Claude
                 # to ignore the "one sentence" instruction in the prompt.
                 description=str(m.get('description') or '')[:500],

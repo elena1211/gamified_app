@@ -11,6 +11,7 @@ tears down an isolated test database around them.
 import os
 from unittest import mock
 
+from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
@@ -22,7 +23,12 @@ from .views import calculate_level_from_exp, get_exp_for_level, calculate_task_e
 # Throttled views (RegisterView, GuestLoginView, SystemChatView) read/write
 # the throttle cache. Tests use an in-memory cache instead of the production
 # DatabaseCache so they don't depend on `createcachetable` having been run
-# against the test database.
+# against the test database. Every class below that applies this shares the
+# same LocMemCache location (none is set, so Django falls back to one
+# process-wide default store), so each of those classes clears it in setUp —
+# otherwise throttle counts from one class's requests leak into the next
+# class that also hits an account_create/system_chat-scoped view, and the
+# combined total can trip a real 429 in what should be an isolated test.
 TEST_CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
 
 
@@ -74,6 +80,7 @@ class UserAttributeClampingTests(TestCase):
 @override_settings(CACHES=TEST_CACHES)
 class RegisterViewTests(TestCase):
     def setUp(self):
+        cache.clear()
         self.client = APIClient()
         self.url = reverse("register")
 
@@ -113,6 +120,40 @@ class RegisterViewTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(User.objects.filter(username="guest_sneaky").exists())
 
+    def test_register_rejects_oversized_goal_title(self):
+        # goal_title/description are read back into the System companion's
+        # AI prompt on every chat request, so an unbounded value here is
+        # both a DB-constraint 500 waiting to happen and an unbounded
+        # prompt-injection surface.
+        response = self.client.post(self.url, {
+            "username": "wordyplayer",
+            "password": "strongpass123",
+            "goal_title": "x" * 151,
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(User.objects.filter(username="wordyplayer").exists())
+
+    def test_register_rejects_oversized_goal_description(self):
+        response = self.client.post(self.url, {
+            "username": "wordyplayer2",
+            "password": "strongpass123",
+            "goal_title": "Get fit",
+            "goal_description": "x" * 501,
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(User.objects.filter(username="wordyplayer2").exists())
+
+    def test_register_rejects_oversized_username(self):
+        # Matches the check UpgradeGuestView already applies -- without it,
+        # an overlong username hits User's DB-level constraint and surfaces
+        # as a raw 500 instead of a clean 400.
+        response = self.client.post(self.url, {
+            "username": "x" * 151,
+            "password": "strongpass123",
+            "goal_title": "Get fit",
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+
 
 class LoginViewTests(TestCase):
     def setUp(self):
@@ -139,6 +180,7 @@ class LoginViewTests(TestCase):
 @override_settings(CACHES=TEST_CACHES)
 class GuestLoginViewTests(TestCase):
     def setUp(self):
+        cache.clear()
         self.client = APIClient()
         self.url = reverse("guest-login")
 
@@ -164,6 +206,7 @@ class GuestLoginViewTests(TestCase):
 @override_settings(CACHES=TEST_CACHES)
 class UpgradeGuestViewTests(TestCase):
     def setUp(self):
+        cache.clear()
         self.guest = User.objects.create_user(username="guest_upgrader", password="throwaway")
         self.guest_token = Token.objects.create(user=self.guest)
         self.client = APIClient()
@@ -657,6 +700,53 @@ class DynamicTaskCompleteViewTests(TestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
         self.url = reverse("dynamic-task-complete")
 
+    def test_rejects_empty_task_title(self):
+        response = self.client.post(self.url, {
+            "task_title": "   ",
+            "task_type": "daily",
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_rejects_oversized_task_title(self):
+        # task_title is stored as Task.title (max_length=150) and later read
+        # back into the System companion's AI prompt (see recent_titles in
+        # _build_user_prompt) -- unbounded input here was both a DB-
+        # constraint 500 waiting to happen and a prompt-injection surface.
+        response = self.client.post(self.url, {
+            "task_title": "x" * 151,
+            "task_type": "daily",
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Task.objects.filter(user=self.user, title__startswith="xxx").exists())
+
+    def test_accepts_task_title_at_the_150_char_limit(self):
+        # The cap must match Task.title's actual max_length -- a stricter
+        # cap here would silently break completing a legitimately-created
+        # task whose title is 140-150 chars (allowed everywhere else a
+        # title is written: TaskListView, TaskDetailView, SystemChatView).
+        title = "x" * 150
+        response = self.client.post(self.url, {
+            "task_title": title,
+            "task_type": "daily",
+        }, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(Task.objects.filter(user=self.user, title=title).exists())
+
+    def test_time_limited_task_title_near_the_limit_does_not_hit_db_constraint(self):
+        # time_limited appends " - HH:MM:SS" (11 chars) to task_title before
+        # storing it, so a title right at the 150-char cap must be
+        # truncated rather than raising a DB-level error on save.
+        response = self.client.post(self.url, {
+            "task_title": "x" * 150,
+            "task_type": "time_limited",
+            "reward_points": 3,
+            "attribute": "discipline",
+        }, format="json")
+        self.assertEqual(response.status_code, 200)
+        task = Task.objects.filter(user=self.user, title__startswith="x" * 139).first()
+        self.assertIsNotNone(task)
+        self.assertLessEqual(len(task.title), 150)
+
     def test_time_limited_task_persists_every_attribute_in_reward_string(self):
         # Previously only reached the frontend's local AppContext state —
         # never written to UserAttribute at all.
@@ -816,6 +906,17 @@ class DynamicTaskUncompleteViewTests(TestCase):
         self.complete_url = reverse("dynamic-task-complete")
         self.uncomplete_url = reverse("dynamic-task-uncomplete")
 
+    def test_uncomplete_of_nonexistent_task_returns_clean_404_not_500(self):
+        # The "not found" branch used to reference an undefined `username`
+        # variable (should have been user.username), raising a NameError
+        # that the outer except swallowed into a raw 500 with the Python
+        # error text leaked to the client, instead of the intended 404.
+        response = self.client.post(self.uncomplete_url, {
+            "task_title": "This task was never created",
+        }, format="json")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data["error"], "Dynamic task not found")
+
     def test_uncomplete_reverses_exactly_what_complete_applied_even_with_mismatched_client_string(self):
         from django.utils import timezone
         from datetime import timedelta
@@ -930,6 +1031,7 @@ class AIProviderTests(TestCase):
 @override_settings(CACHES=TEST_CACHES)
 class SystemChatViewTests(TestCase):
     def setUp(self):
+        cache.clear()
         self.user = User.objects.create_user(username="chatuser", password="pw12345")
         self.token = Token.objects.create(user=self.user)
         self.client = APIClient()
