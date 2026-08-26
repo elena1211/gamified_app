@@ -505,8 +505,13 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
 
         // RewardPopup shows a single number for the primary attribute —
         // reward_point // 2 is what's actually granted to it (see the note
-        // on applyStatChanges above), not the raw reward_point.
-        const primaryAttrGrant = Math.floor((task.reward_point || 0) / 2);
+        // on applyStatChanges above), not the raw reward_point. A task with
+        // difficulty > 1 also grants a "+difficulty-1" bonus to Discipline
+        // specifically (see TaskCompleteView) — when the task's own
+        // attribute IS discipline, that bonus adds to the same total shown
+        // here, so include it or the badge/total undercounts.
+        const primaryAttrGrant = Math.floor((task.reward_point || 0) / 2) +
+          (task.attribute === 'discipline' && (task.difficulty || 1) > 1 ? task.difficulty - 1 : 0);
         const newTotalPoints = getAttributePoints(task.attribute) + primaryAttrGrant;
 
         // Show reward popup with updated stats

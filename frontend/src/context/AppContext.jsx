@@ -262,11 +262,20 @@ export function AppProvider({ children }) {
   // 1-5 task "budget", but completing a task only ever grants half of that
   // (reward_point // 2) to its primary attribute — see TaskCompleteView on
   // the backend. Halve here too, or this total reads ~2x what the user
-  // actually has.
+  // actually has. Tasks with difficulty > 1 also grant a "+difficulty-1"
+  // bonus to Discipline specifically (same view), so a discipline-attribute
+  // task with difficulty > 1 grants both the halved reward_point AND the
+  // bonus to the same attribute — add both when totaling discipline.
   const getAttributePoints = (attribute) => {
     return completedTasks
       .filter((task) => task.attribute === attribute)
-      .reduce((sum, task) => sum + Math.floor(parseInt(task.reward_point || 0) / 2), 0);
+      .reduce((sum, task) => {
+        let points = Math.floor(parseInt(task.reward_point || 0) / 2);
+        if (attribute === 'discipline' && (task.difficulty || 1) > 1) {
+          points += task.difficulty - 1;
+        }
+        return sum + points;
+      }, 0);
   };
 
   const value = {
