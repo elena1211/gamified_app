@@ -1069,3 +1069,45 @@ class HealthViewTests(TestCase):
     def test_health_check_is_public_and_ok(self):
         response = APIClient().get(reverse("health"))
         self.assertEqual(response.status_code, 200)
+
+
+class SettingsGuardTests(TestCase):
+    """.env.example ships a working local config, so copying it verbatim to a real
+    deployment is an easy mistake. settings.py refuses to start in that case."""
+
+    def _load_settings(self, env):
+        import importlib
+        from unittest import mock
+        with mock.patch.dict(os.environ, env, clear=True):
+            import backend.settings
+            importlib.reload(backend.settings)
+            return backend.settings
+
+    def test_placeholder_secret_key_is_rejected_when_debug_is_off(self):
+        with self.assertRaises(RuntimeError) as ctx:
+            self._load_settings({
+                "SECRET_KEY": "dev-only-insecure-key-replace-me-in-production",
+                "DEBUG": "0",
+                "DATABASE_URL": "sqlite:///:memory:",
+            })
+        self.assertIn("placeholder", str(ctx.exception))
+
+    def test_placeholder_secret_key_is_allowed_in_local_development(self):
+        # The whole point of shipping a working .env.example is that this
+        # combination loads without raising.
+        settings_module = self._load_settings({
+            "SECRET_KEY": "dev-only-insecure-key-replace-me-in-production",
+            "DEBUG": "1",
+            "DATABASE_URL": "sqlite:///:memory:",
+        })
+        self.assertTrue(settings_module.DEBUG)
+        self.assertEqual(
+            settings_module.SECRET_KEY, settings_module.DEV_PLACEHOLDER_SECRET_KEY
+        )
+
+    def tearDown(self):
+        # Restore the real settings module for every test that runs after this
+        # class -- reload() above mutated it in place.
+        import importlib
+        import backend.settings
+        importlib.reload(backend.settings)

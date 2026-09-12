@@ -116,3 +116,9 @@ cookies.txt
 # ===========================================
 
 nixpacks.toml.backup
+
+# collectstatic output (STATIC_ROOT) — generated, never committed
+staticfiles/
+
+# virtualenv, non-dot variant (.venv writes its own .gitignore)
+venv/

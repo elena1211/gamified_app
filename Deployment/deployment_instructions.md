@@ -48,8 +48,10 @@ This document provides step-by-step instructions for deploying the LevelUp gamif
    - `requirements.txt`
    - `Procfile` — must contain:
      ```
-     web: gunicorn backend.wsgi:application --bind 0.0.0.0:$PORT
+     web: python manage.py migrate --noinput && python manage.py createcachetable && gunicorn backend.wsgi:application --bind 0.0.0.0:$PORT
      ```
+     `createcachetable` is required: rate limiting uses the database cache, so
+     without that table registration and guest login return a 500.
    - `runtime.txt` — must contain the Python version, e.g. `python-3.13.0`
 
 2. Run locally to verify:
@@ -66,7 +68,8 @@ This document provides step-by-step instructions for deploying the LevelUp gamif
 4. Configure the service:
    - **Environment**: Python
    - **Build Command**: `pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate`
-   - **Start Command**: `gunicorn backend.wsgi:application --bind 0.0.0.0:$PORT`
+   - **Start Command**: leave blank so Render uses the `Procfile`. Setting one here
+     overrides it and skips the `migrate` / `createcachetable` steps it runs.
 
 ### Step 3: Configure Environment Variables on Render
 
@@ -129,8 +132,16 @@ In Vercel dashboard → Domains, add your custom domain if desired.
 ### Backend
 
 ```bash
+# Health probe (public)
 curl https://gamified-app-p9ao.onrender.com/health/
-curl "https://gamified-app-p9ao.onrender.com/api/tasks/?user=tester"
+
+# Authenticated endpoints need a token — mint a guest one, then use it
+TOKEN=$(curl -s -X POST https://gamified-app-p9ao.onrender.com/api/guest/ \
+  -H "Content-Type: application/json" \
+  -d '{"guest_id":"guest_smoke1"}' | python3 -c "import json,sys; print(json.load(sys.stdin)['token'])")
+
+curl -H "Authorization: Token $TOKEN" \
+  https://gamified-app-p9ao.onrender.com/api/tasks/
 ```
 
 ### Frontend
@@ -145,8 +156,8 @@ curl "https://gamified-app-p9ao.onrender.com/api/tasks/?user=tester"
 
 ### Common Issues
 
-1. **HTTP 400 Bad Request** — `ALLOWED_HOSTS` mismatch. Check the `ALLOWED_HOSTS` env var on Render for leading/trailing spaces. Leaving it unset uses the safe default `["*", ".onrender.com"]`.
-2. **CORS Errors / "Unable to connect"** — `CORS_ALLOW_ALL_ORIGINS = True` is set in `settings.py`; no extra config needed.
+1. **HTTP 400 Bad Request** — `ALLOWED_HOSTS` mismatch. Check the `ALLOWED_HOSTS` env var on Render for leading/trailing spaces. Left unset in production, `settings.py` falls back to `["localhost", "127.0.0.1"]` plus the Render hosts (`gamified-app-p9ao.onrender.com`, `.onrender.com`). There is no wildcard.
+2. **CORS Errors / "Unable to connect"** — origins are an explicit allowlist, not `CORS_ALLOW_ALL_ORIGINS`. Left unset in production it defaults to `https://levelup-jet.vercel.app`; set `CORS_ALLOWED_ORIGINS` (comma-separated) to serve a different frontend origin.
 3. **Database connection errors** — Neon requires `conn_max_age=0` (already set) and `sslmode=require` in the connection string.
 4. **Build Failures** — Check `requirements.txt` and `runtime.txt` match the Python version on Render.
 5. **Render cold start (30s delay)** — Free tier services sleep after inactivity. The frontend handles this with optimistic UI updates.
@@ -154,7 +165,8 @@ curl "https://gamified-app-p9ao.onrender.com/api/tasks/?user=tester"
 ### Logs
 
 - **Render**: Dashboard → your service → Logs tab
-- **Vercel**: Dashboard → your project → Functions tab
+- **Vercel**: Dashboard → your project → Deployments → Build Logs (the frontend is a
+  static build, so there are no Functions logs)
 
 ---
 
@@ -162,11 +174,16 @@ curl "https://gamified-app-p9ao.onrender.com/api/tasks/?user=tester"
 
 ### Render (Backend)
 
-| Variable       | Value                  |
-| -------------- | ---------------------- |
-| `DATABASE_URL` | Neon connection string |
-| `SECRET_KEY`   | 50+ char random string |
-| `DEBUG`        | `0`                    |
+| Variable            | Value                                                      |
+| ------------------- | ---------------------------------------------------------- |
+| `DATABASE_URL`      | Neon connection string                                      |
+| `SECRET_KEY`        | 50+ char random string (never the `.env.example` placeholder) |
+| `DEBUG`             | `0`                                                         |
+| `NVIDIA_API_KEY`    | Free key from build.nvidia.com — required by the default provider |
+| `AI_PROVIDER`       | Optional. `nvidia` (default) or `anthropic`                 |
+| `ANTHROPIC_API_KEY` | Only if `AI_PROVIDER=anthropic`                             |
+
+Without an AI provider key the System tab returns an error; every other feature works.
 
 ### Vercel (Frontend)
 

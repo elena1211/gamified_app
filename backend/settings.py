@@ -33,8 +33,19 @@ if not SECRET_KEY:
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get("DEBUG", "0") == "1"
 
+# .env.example ships a working local config so `cp .env.example .env` is enough to
+# get started — which also makes it possible to copy that file straight to a real
+# deployment. Fail loudly rather than serve production traffic with a key that is
+# published in the repo.
+DEV_PLACEHOLDER_SECRET_KEY = "dev-only-insecure-key-replace-me-in-production"
+if not DEBUG and SECRET_KEY == DEV_PLACEHOLDER_SECRET_KEY:
+    raise RuntimeError(
+        "SECRET_KEY is still the placeholder from .env.example. Generate a real one: "
+        "python -c \"from django.core.management.utils import get_random_secret_key; "
+        "print(get_random_secret_key())\""
+    )
+
 # Strip whitespace from each entry so Render env-var copy-paste typos don't break host validation
-_raw_hosts = os.environ.get("ALLOWED_HOSTS", "").strip()
 ALLOWED_HOSTS = (
     [h.strip() for h in os.environ.get("ALLOWED_HOSTS", "").split(",") if h.strip()]
     or ["localhost", "127.0.0.1"]
@@ -192,10 +203,10 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.ScopedRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        # The System chat endpoint calls the Claude API, which costs money
-        # per request — capped per account AND per IP, because guest accounts
-        # are free to create and could otherwise be rotated past a per-account
-        # limit.
+        # The System chat endpoint calls an external AI provider — rate-limited
+        # on the free NVIDIA default, billed per request on Anthropic. Capped
+        # per account AND per IP, because guest accounts are free to create and
+        # could otherwise be rotated past a per-account limit.
         'system_chat': '15/hour',
         'system_chat_ip': '30/hour',
         # Account creation (register + guest login) is IP-throttled for the

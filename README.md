@@ -14,6 +14,27 @@
 
 ---
 
+## Origin
+
+LevelUp began as my MSc dissertation at Queen Mary University of London —
+*Adaptive, Gamified Task-Scheduling for Sustainable Personal Growth* — and is now
+maintained as an ongoing project.
+
+The design draws on **Self-Determination Theory** (Deci & Ryan), which holds that
+motivation depends on satisfying the needs for autonomy, competence and
+relatedness. LevelUp targets competence: progress is only motivating if the user
+can see it, so feedback has to be immediate, meaningful and visible. That is why
+the stat gains, EXP bars, level-ups and attribute growth are not decoration — they
+are the thesis made tangible. It is also why the reward loop carries real risk:
+missed tasks cost attribute points, because feedback that only ever rewards stops
+being information.
+
+Development since the dissertation has focused on the parts academic prototypes
+usually skip: authentication, input validation, server-authoritative game state,
+and an automated test suite.
+
+---
+
 ## Screenshots
 
 ### Welcome page
@@ -72,7 +93,7 @@ LevelUp is a web application that turns daily task management into a character-r
 The app is built on a modular Django + React architecture and ships with:
 
 - A retro RPG visual design system (parchment palette, double-line window frames, JRPG-style stat bars)
-- An AI-powered **System companion** backed by the Anthropic Claude API, which generates contextual daily missions, evaluates evening performance, and applies stat penalties for inactivity
+- An AI-powered **System companion** backed by a pluggable AI provider (NVIDIA NIM by default, Anthropic Claude optional), which generates contextual daily missions, evaluates evening performance, and applies stat penalties for inactivity
 - Goal-aware task selection that biases daily quests toward attributes aligned with the user's chosen goal
 - A first-run onboarding walkthrough and a guest mode that requires no registration
 
@@ -105,7 +126,8 @@ The app is built on a modular Django + React architecture and ships with:
 
 ### System Companion (AI)
 
-The System tab is a chat interface backed by the Anthropic Claude API:
+The System tab is a chat interface backed by a pluggable AI provider — NVIDIA NIM by
+default (free, rate-limited), with Anthropic Claude available via `AI_PROVIDER=anthropic`:
 
 - **Morning Brief** — generates 2–3 contextual missions for the day based on the user's goal, current stats, and recent completion rate
 - **Evening Evaluation** — reviews today's performance and issues a bonus or penalty mission
@@ -167,7 +189,7 @@ The System tab is a chat interface backed by the Anthropic Claude API:
 ### Prerequisites
 
 - Python 3.13+
-- Node.js 18+
+- Node.js 20.19+
 - npm
 
 ### Backend Setup
@@ -175,20 +197,28 @@ The System tab is a chat interface backed by the Anthropic Claude API:
 ```bash
 # 1. Clone the repository
 git clone https://github.com/elena1211/gamified_app.git
-cd LevelUp_Project
+cd gamified_app
 
 # 2. Create and activate a virtual environment
-python -m venv .venv
+python3 -m venv .venv            # Windows: python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 
 # 3. Install Python dependencies
 pip install -r requirements.txt
 
-# 4. Run migrations
+# 4. Create the environment file
+#    The defaults work as-is: DEBUG on, a dev SECRET_KEY, and local SQLite.
+cp .env.example .env
+
+# 5. Run migrations
 python manage.py migrate
 
-# 5. Start the development server
-python manage.py runserver
+# 6. Create the cache table used by rate limiting
+#    Without this, registering or starting a guest session fails.
+python manage.py createcachetable   # prints nothing on success
+
+# 7. Start the development server
+python manage.py runserver       # http://localhost:8000
 ```
 
 ### Frontend Setup
@@ -220,7 +250,7 @@ cd frontend
 npm test
 ```
 
-Both suites run automatically on every push and pull request via [GitHub Actions](.github/workflows/ci.yml).
+Both suites run automatically on pushes to `main` and on pull requests targeting `main`, via [GitHub Actions](.github/workflows/ci.yml).
 
 ---
 
@@ -237,13 +267,13 @@ VITE_API_URL=http://127.0.0.1:8000/api
 | Variable | Required | Description |
 |---|---|---|
 | `SECRET_KEY` | Yes | Django secret key |
-| `DEBUG` | No | Set `False` in production |
-| `DATABASE_URL` | Production | PostgreSQL connection string (Neon) |
+| `DEBUG` | No | `1` enables debug mode; anything else disables it. Leave unset in production |
+| `DATABASE_URL` | Yes | Database connection string — SQLite locally, PostgreSQL (Neon) in production |
 | `AI_PROVIDER` | No | `nvidia` (default) or `anthropic` — selects the System companion's AI backend |
 | `NVIDIA_API_KEY` | Yes, if using the default `nvidia` provider | Free API key from [build.nvidia.com](https://build.nvidia.com) |
 | `NVIDIA_MODEL` | No | NVIDIA NIM model slug (default: `meta/llama-3.1-70b-instruct`) |
 | `ANTHROPIC_API_KEY` | Yes, if `AI_PROVIDER=anthropic` | Claude API key — get one at [console.anthropic.com](https://console.anthropic.com) |
-| `ALLOWED_HOSTS` | Production | Comma-separated list of allowed host names |
+| `ALLOWED_HOSTS` | No | Comma-separated host names. Left unset, production falls back to the Render hosts |
 
 > **Note:** Without a configured AI provider key, the System companion tab will return an error. All other features work without it. The default `nvidia` provider is free (rate-limited); `anthropic` is billed per request but generally gives higher-quality output.
 
@@ -258,7 +288,17 @@ https://gamified-app-p9ao.onrender.com/api   # production
 http://localhost:8000/api                     # local
 ```
 
-All endpoints accept a `?user=<username>` query parameter. If the username does not exist it is created automatically.
+Every endpoint requires a token except `/register/`, `/login/` and `/guest/`. (The
+deployment health probe lives outside the API, at `/health/` on the site root.)
+Obtain a token from `/register/`, `/login/` or `/guest/`, then send it on each
+request:
+
+```
+Authorization: Token <token>
+```
+
+Requests identify the caller from that token alone — there is no user parameter, and
+every object lookup is scoped to the authenticated owner.
 
 ### Authentication
 
@@ -266,6 +306,8 @@ All endpoints accept a `?user=<username>` query parameter. If the username does 
 |---|---|---|
 | POST | `/register/` | Create a new account |
 | POST | `/login/` | Sign in |
+| POST | `/guest/` | Start a guest session (no password) |
+| POST | `/upgrade-guest/` | Convert the current guest into a real account, keeping all progress |
 
 ### Tasks
 
@@ -274,9 +316,11 @@ All endpoints accept a `?user=<username>` query parameter. If the username does 
 | GET | `/tasks/` | Retrieve today's daily tasks (goal-weighted) |
 | POST | `/tasks/` | Create a new task |
 | GET | `/tasks/<id>/` | Get a single task |
+| PUT | `/tasks/<id>/` | Edit a task |
+| DELETE | `/tasks/<id>/` | Delete a task |
 | POST | `/tasks/complete/` | Toggle task completion |
-| POST | `/tasks/complete-dynamic/` | Complete a time-limited quest |
-| POST | `/tasks/uncomplete-dynamic/` | Undo a time-limited quest |
+| POST | `/tasks/complete-dynamic/` | Complete a daily task or time-limited quest |
+| POST | `/tasks/uncomplete-dynamic/` | Undo a daily task completion |
 | GET | `/tasks/completed-history/` | Full completion history |
 | GET | `/tasks/weekly-stats/` | 7-day completion breakdown |
 
@@ -292,13 +336,15 @@ All endpoints accept a `?user=<username>` query parameter. If the username does 
 | Method | Endpoint | Description |
 |---|---|---|
 | GET | `/goal/` | Retrieve the user's current goal |
-| POST | `/goal/` | Create or update the goal |
+
+> The goal is set during registration. Editing it after sign-up is not yet supported —
+> see [Known Limitations](#known-limitations).
 
 ### System (AI)
 
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | `/system/chat/` | Generate missions via Claude API |
+| POST | `/system/chat/` | Generate missions via the configured AI provider |
 | GET | `/system/messages/` | Last 10 system log entries |
 | GET | `/system/daily-status/` | Unread count, active title, morning-brief flag |
 | POST | `/system/punishment-check/` | Apply daily penalty if yesterday's rate < 30 % |
@@ -307,7 +353,6 @@ All endpoints accept a `?user=<username>` query parameter. If the username does 
 
 ```json
 {
-  "user": "elena",
   "message": "I have a job interview tomorrow",
   "context_type": "user_input"
 }
@@ -320,7 +365,7 @@ All endpoints accept a `?user=<username>` query parameter. If the username does 
 ## Project Structure
 
 ```
-LevelUp_Project/
+gamified_app/
 ├── backend/
 │   ├── models.py          # User, Task, Goal, UserAttribute,
 │   │                      # UserTaskLog, SystemLog, UserTitle
@@ -353,11 +398,12 @@ LevelUp_Project/
 │   │   │   └── AppContext.jsx          # Global state (stats, system, auth)
 │   │   ├── config/
 │   │   │   └── api.js                  # API endpoints + cold-start retry logic
-│   │   └── utils/
-│   │       ├── avatar.js               # Level → stage/title/EXP helpers
-│   │       └── taskUtils.js            # Title cleaning utilities
-│   ├── index.html
-│   └── index.css                       # Design tokens + RPG utility classes
+│   │   ├── utils/
+│   │   │   ├── avatar.js               # Level → stage/title/EXP helpers
+│   │   │   ├── logger.js               # debugLog — dev-only console output
+│   │   │   └── taskUtils.js            # Title cleaning utilities
+│   │   └── index.css                   # Design tokens + RPG utility classes
+│   └── index.html
 ├── requirements.txt
 ├── manage.py
 └── README.md
@@ -371,7 +417,7 @@ LevelUp_Project/
 
 1. Connect the GitHub repository to a new Render Web Service.
 2. Set the build command: `pip install -r requirements.txt`
-3. Set the start command: `gunicorn backend.wsgi --workers 2`
+3. Leave the start command blank so Render uses the `Procfile` (it runs `migrate` and `createcachetable` before gunicorn)
 4. Add environment variables: `SECRET_KEY`, `DATABASE_URL`, `NVIDIA_API_KEY` (or `AI_PROVIDER=anthropic` + `ANTHROPIC_API_KEY`), `ALLOWED_HOSTS`.
 5. After the first deploy, open the Render Shell and run:
 
@@ -394,7 +440,10 @@ LevelUp_Project/
 - The Render free tier sleeps after 15 minutes of inactivity; the first request after sleep can take 30–60 seconds. The app retries automatically with exponential backoff.
 - The System companion requires a configured AI provider key (`NVIDIA_API_KEY` by default, or `ANTHROPIC_API_KEY` if `AI_PROVIDER=anthropic`). Without one, the System tab will surface an error message.
 - NVIDIA's free NIM API (the default provider) is rate-limited (~40 requests/minute) and positioned by NVIDIA for prototyping rather than guaranteed production traffic.
-- User authentication uses session-based login without OAuth; not recommended for sensitive data.
+- Authentication uses DRF tokens, which do not expire and cannot yet be revoked server-side (there is no logout endpoint). Rotating refresh tokens are the intended next step; there is no OAuth or social login.
+- Guest session IDs are generated client-side and act as the only credential for that account, so a guessed ID grants access to it. Guest accounts are intended for trying the demo, not for real data.
+- The goal is set at registration and cannot be edited afterwards.
+- There is no password reset, and account deletion and data export are not yet implemented — both are prerequisites for opening the app to real users.
 - Automated tests cover core models and API views (backend) and key components (frontend) — see [Testing](#testing). Coverage is not exhaustive.
 
 ---
