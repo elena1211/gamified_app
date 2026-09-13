@@ -275,6 +275,7 @@ VITE_API_URL=http://127.0.0.1:8000/api
 | `NVIDIA_MODEL` | No | NVIDIA NIM model slug (default: `meta/llama-3.1-70b-instruct`) |
 | `ANTHROPIC_API_KEY` | Yes, if `AI_PROVIDER=anthropic` | Claude API key — get one at [console.anthropic.com](https://console.anthropic.com) |
 | `ALLOWED_HOSTS` | No | Comma-separated host names. Left unset, production falls back to the Render hosts |
+| `ADMIN_URL` | No | Path for the Django admin (default `admin`) |
 
 > **Note:** Without a configured AI provider key, the System companion tab will return an error. All other features work without it. The default `nvidia` provider is free (rate-limited); `anthropic` is billed per request but generally gives higher-quality output.
 

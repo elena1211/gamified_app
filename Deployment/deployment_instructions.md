@@ -182,8 +182,15 @@ curl -H "Authorization: Token $TOKEN" \
 | `NVIDIA_API_KEY`    | Free key from build.nvidia.com — required by the default provider |
 | `AI_PROVIDER`       | Optional. `nvidia` (default) or `anthropic`                 |
 | `ANTHROPIC_API_KEY` | Only if `AI_PROVIDER=anthropic`                             |
+| `ADMIN_URL`         | Optional. Path for the Django admin (default `admin`). Set something unguessable |
 
 Without an AI provider key the System tab returns an error; every other feature works.
+
+With `DEBUG=0`, `settings.py` also turns on HTTPS redirection, HSTS, secure
+cookies and `SECURE_PROXY_SSL_HEADER` — the last is what makes the redirect
+work behind Render's TLS-terminating proxy rather than looping. `manage.py
+check --deploy` runs in CI against production-shaped settings, so a
+regression there fails the build rather than reaching a deploy.
 
 ### Vercel (Frontend)
 
