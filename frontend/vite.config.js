@@ -21,5 +21,19 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './src/test/setup.js',
     globals: true,
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.{js,jsx}'],
+      exclude: ['src/**/__tests__/**', 'src/test/**', 'src/main.jsx'],
+      reporter: ['text-summary', 'text'],
+      // A couple of points under the current figures, so a real drop fails CI
+      // while ordinary churn does not. Raise them as coverage rises.
+      thresholds: {
+        statements: 33,
+        branches: 31,
+        functions: 31,
+        lines: 33,
+      },
+    },
   },
 })

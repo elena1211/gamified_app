@@ -195,7 +195,7 @@ export default function SystemSettingsPage({ currentUser, onLogout, onUpgradeSuc
                   value={upgradeData.password}
                   onChange={handleUpgradeInputChange}
                   className="rpg-input text-sm"
-                  placeholder="At least 6 characters"
+                  placeholder="At least 8 characters"
                   autoComplete="new-password"
                   required
                 />

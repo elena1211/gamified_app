@@ -43,7 +43,9 @@ class ErrorBoundary extends React.Component {
                   <pre className="text-xs text-red-600 mt-2 overflow-auto">
                     {this.state.error && this.state.error.toString()}
                     <br />
-                    {this.state.errorInfo.componentStack}
+                    {/* getDerivedStateFromError renders this before componentDidCatch
+                        has stored errorInfo, so it is still null on the first pass. */}
+                    {this.state.errorInfo?.componentStack}
                   </pre>
                 </details>
               )}

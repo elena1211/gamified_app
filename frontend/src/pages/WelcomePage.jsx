@@ -53,6 +53,24 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
     }
   };
 
+  // Shown on both views. The landing view used to omit it, so a failed guest
+  // start — most often the backend still waking up — cleared the spinner and
+  // left the player with no idea anything had gone wrong.
+  const errorBox = error && (
+    <div
+      role="alert"
+      className="mb-4 px-4 py-3 text-sm text-ink border-2 rounded-sm"
+      style={{ background: 'var(--paper-deep)', borderColor: 'var(--accent-rust)' }}
+    >
+      {error}
+    </div>
+  );
+
+  const switchMode = (loginMode) => {
+    setError('');
+    setIsLoginMode(loginMode);
+  };
+
   const FEATURES = [
     { icon: '🎯', title: 'Set Your Goals', desc: 'Define your path to success' },
     { icon: '📋', title: 'Daily Random Quests', desc: 'Complete challenges to level up' },
@@ -84,6 +102,8 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
 
             <div className="paper-divider mb-5"><span>begin your journey</span></div>
 
+            {errorBox}
+
             <div className="space-y-3">
               <button
                 onClick={onNavigateToRegister}
@@ -92,7 +112,7 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
                 Create Account
               </button>
               <button
-                onClick={() => setIsLoginMode(true)}
+                onClick={() => switchMode(true)}
                 className="rpg-btn-secondary w-full"
               >
                 Sign In
@@ -120,14 +140,7 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
       <div className="rpg-window max-w-sm w-full page-enter">
         <div className="rpg-header">Welcome Back</div>
         <div className="px-6 py-6">
-          {error && (
-            <div
-              className="mb-4 px-4 py-3 text-sm text-ink border-2 rounded-sm"
-              style={{ background: 'var(--paper-deep)', borderColor: 'var(--accent-rust)' }}
-            >
-              {error}
-            </div>
-          )}
+          {errorBox}
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
@@ -179,7 +192,7 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
 
           <div className="flex flex-col gap-2 text-center text-sm">
             <button
-              onClick={() => setIsLoginMode(false)}
+              onClick={() => switchMode(false)}
               className="text-ink-mute hover:text-ink transition-colors"
             >
               ← Back
