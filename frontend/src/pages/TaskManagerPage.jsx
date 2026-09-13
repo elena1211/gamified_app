@@ -6,7 +6,7 @@ import RewardPopup from '../components/RewardPopup';
 import WeeklyTaskStats from '../components/WeeklyTaskStats';
 import LevelUpModal from '../components/LevelUpModal';
 import Modal from '../components/Modal';
-import { useAppContext } from '../context/AppContext';
+import { useAppContext } from '../context/appContextValue';
 import { getAvatarStage } from '../utils/avatar';
 import { debugLog } from '../utils/logger';
 import { cleanTaskTitle } from '../utils/taskUtils';

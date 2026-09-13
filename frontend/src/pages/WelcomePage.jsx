@@ -21,7 +21,7 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
         body: JSON.stringify({ guest_id: guestId }),
       });
       onLoginSuccess(data.username, data.token);
-    } catch (err) {
+    } catch {
       setError('Failed to start guest session. Please try again.');
     } finally {
       setLoading(false);

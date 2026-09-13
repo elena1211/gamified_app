@@ -11,7 +11,7 @@ import Modal from "../components/Modal";
 import WeeklyTaskStats from "../components/WeeklyTaskStats";
 import LevelUpModal from "../components/LevelUpModal";
 import SystemAlert from "../components/SystemAlert";
-import { useAppContext } from "../context/AppContext";
+import { useAppContext } from "../context/appContextValue";
 import { getAvatarStage, getExpForLevel } from "../utils/avatar";
 import { debugLog } from "../utils/logger";
 

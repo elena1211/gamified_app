@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { markOnboardingDone } from '../utils/onboarding';
 
 const SLIDES = [
   {
@@ -22,20 +23,6 @@ const SLIDES = [
     icon: '✦',
   },
 ];
-
-const STORAGE_KEY = 'levelup_onboarding_done';
-
-export function hasSeenOnboarding() {
-  return localStorage.getItem(STORAGE_KEY) === 'true';
-}
-
-export function markOnboardingDone() {
-  localStorage.setItem(STORAGE_KEY, 'true');
-}
-
-export function resetOnboarding() {
-  localStorage.removeItem(STORAGE_KEY);
-}
 
 export default function OnboardingTutorial({ onComplete }) {
   const [index, setIndex] = useState(0);

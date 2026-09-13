@@ -1,18 +1,7 @@
-import { useState, useEffect, createContext, useContext } from "react";
+import { useState, useEffect } from "react";
+import { AppContext } from "./appContextValue";
 import { debugLog } from "../utils/logger";
 import { apiRequest, API_ENDPOINTS } from "../config/api";
-
-// Create the context
-export const AppContext = createContext();
-
-// Custom hook to use the context
-export const useAppContext = () => {
-  const context = useContext(AppContext);
-  if (!context) {
-    throw new Error("useAppContext must be used within an AppProvider");
-  }
-  return context;
-};
 
 // Provider component
 export function AppProvider({ children }) {

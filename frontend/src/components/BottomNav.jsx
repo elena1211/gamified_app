@@ -1,6 +1,6 @@
 import { Home, Settings, ClipboardList, Cpu } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useAppContext } from "../context/AppContext.jsx";
+import { useAppContext } from "../context/appContextValue.js";
 
 export default function BottomNav({
   onSettingsClick,
