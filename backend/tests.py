@@ -14,11 +14,16 @@ from unittest import mock
 from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.urls import reverse
-from rest_framework.test import APIClient
 from rest_framework.authtoken.models import Token
+from rest_framework.test import APIClient
 
-from .models import User, UserAttribute, Task, Goal
-from .views import calculate_level_from_exp, get_exp_for_level, calculate_task_exp, _call_ai_provider
+from .models import Goal, Task, User, UserAttribute
+from .views import (
+    _call_ai_provider,
+    calculate_level_from_exp,
+    calculate_task_exp,
+    get_exp_for_level,
+)
 
 # Throttled views (RegisterView, GuestLoginView, SystemChatView) read/write
 # the throttle cache. Tests use an in-memory cache instead of the production
@@ -214,8 +219,9 @@ class UpgradeGuestViewTests(TestCase):
         self.url = reverse("upgrade-guest")
 
     def test_upgrade_preserves_all_existing_progress(self):
-        from django.utils import timezone
         from datetime import timedelta
+
+        from django.utils import timezone
 
         goal = Goal.objects.create(user=self.guest, title="Getting Started", description="")
         task = Task.objects.create(
@@ -314,8 +320,9 @@ class TaskListViewTests(TestCase):
         self.assertEqual(response.status_code, 401)
 
     def test_returns_only_current_users_tasks(self):
-        from django.utils import timezone
         from datetime import timedelta
+
+        from django.utils import timezone
 
         other_user = User.objects.create_user(username="otherplayer", password="pw12345")
         Task.objects.create(
@@ -338,8 +345,9 @@ class TaskListViewTests(TestCase):
         # "reward" display string, which is already halved (reward_point//2)
         # -- silently corrupting the stored value on every edit-after-fetch.
         # The raw field must be present and must NOT match the halved string.
-        from django.utils import timezone
         from datetime import timedelta
+
+        from django.utils import timezone
 
         Task.objects.create(
             user=self.user, title="Solo task", description="", attribute="discipline",
@@ -452,8 +460,9 @@ class TaskCreateValidationTests(TestCase):
 
 class TaskDeleteTests(TestCase):
     def setUp(self):
-        from django.utils import timezone
         from datetime import timedelta
+
+        from django.utils import timezone
 
         self.user = User.objects.create_user(username="deleter", password="pw12345")
         self.token = Token.objects.create(user=self.user)
@@ -487,6 +496,7 @@ class TaskDeleteTests(TestCase):
 
     def test_deleting_a_completed_task_removes_its_history(self):
         from django.utils import timezone
+
         from .models import UserTaskLog
 
         log = UserTaskLog.objects.create(
@@ -501,8 +511,9 @@ class TaskDeleteTests(TestCase):
 
 class TaskEditTests(TestCase):
     def setUp(self):
-        from django.utils import timezone
         from datetime import timedelta
+
+        from django.utils import timezone
 
         self.user = User.objects.create_user(username="editor", password="pw12345")
         self.token = Token.objects.create(user=self.user)
@@ -604,6 +615,7 @@ class TaskEditTests(TestCase):
 
     def test_cannot_change_reward_fields_after_completing_today(self):
         from django.utils import timezone
+
         from .models import UserTaskLog
 
         UserTaskLog.objects.create(
@@ -617,6 +629,7 @@ class TaskEditTests(TestCase):
 
     def test_can_still_rename_a_task_completed_today(self):
         from django.utils import timezone
+
         from .models import UserTaskLog
 
         UserTaskLog.objects.create(
@@ -651,8 +664,9 @@ class TaskEditTests(TestCase):
 
 class TaskCompleteViewTests(TestCase):
     def setUp(self):
-        from django.utils import timezone
         from datetime import timedelta
+
+        from django.utils import timezone
 
         self.user = User.objects.create_user(username="completer", password="pw12345")
         for attr_name in ["intelligence", "discipline", "energy", "social", "wellness", "stress"]:
@@ -833,8 +847,9 @@ class DynamicTaskCompleteViewTests(TestCase):
         self.assertEqual(social.value, 2)
 
     def test_daily_task_reward_is_derived_from_stored_task_not_client_string(self):
-        from django.utils import timezone
         from datetime import timedelta
+
+        from django.utils import timezone
 
         # A real task already exists with a small, single-attribute reward...
         Task.objects.create(
@@ -875,8 +890,9 @@ class DynamicTaskCompleteViewTests(TestCase):
         self.assertEqual(task.attribute, "discipline")
 
     def test_completing_same_daily_task_twice_in_one_day_does_not_double_grant(self):
-        from django.utils import timezone
         from datetime import timedelta
+
+        from django.utils import timezone
 
         Task.objects.create(
             user=self.user, title="Write journal entry", description="", attribute="discipline",
@@ -918,8 +934,9 @@ class DynamicTaskUncompleteViewTests(TestCase):
         self.assertEqual(response.data["error"], "Dynamic task not found")
 
     def test_uncomplete_reverses_exactly_what_complete_applied_even_with_mismatched_client_string(self):
-        from django.utils import timezone
         from datetime import timedelta
+
+        from django.utils import timezone
 
         # Real stored task grants a small, single-attribute reward...
         Task.objects.create(
@@ -953,8 +970,9 @@ class DynamicTaskUncompleteViewTests(TestCase):
         self.assertEqual(energy.value, 0)
 
     def test_uncomplete_without_reward_string_still_reverses_correctly(self):
-        from django.utils import timezone
         from datetime import timedelta
+
+        from django.utils import timezone
 
         Task.objects.create(
             user=self.user, title="Meditation", description="", attribute="energy",
@@ -1109,5 +1127,6 @@ class SettingsGuardTests(TestCase):
         # Restore the real settings module for every test that runs after this
         # class -- reload() above mutated it in place.
         import importlib
+
         import backend.settings
         importlib.reload(backend.settings)

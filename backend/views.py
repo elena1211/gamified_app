@@ -1,22 +1,24 @@
-from rest_framework.response import Response
-from rest_framework.views import APIView
-from rest_framework import status
-from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework.throttling import ScopedRateThrottle
-from rest_framework.authtoken.models import Token
-from .throttles import SystemChatIPThrottle
+import logging
+import math
+import random
+import re
+import secrets
+from datetime import date, datetime, timedelta
+
 from django.contrib.auth import authenticate
 from django.contrib.auth.hashers import make_password
 from django.db import IntegrityError
 from django.http import HttpResponse
-from .models import Task, User, Goal, UserTaskLog, UserAttribute, SystemLog, UserTitle
 from django.utils import timezone
-from datetime import date, timedelta, datetime
-import random
-import math
-import logging
-import re
-import secrets
+from rest_framework import status
+from rest_framework.authtoken.models import Token
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.views import APIView
+
+from .models import Goal, SystemLog, Task, User, UserAttribute, UserTaskLog, UserTitle
+from .throttles import SystemChatIPThrottle
 
 logger = logging.getLogger(__name__)
 
@@ -616,9 +618,8 @@ class TaskCompleteView(APIView):
             ).first()
 
             # Store old level and exp for level-up detection
-            # Store old level and exp for level-up detection
+            # Store old level for level-up detection
             old_level = user.level
-            old_exp = user.exp
 
             # Build reward string for attribute side-effects
             reward_attr = task.attribute.title()
@@ -1215,7 +1216,7 @@ class DynamicTaskCompleteView(APIView):
 
                 return Response({
                     'success': True,
-                    'message': f'Time-limited task completed successfully',
+                    'message': 'Time-limited task completed successfully',
                     'task_completed': True,
                     'streak': user.current_streak,
                     'user_stats': {
@@ -1297,7 +1298,7 @@ class DynamicTaskCompleteView(APIView):
 
                     return Response({
                         'success': True,
-                        'message': f'Daily task completed successfully',
+                        'message': 'Daily task completed successfully',
                         'task_completed': True,
                         'streak': user.current_streak,
                         'user_stats': {
@@ -1352,9 +1353,6 @@ class DynamicTaskUncompleteView(APIView):
 
             # If exact match fails, try partial match for common title mismatches
             if not task:
-                # Try to find task by removing emojis and checking if core title matches
-                core_title = re.sub(r'[^\w\s-]', '', task_title).strip()
-
                 # Remove potential timestamp from the search title
                 clean_search_title = re.sub(r' - \d{2}:\d{2}:\d{2}$', '', task_title)
                 clean_core_title = re.sub(r'[^\w\s-]', '', clean_search_title).strip()
@@ -1424,9 +1422,8 @@ class DynamicTaskUncompleteView(APIView):
             completion_log = completion_logs.first()
 
             if completion_log:
-                # Store old level and exp for level-up detection
+                # Store old level for level-up detection
                 old_level = user.level
-                old_exp = user.exp
 
                 # Subtract EXP when uncompleting
                 exp_lost = calculate_task_exp(task)

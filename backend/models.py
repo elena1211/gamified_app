@@ -1,6 +1,7 @@
-from django.db import models
-from django.contrib.auth.models import AbstractUser
 from datetime import date, timedelta
+
+from django.contrib.auth.models import AbstractUser
+from django.db import models
 
 PERSONALITY_CHOICES = [
     ('logical', 'Logical'),
