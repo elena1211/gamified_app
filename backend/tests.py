@@ -1271,6 +1271,53 @@ class HealthViewTests(TestCase):
         self.assertEqual(response.data["database"], "unreachable")
 
 
+class DeploymentSecurityTests(TestCase):
+    """The SECURE_* block only applies when DEBUG is off, so it is invisible in
+    local development and in the rest of the suite. These load settings the way
+    production does and assert it is actually there."""
+
+    def _prod_settings(self):
+        import importlib
+        from unittest import mock
+
+        env = {
+            "SECRET_KEY": "a-long-enough-production-looking-key-1234567890abcdef",
+            "DEBUG": "0",
+            "DATABASE_URL": "postgres://user:pass@localhost:5432/placeholder",
+            "ALLOWED_HOSTS": "example.com",
+        }
+        with mock.patch.dict(os.environ, env, clear=True):
+            import backend.settings
+            importlib.reload(backend.settings)
+            return backend.settings
+
+    def test_production_redirects_to_https_and_trusts_the_proxy_header(self):
+        cfg = self._prod_settings()
+        self.assertTrue(cfg.SECURE_SSL_REDIRECT)
+        # Without this, Django never sees a request as secure behind Render's
+        # TLS-terminating proxy and the redirect above loops forever.
+        self.assertEqual(cfg.SECURE_PROXY_SSL_HEADER, ("HTTP_X_FORWARDED_PROTO", "https"))
+
+    def test_production_sets_secure_cookies_and_headers(self):
+        cfg = self._prod_settings()
+        self.assertTrue(cfg.SESSION_COOKIE_SECURE)
+        self.assertTrue(cfg.CSRF_COOKIE_SECURE)
+        self.assertTrue(cfg.SECURE_CONTENT_TYPE_NOSNIFF)
+        self.assertGreater(cfg.SECURE_HSTS_SECONDS, 0)
+
+    def test_local_development_is_not_forced_onto_https(self):
+        # Turning these on for DEBUG=1 would redirect localhost to an https URL
+        # nothing is serving.
+        import backend.settings
+        self.assertFalse(getattr(backend.settings, "SECURE_SSL_REDIRECT", False))
+
+    def tearDown(self):
+        import importlib
+
+        import backend.settings
+        importlib.reload(backend.settings)
+
+
 class SettingsGuardTests(TestCase):
     """.env.example ships a working local config, so copying it verbatim to a real
     deployment is an easy mistake. settings.py refuses to start in that case."""

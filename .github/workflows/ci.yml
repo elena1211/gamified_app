@@ -28,6 +28,16 @@ jobs:
       # would otherwise only surface as a warning in local test output.
       - name: Check for missing migrations
         run: python manage.py makemigrations --check --dry-run
+      # Runs with production-shaped settings, so the SECURE_* block is actually
+      # exercised. Warnings fail the build; the two deliberate ones are
+      # silenced in settings.py with the reasoning next to them.
+      - name: Django deployment checks
+        env:
+          DEBUG: "0"
+          SECRET_KEY: ci-deploy-check-key-long-enough-to-satisfy-the-w009-check
+          DATABASE_URL: "postgres://user:pass@localhost:5432/placeholder"
+          ALLOWED_HOSTS: "example.com"
+        run: python manage.py check --deploy --fail-level WARNING
       - run: python manage.py test backend
 
   frontend:

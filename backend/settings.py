@@ -190,6 +190,41 @@ if not DEBUG:
         "https://levelup-jet.vercel.app",
     ]
 
+    # Render terminates TLS at its proxy and forwards over plain HTTP, so
+    # request.is_secure() is False for every request unless Django is told to
+    # trust the forwarded header. Without this line SECURE_SSL_REDIRECT below
+    # sees an insecure request, redirects to HTTPS, and the proxy forwards the
+    # result back over HTTP — an infinite loop. This has to come first.
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = True
+
+    # Start HSTS at one hour rather than the usual year. A browser that has
+    # seen this header refuses plain HTTP for the whole max-age and there is no
+    # way to call that back, so the value is raised deliberately once the
+    # HTTPS-only setup has proven itself, not on day one.
+    SECURE_HSTS_SECONDS = 3600
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+    SECURE_HSTS_PRELOAD = False
+
+    # The API is token-authenticated, so these cookies matter for the Django
+    # admin rather than the app itself — which is exactly the session worth
+    # protecting.
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_REFERRER_POLICY = "same-origin"
+
+    # Both of these are deliberate, so they are silenced rather than left as
+    # standing warnings — that way CI can treat any *new* warning as a failure.
+    #   W005 includeSubDomains: the deployed host has no subdomains, and
+    #        asserting it would outlive a future move to a custom domain whose
+    #        subdomains may not all be HTTPS.
+    #   W021 preload: submitting to the browser preload list is effectively
+    #        irreversible, which is not a commitment to make while HSTS is
+    #        still at a one-hour max-age.
+    SILENCED_SYSTEM_CHECKS = ["security.W005", "security.W021"]
+
 # Django REST Framework settings
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
