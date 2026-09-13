@@ -255,6 +255,8 @@ Both suites run automatically on pushes to `main` and on pull requests targeting
 
 The backend suite runs under `coverage` with a floor configured in `pyproject.toml`, so a drop fails the build rather than going unnoticed. Current backend coverage is **82%** across 153 tests; `views.py`, which holds the API, is at 78%.
 
+The frontend suite runs the same way (`npm run test:coverage`, thresholds in `vite.config.js`). It is at **36%** across 118 tests: the utilities, the API client's retry and error handling, the sign-in and registration pages, and the shared components are covered; `HomePage` and `TaskManagerPage`, the two largest files, are not yet.
+
 Every endpoint has an authentication test — the list is data-driven, so adding a view without protecting it fails the suite rather than reaching production. Cross-user isolation is asserted separately: reads return only the caller's rows, and writes against another user's row are rejected.
 
 ---
@@ -468,7 +470,7 @@ reviewed change with its reasoning in the message body.
 - The goal is set at registration and cannot be edited afterwards.
 - Day boundaries use a single timezone (`Europe/London`) rather than each user's own, so streaks and the daily reset roll over at UK midnight regardless of where the user is. Per-user timezones are the next step.
 - There is no password reset, and account deletion and data export are not yet implemented — both are prerequisites for opening the app to real users.
-- Automated tests cover core models and API views (backend) and key components (frontend) — see [Testing](#testing). Coverage is not exhaustive.
+- Backend coverage is 82%; frontend coverage is 36%, with `HomePage` and `TaskManagerPage` still untested — see [Testing](#testing).
 
 ---
 

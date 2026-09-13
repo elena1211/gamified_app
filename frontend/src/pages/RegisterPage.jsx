@@ -41,7 +41,7 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
 
   const handleNextStep = () => {
     if (!formData.username.trim()) { setError('All fields are required'); return; }
-    if (formData.password.length < 6) { setError('Password must be at least 6 characters'); return; }
+    if (formData.password.length < 8) { setError('Password must be at least 8 characters'); return; }
     if (formData.password !== formData.confirmPassword) { setError('Passwords do not match'); return; }
     setError('');
     setStep(2);
@@ -123,7 +123,7 @@ export default function RegisterPage({ onRegisterSuccess, onNavigateBack }) {
                 {[
                   { label: 'Username', name: 'username', type: 'text', placeholder: 'Choose a username', required: true },
                   { label: 'Email (optional)', name: 'email', type: 'email', placeholder: 'your@email.com', required: false },
-                  { label: 'Password', name: 'password', type: 'password', placeholder: 'At least 6 characters', required: true },
+                  { label: 'Password', name: 'password', type: 'password', placeholder: 'At least 8 characters', required: true },
                   { label: 'Confirm Password', name: 'confirmPassword', type: 'password', placeholder: 'Repeat your password', required: true },
                 ].map(field => (
                   <div key={field.name}>

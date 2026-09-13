@@ -42,6 +42,17 @@ const RETRY_DELAYS_MS = [1000, 3000, 6000];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// A response the server chose to send. Its message is written for the player —
+// "Username already exists", "Request was throttled." — so it must reach them
+// unchanged rather than be relabelled as a connection problem.
+export class ApiError extends Error {
+  constructor(message, status) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 export const getAuthToken = () => localStorage.getItem('levelup_auth_token');
 
 export const getAuthHeaders = () => {
@@ -93,7 +104,7 @@ export const apiRequest = async (url, options = {}) => {
         } catch (parseError) {
           debugError("Failed to parse error response:", parseError);
         }
-        throw new Error(errorMessage);
+        throw new ApiError(errorMessage, response.status);
       }
 
       debugLog(
@@ -101,6 +112,11 @@ export const apiRequest = async (url, options = {}) => {
       );
       await sleep(RETRY_DELAYS_MS[attempt]);
     } catch (error) {
+      // The ApiError above is thrown inside this try, so it lands here too.
+      // Without this it fell through to the generic branch below and every
+      // validation message was shown prefixed with "Connection error:".
+      if (error instanceof ApiError) throw error;
+
       lastError = error;
       const isNetworkError =
         error.name === "TypeError" && error.message.includes("fetch");
@@ -112,9 +128,6 @@ export const apiRequest = async (url, options = {}) => {
           throw new Error(
             "Connection error: Unable to connect to server. Please check if the backend is running.",
           );
-        }
-        if (error.message.startsWith("HTTP error") || error.message.startsWith("Connection error")) {
-          throw error;
         }
         throw new Error(`Connection error: ${error.message}`);
       }
