@@ -252,6 +252,11 @@ REST_FRAMEWORK = {
         # deliberately tighter than account creation. Legitimate users rarely
         # need more than a handful of attempts in an hour.
         'login': '20/hour',
+        # Task completion writes EXP, attributes and rows. Nothing capped it,
+        # and the time-limited branch creates a new Task per call with no
+        # per-day limit, so a loop could farm stats and fill the database.
+        # Set well above real use: a heavy day is a few dozen completions.
+        'task_write': '200/hour',
     },
     # Render sits behind one reverse proxy; without this, every client would
     # share the proxy's IP and IP throttles would lump all users together.

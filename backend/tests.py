@@ -18,7 +18,7 @@ from django.urls import reverse
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
-from .models import Goal, Task, User, UserAttribute
+from .models import Goal, Task, User, UserAttribute, UserTaskLog
 from .views import (
     _call_ai_provider,
     calculate_level_from_exp,
@@ -1269,6 +1269,87 @@ class HealthViewTests(TestCase):
 
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.data["database"], "unreachable")
+
+
+class ConcurrencyTests(TestCase):
+    """The reward paths read EXP, derive a new value and write it back. Without
+    a lock two interleaved requests both read the old value and the second write
+    discards the first."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(username="concurrent", password="pw12345")
+        for name in ["intelligence", "discipline", "energy", "social", "wellness", "stress"]:
+            UserAttribute.objects.create(user=self.user, name=name, value=0)
+        self.token = Token.objects.create(user=self.user)
+        self.client = APIClient()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
+
+    def test_completing_the_same_task_twice_grants_exp_once(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        task = Task.objects.create(
+            user=self.user, title="Focus block", description="", attribute="discipline",
+            reward_point=6, difficulty=1, deadline=timezone.now() + timedelta(days=1),
+        )
+        url = reverse("task-complete")
+
+        self.client.post(url, {"task_id": task.id}, format="json")
+        self.user.refresh_from_db()
+        after_first = self.user.exp
+        self.assertGreater(after_first, 0)
+
+        # A second complete toggles it back off rather than granting again.
+        self.client.post(url, {"task_id": task.id}, format="json")
+        self.user.refresh_from_db()
+        self.assertLess(self.user.exp, after_first)
+
+        self.assertEqual(
+            UserTaskLog.objects.filter(user=self.user, task=task, status="completed").count(), 0
+        )
+
+    def test_reward_write_is_atomic(self):
+        # If the log is written but the EXP save fails, the user is left having
+        # completed a task for nothing. The transaction makes that impossible.
+        from datetime import timedelta
+        from unittest import mock
+
+        from django.utils import timezone
+
+        task = Task.objects.create(
+            user=self.user, title="Atomic check", description="", attribute="discipline",
+            reward_point=6, difficulty=1, deadline=timezone.now() + timedelta(days=1),
+        )
+        exp_before = self.user.exp
+
+        with mock.patch.object(User, "update_streak", side_effect=RuntimeError("boom")):
+            response = self.client.post(reverse("task-complete"), {"task_id": task.id}, format="json")
+        self.assertEqual(response.status_code, 500)
+
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.exp, exp_before)
+        self.assertEqual(
+            UserTaskLog.objects.filter(user=self.user, task=task, status="completed").count(), 0
+        )
+        self.assertEqual(
+            UserAttribute.objects.get(user=self.user, name="discipline").value, 0
+        )
+
+    def test_time_limited_completions_are_capped_per_day(self):
+        from backend.views import MAX_TIME_LIMITED_COMPLETIONS_PER_DAY
+
+        url = reverse("dynamic-task-complete")
+        payload = {
+            "task_title": "Press Ctrl+S", "task_type": "time_limited",
+            "reward_points": 2, "attribute": "discipline",
+        }
+        for _ in range(MAX_TIME_LIMITED_COMPLETIONS_PER_DAY):
+            self.client.post(url, payload, format="json")
+
+        blocked = self.client.post(url, payload, format="json")
+        self.assertEqual(blocked.status_code, 429)
 
 
 class DeploymentSecurityTests(TestCase):

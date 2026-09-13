@@ -9,7 +9,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, OperationalError, connection
+from django.db import IntegrityError, OperationalError, connection, transaction
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import status
@@ -23,6 +23,10 @@ from .models import Goal, SystemLog, Task, User, UserAttribute, UserTaskLog, Use
 from .throttles import SystemChatIPThrottle
 
 logger = logging.getLogger(__name__)
+
+# A time-limited quest fires every few minutes at most, so a real day never
+# approaches this. It bounds an automated loop rather than rationing use.
+MAX_TIME_LIMITED_COMPLETIONS_PER_DAY = 50
 
 REWARD_STRING_MAX_SEGMENTS = 5
 REWARD_STRING_MAX_DELTA = 10
@@ -542,101 +546,111 @@ def get_exp_for_level(level):
 
 class TaskCompleteView(APIView):
     """API view for marking tasks as complete or uncomplete"""
+    throttle_scope = 'task_write'
+
     def post(self, request):
-        user = request.user
         try:
-            task_id = request.data.get('task_id')
-            task = Task.objects.get(id=task_id, user=user)
+            # Everything below reads the user's EXP, decides a new value from
+            # it, and writes it back. Two requests interleaving there — a
+            # double-tap, or a retry racing the original — both read the old
+            # value and the second write silently discards the first. Locking
+            # the row for the duration serialises them, and the transaction
+            # means a failure part-way cannot leave EXP granted without its
+            # completion log (or the reverse).
+            with transaction.atomic():
+                user = User.objects.select_for_update().get(pk=request.user.pk)
+                task_id = request.data.get('task_id')
+                task = Task.objects.get(id=task_id, user=user)
 
-            # Check if task is already completed today
-            today = date.today()
-            existing_log = UserTaskLog.objects.filter(
-                user=user,
-                task=task,
-                status='completed',
-                completed_at__date=today
-            ).first()
-
-            # Store old level and exp for level-up detection
-            # Store old level for level-up detection
-            old_level = user.level
-
-            # Build reward string for attribute side-effects
-            reward_attr = task.attribute.title()
-            reward_str = f"+{task.reward_point//2} {reward_attr}"
-            if task.difficulty > 1:
-                reward_str += f", +{task.difficulty-1} Discipline"
-
-            if existing_log:
-                # Task already completed today - TOGGLE to uncomplete
-                # Subtract EXP when uncompleting
-                exp_lost = calculate_task_exp(task)
-                user.exp = max(0, user.exp - exp_lost)
-                existing_log.delete()
-                # Reverse attribute changes so they persist to DB
-                reverse_attribute_changes(user, reward_str)
-                message = "Task marked as incomplete"
-            else:
-                # Mark task as completed and add EXP
-                task_log, created = UserTaskLog.objects.get_or_create(
+                # Check if task is already completed today
+                today = date.today()
+                existing_log = UserTaskLog.objects.filter(
                     user=user,
                     task=task,
-                    defaults={
-                        'status': 'completed',
-                        'completed_at': timezone.now()
+                    status='completed',
+                    completed_at__date=today
+                ).first()
+
+                # Store old level and exp for level-up detection
+                # Store old level for level-up detection
+                old_level = user.level
+
+                # Build reward string for attribute side-effects
+                reward_attr = task.attribute.title()
+                reward_str = f"+{task.reward_point//2} {reward_attr}"
+                if task.difficulty > 1:
+                    reward_str += f", +{task.difficulty-1} Discipline"
+
+                if existing_log:
+                    # Task already completed today - TOGGLE to uncomplete
+                    # Subtract EXP when uncompleting
+                    exp_lost = calculate_task_exp(task)
+                    user.exp = max(0, user.exp - exp_lost)
+                    existing_log.delete()
+                    # Reverse attribute changes so they persist to DB
+                    reverse_attribute_changes(user, reward_str)
+                    message = "Task marked as incomplete"
+                else:
+                    # Mark task as completed and add EXP
+                    task_log, created = UserTaskLog.objects.get_or_create(
+                        user=user,
+                        task=task,
+                        defaults={
+                            'status': 'completed',
+                            'completed_at': timezone.now()
+                        }
+                    )
+
+                    if not created and task_log.status != 'completed':
+                        task_log.status = 'completed'
+                        task_log.completed_at = timezone.now()
+                        task_log.save()
+
+                    # Add EXP when completing
+                    exp_gained = calculate_task_exp(task)
+                    user.exp += exp_gained
+                    # Apply attribute changes so they persist to DB
+                    apply_attribute_changes(user, reward_str)
+                    message = "Task completed successfully"
+
+                # Update level based on new EXP
+                new_level = calculate_level_from_exp(user.exp)
+                user.level = new_level
+
+                # Check for level up
+                leveled_up = new_level > old_level
+
+                # Update streak after task completion/uncompletion
+                user.update_streak()
+
+                user.save()
+
+                completed_today_count = UserTaskLog.objects.filter(
+                    user=user,
+                    status='completed',
+                    completed_at__date=today
+                ).count()
+
+                total_tasks = Task.objects.filter(user=user).count()
+
+                return Response({
+                    "success": True,
+                    "message": message,
+                    "streak": user.current_streak,
+                    "completed_tasks": completed_today_count,
+                    "total_tasks": total_tasks,
+                    "task_completed": not existing_log,  # Toggle status
+                    "user_stats": {
+                        "level": user.level,
+                        "exp": user.exp,
+                        "level_up": leveled_up,
+                        "old_level": old_level,
+                        "next_level_exp": get_exp_for_level(user.level + 1),
+                        "current_level_exp": get_exp_for_level(user.level),
+                        "exp_progress": user.exp - get_exp_for_level(user.level),
+                        "exp_needed": get_exp_for_level(user.level + 1) - get_exp_for_level(user.level)
                     }
-                )
-
-                if not created and task_log.status != 'completed':
-                    task_log.status = 'completed'
-                    task_log.completed_at = timezone.now()
-                    task_log.save()
-
-                # Add EXP when completing
-                exp_gained = calculate_task_exp(task)
-                user.exp += exp_gained
-                # Apply attribute changes so they persist to DB
-                apply_attribute_changes(user, reward_str)
-                message = "Task completed successfully"
-
-            # Update level based on new EXP
-            new_level = calculate_level_from_exp(user.exp)
-            user.level = new_level
-
-            # Check for level up
-            leveled_up = new_level > old_level
-
-            # Update streak after task completion/uncompletion
-            user.update_streak()
-
-            user.save()
-
-            completed_today_count = UserTaskLog.objects.filter(
-                user=user,
-                status='completed',
-                completed_at__date=today
-            ).count()
-
-            total_tasks = Task.objects.filter(user=user).count()
-
-            return Response({
-                "success": True,
-                "message": message,
-                "streak": user.current_streak,
-                "completed_tasks": completed_today_count,
-                "total_tasks": total_tasks,
-                "task_completed": not existing_log,  # Toggle status
-                "user_stats": {
-                    "level": user.level,
-                    "exp": user.exp,
-                    "level_up": leveled_up,
-                    "old_level": old_level,
-                    "next_level_exp": get_exp_for_level(user.level + 1),
-                    "current_level_exp": get_exp_for_level(user.level),
-                    "exp_progress": user.exp - get_exp_for_level(user.level),
-                    "exp_needed": get_exp_for_level(user.level + 1) - get_exp_for_level(user.level)
-                }
-            })
+                })
 
         except (Task.DoesNotExist, User.DoesNotExist):
             return Response({"error": "Task or user not found"}, status=404)
@@ -1091,6 +1105,8 @@ class WeeklyStatsView(APIView):
 
 class DynamicTaskCompleteView(APIView):
     """API view for completing dynamic tasks (daily tasks, time-limited tasks)"""
+    throttle_scope = 'task_write'
+
     def post(self, request):
         user = request.user
         task_type = request.data.get('task_type', 'daily')  # 'daily' or 'time_limited'
@@ -1126,118 +1142,54 @@ class DynamicTaskCompleteView(APIView):
             attribute = 'discipline'
 
         try:
+            # Same lock and transaction as TaskCompleteView: this path also
+            # reads EXP, derives a new value and writes it back, and creates
+            # a UserTaskLog alongside it. Without both, a double-tap can
+            # double-grant or leave the log and the EXP disagreeing.
+            with transaction.atomic():
+                user = User.objects.select_for_update().get(pk=request.user.pk)
 
-            # Store old level for level-up detection
-            old_level = user.level
+                # Store old level for level-up detection
+                old_level = user.level
 
-            # For time-limited tasks, create unique task each time to allow multiple completions
-            if task_type == 'time_limited':
-                # Add timestamp to make each time-limited task unique (for
-                # database uniqueness). The " - HH:MM:SS" suffix is 11 chars,
-                # so truncate task_title to keep the result within
-                # Task.title's max_length=150 regardless of how close to the
-                # 150 cap above task_title itself is.
-                unique_title = f"{task_title[:139]} - {timezone.now().strftime('%H:%M:%S')}"
-
-                # Create a new task record for each time-limited task completion
-                task = Task.objects.create(
-                    title=unique_title,
-                    user=user,
-                    description=f'Time-limited task completed at {timezone.now().strftime("%H:%M")}',
-                    reward_point=reward_points,
-                    attribute=attribute,
-                    difficulty=2,
-                    deadline=timezone.now() + timedelta(days=1),
-                    is_random=True
-                )
-
-                UserTaskLog.objects.create(
-                    user=user,
-                    task=task,
-                    status='completed',
-                    completed_at=timezone.now()
-                )
-
-                # Add EXP when completing time-limited task
-                exp_gained = calculate_task_exp(task)
-                user.exp += exp_gained
-
-                # Time-limited quests can reward multiple attributes at once
-                # (e.g. "+3 Intelligence, +2 Discipline"). This used to only
-                # be applied to local browser state via the frontend's own
-                # applyStatChanges call and was never persisted server-side
-                # at all — every attribute point earned this way was lost on
-                # a new device or cleared storage. Persist it here too, same
-                # as the daily-task path already does below.
-                #
-                # Unlike reward_points/attribute (validated above and only
-                # ever used for the Task row), reward_string is what actually
-                # drives the stat change, so it's validated the same way
-                # before being trusted — otherwise a request could name any
-                # attribute with any magnitude, bypassing the validation done
-                # on the other two fields entirely.
-                if reward_string and validate_reward_string(reward_string):
-                    apply_attribute_changes(user, reward_string)
-                elif reward_string:
-                    logger.warning(f"Rejected malformed/out-of-range reward_string for user '{user.username}': {reward_string!r}")
-
-                # Update level based on new EXP
-                new_level = calculate_level_from_exp(user.exp)
-                user.level = new_level
-
-                # Check for level up
-                leveled_up = new_level > old_level
-
-                # Update user streak
-                user.update_streak()
-
-                # Save user changes
-                user.save()
-
-                return Response({
-                    'success': True,
-                    'message': 'Time-limited task completed successfully',
-                    'task_completed': True,
-                    'streak': user.current_streak,
-                    'user_stats': {
-                        'level': user.level,
-                        'exp': user.exp,
-                        'level_up': leveled_up,
-                        'old_level': old_level,
-                        'next_level_exp': get_exp_for_level(user.level + 1),
-                        'current_level_exp': get_exp_for_level(user.level),
-                        'exp_progress': user.exp - get_exp_for_level(user.level),
-                        'exp_needed': get_exp_for_level(user.level + 1) - get_exp_for_level(user.level)
-                    }
-                })
-
-            else:
-                # For daily tasks, use existing logic (prevent duplicates per day).
-                # Looked up explicitly (not get_or_create with a reward_point
-                # default) so an existing task is never re-parameterized by
-                # whatever the client happened to send this time.
-                task = Task.objects.filter(title=task_title, user=user).first()
-                if not task:
-                    task = Task.objects.create(
-                        title=task_title,
+                # For time-limited tasks, create unique task each time to allow multiple completions
+                if task_type == 'time_limited':
+                    # Unlike the daily branch, nothing here stops the same quest
+                    # being completed repeatedly — a new Task row is created
+                    # every call. The frontend offers these on a timer measured
+                    # in minutes, so a genuine day tops out well under this;
+                    # the cap exists to bound a loop, not to ration real use.
+                    completed_today = UserTaskLog.objects.filter(
                         user=user,
-                        description=f'Dynamic {task_type} task',
+                        status='completed',
+                        task__is_random=True,
+                        completed_at__date=date.today(),
+                    ).count()
+                    if completed_today >= MAX_TIME_LIMITED_COMPLETIONS_PER_DAY:
+                        return Response({
+                            'success': False,
+                            'error': 'Daily limit for time-limited quests reached',
+                        }, status=429)
+
+                    # Add timestamp to make each time-limited task unique (for
+                    # database uniqueness). The " - HH:MM:SS" suffix is 11 chars,
+                    # so truncate task_title to keep the result within
+                    # Task.title's max_length=150 regardless of how close to the
+                    # 150 cap above task_title itself is.
+                    unique_title = f"{task_title[:139]} - {timezone.now().strftime('%H:%M:%S')}"
+
+                    # Create a new task record for each time-limited task completion
+                    task = Task.objects.create(
+                        title=unique_title,
+                        user=user,
+                        description=f'Time-limited task completed at {timezone.now().strftime("%H:%M")}',
                         reward_point=reward_points,
                         attribute=attribute,
-                        difficulty=1,
+                        difficulty=2,
                         deadline=timezone.now() + timedelta(days=1),
                         is_random=True
                     )
 
-                today = date.today()
-                existing_log = UserTaskLog.objects.filter(
-                    user=user,
-                    task=task,
-                    status='completed',
-                    completed_at__date=today
-                ).first()
-
-                if not existing_log:
                     UserTaskLog.objects.create(
                         user=user,
                         task=task,
@@ -1245,23 +1197,28 @@ class DynamicTaskCompleteView(APIView):
                         completed_at=timezone.now()
                     )
 
-                    # Add EXP when completing daily task
+                    # Add EXP when completing time-limited task
                     exp_gained = calculate_task_exp(task)
                     user.exp += exp_gained
 
-                    # Derive the applied reward from the task's own stored
-                    # values (same formula as TaskCompleteView), never from
-                    # the client-supplied reward_string — that string can be
-                    # stale, or (for the frontend's offline-fallback task
-                    # list, shown when /api/tasks/ fails) entirely made up
-                    # and unrelated to what this task actually grants, which
-                    # would otherwise let a request apply an arbitrary
-                    # mismatched reward to a real task.
-                    reward_attr = task.attribute.title()
-                    computed_reward_string = f"+{task.reward_point // 2} {reward_attr}"
-                    if task.difficulty > 1:
-                        computed_reward_string += f", +{task.difficulty - 1} Discipline"
-                    apply_attribute_changes(user, computed_reward_string)
+                    # Time-limited quests can reward multiple attributes at once
+                    # (e.g. "+3 Intelligence, +2 Discipline"). This used to only
+                    # be applied to local browser state via the frontend's own
+                    # applyStatChanges call and was never persisted server-side
+                    # at all — every attribute point earned this way was lost on
+                    # a new device or cleared storage. Persist it here too, same
+                    # as the daily-task path already does below.
+                    #
+                    # Unlike reward_points/attribute (validated above and only
+                    # ever used for the Task row), reward_string is what actually
+                    # drives the stat change, so it's validated the same way
+                    # before being trusted — otherwise a request could name any
+                    # attribute with any magnitude, bypassing the validation done
+                    # on the other two fields entirely.
+                    if reward_string and validate_reward_string(reward_string):
+                        apply_attribute_changes(user, reward_string)
+                    elif reward_string:
+                        logger.warning(f"Rejected malformed/out-of-range reward_string for user '{user.username}': {reward_string!r}")
 
                     # Update level based on new EXP
                     new_level = calculate_level_from_exp(user.exp)
@@ -1278,7 +1235,7 @@ class DynamicTaskCompleteView(APIView):
 
                     return Response({
                         'success': True,
-                        'message': 'Daily task completed successfully',
+                        'message': 'Time-limited task completed successfully',
                         'task_completed': True,
                         'streak': user.current_streak,
                         'user_stats': {
@@ -1292,13 +1249,95 @@ class DynamicTaskCompleteView(APIView):
                             'exp_needed': get_exp_for_level(user.level + 1) - get_exp_for_level(user.level)
                         }
                     })
+
                 else:
-                    return Response({
-                        'success': True,
-                        'message': 'Daily task already completed today',
-                        'task_completed': True,
-                        'streak': user.current_streak
-                    })
+                    # For daily tasks, use existing logic (prevent duplicates per day).
+                    # Looked up explicitly (not get_or_create with a reward_point
+                    # default) so an existing task is never re-parameterized by
+                    # whatever the client happened to send this time.
+                    task = Task.objects.filter(title=task_title, user=user).first()
+                    if not task:
+                        task = Task.objects.create(
+                            title=task_title,
+                            user=user,
+                            description=f'Dynamic {task_type} task',
+                            reward_point=reward_points,
+                            attribute=attribute,
+                            difficulty=1,
+                            deadline=timezone.now() + timedelta(days=1),
+                            is_random=True
+                        )
+
+                    today = date.today()
+                    existing_log = UserTaskLog.objects.filter(
+                        user=user,
+                        task=task,
+                        status='completed',
+                        completed_at__date=today
+                    ).first()
+
+                    if not existing_log:
+                        UserTaskLog.objects.create(
+                            user=user,
+                            task=task,
+                            status='completed',
+                            completed_at=timezone.now()
+                        )
+
+                        # Add EXP when completing daily task
+                        exp_gained = calculate_task_exp(task)
+                        user.exp += exp_gained
+
+                        # Derive the applied reward from the task's own stored
+                        # values (same formula as TaskCompleteView), never from
+                        # the client-supplied reward_string — that string can be
+                        # stale, or (for the frontend's offline-fallback task
+                        # list, shown when /api/tasks/ fails) entirely made up
+                        # and unrelated to what this task actually grants, which
+                        # would otherwise let a request apply an arbitrary
+                        # mismatched reward to a real task.
+                        reward_attr = task.attribute.title()
+                        computed_reward_string = f"+{task.reward_point // 2} {reward_attr}"
+                        if task.difficulty > 1:
+                            computed_reward_string += f", +{task.difficulty - 1} Discipline"
+                        apply_attribute_changes(user, computed_reward_string)
+
+                        # Update level based on new EXP
+                        new_level = calculate_level_from_exp(user.exp)
+                        user.level = new_level
+
+                        # Check for level up
+                        leveled_up = new_level > old_level
+
+                        # Update user streak
+                        user.update_streak()
+
+                        # Save user changes
+                        user.save()
+
+                        return Response({
+                            'success': True,
+                            'message': 'Daily task completed successfully',
+                            'task_completed': True,
+                            'streak': user.current_streak,
+                            'user_stats': {
+                                'level': user.level,
+                                'exp': user.exp,
+                                'level_up': leveled_up,
+                                'old_level': old_level,
+                                'next_level_exp': get_exp_for_level(user.level + 1),
+                                'current_level_exp': get_exp_for_level(user.level),
+                                'exp_progress': user.exp - get_exp_for_level(user.level),
+                                'exp_needed': get_exp_for_level(user.level + 1) - get_exp_for_level(user.level)
+                            }
+                        })
+                    else:
+                        return Response({
+                            'success': True,
+                            'message': 'Daily task already completed today',
+                            'task_completed': True,
+                            'streak': user.current_streak
+                        })
 
         except User.DoesNotExist:
             return Response({
@@ -1315,6 +1354,8 @@ class DynamicTaskCompleteView(APIView):
 
 class DynamicTaskUncompleteView(APIView):
     """API view for uncompleting dynamic daily tasks"""
+    throttle_scope = 'task_write'
+
     def post(self, request):
         user = request.user
 
@@ -1328,103 +1369,109 @@ class DynamicTaskUncompleteView(APIView):
             return Response({'error': 'task_title must be 150 characters or fewer'}, status=400)
 
         try:
-            # Exact match only. This used to fall back to a chain of fuzzy
-            # strategies — icontains on the raw input, then on an
-            # emoji-stripped version, then on any word over three characters —
-            # so {"task_title": "a"} matched the first task containing an "a"
-            # and reversed that completion instead, subtracting the wrong EXP
-            # and attributes. Each attempt was also an unindexed LIKE '%…%'
-            # scan on unbounded input.
-            #
-            # The timestamp suffix is stripped because time-limited tasks are
-            # stored as "<title> - HH:MM:SS"; that is a known, exact shape
-            # rather than a guess.
-            task = Task.objects.filter(title=task_title, user=user).first()
-            if not task:
-                without_timestamp = re.sub(r' - \d{2}:\d{2}:\d{2}$', '', task_title)
-                if without_timestamp != task_title:
-                    task = Task.objects.filter(title=without_timestamp, user=user).first()
+            # Reversing a completion subtracts EXP and attributes and deletes
+            # the log — the same read-modify-write shape as granting them, so
+            # it needs the same lock to avoid two undos both subtracting from
+            # the value they each read.
+            with transaction.atomic():
+                user = User.objects.select_for_update().get(pk=request.user.pk)
+                # Exact match only. This used to fall back to a chain of fuzzy
+                # strategies — icontains on the raw input, then on an
+                # emoji-stripped version, then on any word over three characters —
+                # so {"task_title": "a"} matched the first task containing an "a"
+                # and reversed that completion instead, subtracting the wrong EXP
+                # and attributes. Each attempt was also an unindexed LIKE '%…%'
+                # scan on unbounded input.
+                #
+                # The timestamp suffix is stripped because time-limited tasks are
+                # stored as "<title> - HH:MM:SS"; that is a known, exact shape
+                # rather than a guess.
+                task = Task.objects.filter(title=task_title, user=user).first()
+                if not task:
+                    without_timestamp = re.sub(r' - \d{2}:\d{2}:\d{2}$', '', task_title)
+                    if without_timestamp != task_title:
+                        task = Task.objects.filter(title=without_timestamp, user=user).first()
 
-            if not task:
-                # Previously logged every task the user owns, one line each, on
-                # every miss — an unauthenticated-adjacent way to drive log
-                # spend, and a copy of the user's task titles in the logs.
-                logger.warning("Uncomplete: no matching task for this user")
-                return Response({
-                    'success': False,
-                    'error': 'Dynamic task not found'
-                }, status=404)
+                if not task:
+                    # Previously logged every task the user owns, one line each, on
+                    # every miss — an unauthenticated-adjacent way to drive log
+                    # spend, and a copy of the user's task titles in the logs.
+                    logger.warning("Uncomplete: no matching task for this user")
+                    return Response({
+                        'success': False,
+                        'error': 'Dynamic task not found'
+                    }, status=404)
 
-            # Find today's completion log for this task
-            today = date.today()
-            completion_logs = UserTaskLog.objects.filter(
-                user=user,
-                task=task,
-                status='completed',
-                completed_at__date=today
-            )
+                # Find today's completion log for this task
+                today = date.today()
+                completion_logs = UserTaskLog.objects.filter(
+                    user=user,
+                    task=task,
+                    status='completed',
+                    completed_at__date=today
+                )
 
 
-            completion_log = completion_logs.first()
+                completion_log = completion_logs.first()
 
-            if completion_log:
-                # Store old level for level-up detection
-                old_level = user.level
+                if completion_log:
+                    # Store old level for level-up detection
+                    old_level = user.level
 
-                # Subtract EXP when uncompleting
-                exp_lost = calculate_task_exp(task)
-                user.exp = max(0, user.exp - exp_lost)
+                    # Subtract EXP when uncompleting
+                    exp_lost = calculate_task_exp(task)
+                    user.exp = max(0, user.exp - exp_lost)
 
-                # Reverse exactly what the complete path would have applied,
-                # derived from the task's own stored values rather than the
-                # client's reward_string. DynamicTaskCompleteView computes
-                # the daily-task reward server-side the same way (see the
-                # comment there) — reversing from a client-supplied string
-                # instead would drift out of sync whenever it doesn't match
-                # what was actually granted (e.g. the frontend's offline-
-                # fallback task list reuses real task titles with invented,
-                # unrelated reward text).
-                reward_attr = task.attribute.title()
-                computed_reward_string = f"+{task.reward_point // 2} {reward_attr}"
-                if task.difficulty > 1:
-                    computed_reward_string += f", +{task.difficulty - 1} Discipline"
-                reverse_attribute_changes(user, computed_reward_string)
+                    # Reverse exactly what the complete path would have applied,
+                    # derived from the task's own stored values rather than the
+                    # client's reward_string. DynamicTaskCompleteView computes
+                    # the daily-task reward server-side the same way (see the
+                    # comment there) — reversing from a client-supplied string
+                    # instead would drift out of sync whenever it doesn't match
+                    # what was actually granted (e.g. the frontend's offline-
+                    # fallback task list reuses real task titles with invented,
+                    # unrelated reward text).
+                    reward_attr = task.attribute.title()
+                    computed_reward_string = f"+{task.reward_point // 2} {reward_attr}"
+                    if task.difficulty > 1:
+                        computed_reward_string += f", +{task.difficulty - 1} Discipline"
+                    reverse_attribute_changes(user, computed_reward_string)
 
-                # Update level based on new EXP
-                new_level = calculate_level_from_exp(user.exp)
-                user.level = new_level
+                    # Update level based on new EXP
+                    new_level = calculate_level_from_exp(user.exp)
+                    user.level = new_level
 
-                completion_log.delete()
+                    completion_log.delete()
 
-                # Update user streak
-                user.update_streak()
+                    # Update user streak
+                    user.update_streak()
 
-                # Save user changes
-                user.save()
+                    # Save user changes
+                    user.save()
 
-                return Response({
-                    'success': True,
-                    'message': 'Daily task uncompleted successfully',
-                    'task_completed': False,
-                    'streak': user.current_streak,
-                    'user_stats': {
-                        'level': user.level,
-                        'exp': user.exp,
-                        'level_up': False,
-                        'old_level': old_level,
-                        'next_level_exp': get_exp_for_level(user.level + 1),
-                        'current_level_exp': get_exp_for_level(user.level),
-                        'exp_progress': user.exp - get_exp_for_level(user.level),
-                        'exp_needed': get_exp_for_level(user.level + 1) - get_exp_for_level(user.level)
-                    }
-                })
-            else:
-                return Response({
-                    'success': False,
-                    'message': 'No completion record found for today',
-                    'task_completed': False,
-                    'streak': user.current_streak
-                })
+                    return Response({
+                        'success': True,
+                        'message': 'Daily task uncompleted successfully',
+                        'task_completed': False,
+                        'streak': user.current_streak,
+                        'user_stats': {
+                            'level': user.level,
+                            'exp': user.exp,
+                            'level_up': False,
+                            'old_level': old_level,
+                            'next_level_exp': get_exp_for_level(user.level + 1),
+                            'current_level_exp': get_exp_for_level(user.level),
+                            'exp_progress': user.exp - get_exp_for_level(user.level),
+                            'exp_needed': get_exp_for_level(user.level + 1) - get_exp_for_level(user.level)
+                        }
+                    })
+                else:
+                    return Response({
+                        'success': False,
+                        'message': 'No completion record found for today',
+                        'task_completed': False,
+                        'streak': user.current_streak
+                    })
 
         except Exception:
             logger.exception(f"Dynamic task uncompletion failed for '{user.username}'")
