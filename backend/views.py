@@ -489,35 +489,30 @@ class TaskDetailView(APIView):
 class GoalView(APIView):
     """API view for user's main goal"""
 
-    DEFAULT_GOAL = {
-        "id": 1,
-        "title": "Become a Software Engineer",
-        "description": "Master programming skills, build projects, and land a position at a tech company",
-        "is_completed": False,
-        "created_at": "2024-01-01"
-    }
-
     def get(self, request):
         user = request.user
         try:
             # Get user's main goal (first active goal)
             goal = Goal.objects.filter(user=user, is_completed=False).first()
 
-            if goal:
-                goal_data = {
-                    "id": goal.id,
-                    "title": goal.title,
-                    "description": goal.description,
-                    "is_completed": goal.is_completed,
-                    "created_at": goal.created_at.strftime("%Y-%m-%d")
-                }
-                return Response(goal_data)
-            else:
-                return Response(self.DEFAULT_GOAL)
+            # A user with no active goal gets an explicit null rather than a
+            # stand-in. This used to return a hardcoded "Become a Software
+            # Engineer" goal, which every caller displayed as if the user had
+            # written it themselves.
+            if not goal:
+                return Response({"goal": None})
 
-        except Exception as e:
-            logger.error(f"GoalView error for user '{user.username}': {e}")
-            return Response(self.DEFAULT_GOAL)
+            return Response({
+                "id": goal.id,
+                "title": goal.title,
+                "description": goal.description,
+                "is_completed": goal.is_completed,
+                "created_at": goal.created_at.strftime("%Y-%m-%d")
+            })
+
+        except Exception:
+            logger.exception(f"GoalView error for user '{user.username}'")
+            return Response({"error": "Could not load goal"}, status=500)
 
 def calculate_task_exp(task):
     """Calculate EXP gained from completing a task"""

@@ -110,7 +110,10 @@ export default function HomePage({
 
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+  // `error` means there is nothing to render (today's quests failed to load).
+  // `statsWarning` means the page is usable but one panel may be stale.
   const [error, setError] = useState(null);
+  const [statsWarning, setStatsWarning] = useState(null);
   const [showTimeLimitedTask, setShowTimeLimitedTask] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
   const [warningType, setWarningType] = useState("");
@@ -475,69 +478,14 @@ export default function HomePage({
           selectedTasks.map((t) => ({ id: t.id, title: t.title })),
         );
       } catch (err) {
+        // These used to fall back to a hardcoded task list. Its titles matched
+        // real seeded tasks but its rewards did not, so completing one showed a
+        // reward the server never granted — and its ids (101-106) were live
+        // enough to edit and delete. Surfacing the failure is the honest
+        // behaviour, and the retry below is what the user actually needs.
         debugError("Error fetching tasks:", err);
-        debugLog("⚠️ API failed, loading fallback tasks...");
-        // Set default tasks if API fails - enhanced rewards (1-10 points)
-        const fallbackTasks = [
-          {
-            id: 101,
-            title: "🧹 Organise workspace",
-            tip: "Clean and organise your desk",
-            reward: "+6 Discipline, +8 Wellness, +2 Energy",
-            completed: false,
-            difficulty: 1,
-            attribute: "discipline",
-          },
-          {
-            id: 102,
-            title: "📝 Write journal entry",
-            tip: "Reflect on today's experiences",
-            reward: "+5 Discipline, +7 Wellness, +3 Intelligence",
-            completed: false,
-            difficulty: 1,
-            attribute: "discipline",
-          },
-          {
-            id: 103,
-            title: "🏃‍♂️ 30-minute workout",
-            tip: "Include cardio and strength training",
-            reward: "+9 Energy, +6 Discipline, +8 Wellness",
-            completed: false,
-            difficulty: 2,
-            attribute: "energy",
-          },
-          {
-            id: 104,
-            title: "💻 Practice coding",
-            tip: "Solve a Leetcode problem",
-            reward: "+8 Intelligence, +5 Discipline, +2 Wellness",
-            completed: false,
-            difficulty: 2,
-            attribute: "intelligence",
-          },
-          {
-            id: 105,
-            title: "🧘‍♀️ Meditation",
-            tip: "10 minutes of mindfulness",
-            reward: "+4 Energy, +6 Discipline, +10 Wellness, -3 Stress",
-            completed: false,
-            difficulty: 1,
-            attribute: "energy",
-          },
-          {
-            id: 106,
-            title: "📚 Learn something new",
-            tip: "Read an educational article",
-            reward: "+7 Intelligence, +4 Discipline, +3 Wellness",
-            completed: false,
-            difficulty: 1,
-            attribute: "intelligence",
-          },
-        ];
-        const selectedTasks = selectDailyTasks(fallbackTasks);
-        setTasks(selectedTasks);
-        setError(null); // Don't show error if we have fallback data
-        debugLog("📋 Fallback tasks loaded:", selectedTasks);
+        setTasks([]);
+        setError("Could not load today's quests.");
       } finally {
         if (!preventScroll) {
           setLoading(false);
@@ -562,6 +510,8 @@ export default function HomePage({
         exp: data.exp,
       });
 
+      setStatsWarning(null);
+
       // NOTE: attribute stats are managed by AppContext (loaded once on login
       // and persisted in localStorage). Do NOT overwrite them here on every
       // navigation — that would reset in-session progress to whatever the DB has.
@@ -574,22 +524,12 @@ export default function HomePage({
         streak: data.current_streak,
       }));
     } catch (err) {
+      // Stats are the user's actual progress — inventing a level and streak
+      // here meant a brand new user whose first request hit a cold start was
+      // shown Level 5 with a 3-day streak, which then vanished on reload.
+      // Leave the existing values alone and surface the failure instead.
       debugError("Failed to fetch user stats:", err);
-      // Set default user stats if API fails
-      setLocalUserStats({
-        level: 5,
-        current_streak: 3,
-        total_tasks_completed: 25,
-        total_score: 1250,
-        exp: 0,
-      });
-      // Update user state with defaults
-      setUser((prev) => ({
-        ...prev,
-        level: 5,
-        exp: 0,
-        streak: 3,
-      }));
+      setStatsWarning("Could not refresh your stats — they may be out of date.");
     }
   }, [currentUser, updateUserStats]); // Include dependencies
 
@@ -872,6 +812,11 @@ export default function HomePage({
               </div>
             </div>
             <StatsPanel stats={attributeStats} />
+            {statsWarning && (
+              <p role="status" className="px-4 pb-3 text-xs text-ink-mute">
+                {statsWarning}
+              </p>
+            )}
           </div>
         </div>
 

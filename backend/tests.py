@@ -1083,6 +1083,37 @@ class SystemChatViewTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
 
+class GoalViewTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="goalowner", password="pw12345")
+        self.token = Token.objects.create(user=self.user)
+        self.client = APIClient()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
+        self.url = reverse("user-goal")
+
+    def test_returns_the_users_own_goal(self):
+        Goal.objects.create(user=self.user, title="Learn Django", description="Ship a real app")
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["title"], "Learn Django")
+
+    def test_user_without_a_goal_gets_null_not_a_stand_in(self):
+        # This used to return a hardcoded "Become a Software Engineer" goal,
+        # which the UI rendered as if the user had written it themselves.
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data["goal"])
+
+    def test_does_not_return_another_users_goal(self):
+        other = User.objects.create_user(username="goalstranger", password="pw12345")
+        Goal.objects.create(user=other, title="Not yours", description="")
+        response = self.client.get(self.url)
+        self.assertIsNone(response.data["goal"])
+
+    def test_requires_authentication(self):
+        self.assertEqual(APIClient().get(self.url).status_code, 401)
+
+
 class HealthViewTests(TestCase):
     def test_health_check_is_public_and_ok(self):
         response = APIClient().get(reverse("health"))

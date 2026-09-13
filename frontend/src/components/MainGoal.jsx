@@ -2,28 +2,24 @@ import { useState, useEffect, useCallback } from "react";
 import { API_ENDPOINTS, apiRequest } from "../config/api.js";
 import { debugLog } from "../utils/logger.js";
 
-const FALLBACK_GOAL = {
-  id: 1,
-  title: "Become a Software Engineer",
-  description:
-    "Master programming skills, build projects, and land a position at a tech company",
-  is_completed: false,
-  created_at: "2024-01-01",
-};
-
 export default function MainGoal({ currentUser }) {
   const [goal, setGoal] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const fetchGoal = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
       const { data } = await apiRequest(API_ENDPOINTS.goal);
-      setGoal(data);
+      // The API returns { goal: null } for a user who has no active goal.
+      setGoal(data?.goal === null ? null : data);
       debugLog("✅ Goal loaded:", data);
     } catch (err) {
-      debugLog("⚠️ Goal API unavailable, using fallback:", err.message);
-      setGoal(FALLBACK_GOAL);
+      // Showing a stand-in goal here would present someone else's aspiration
+      // as the user's own, so failures say so instead.
+      debugLog("⚠️ Goal request failed:", err.message);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -40,6 +36,20 @@ export default function MainGoal({ currentUser }) {
         <div className="p-5">
           <div className="h-5 bg-[var(--paper-shadow)] rounded w-2/3 mb-2" />
           <div className="h-3 bg-[var(--paper-shadow)] rounded" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rpg-window">
+        <div className="rpg-header">Main Goal</div>
+        <div className="px-5 py-4">
+          <p className="text-sm text-ink-soft mb-3">Could not load your goal.</p>
+          <button onClick={fetchGoal} className="rpg-btn-secondary text-xs">
+            Retry
+          </button>
         </div>
       </div>
     );
