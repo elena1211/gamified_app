@@ -182,6 +182,22 @@ body {
   animation: pageFadeIn 320ms ease-out;
 }
 
+/* Round seal behind a feature icon. The ring is --frame rather than the icon's
+   own colour: rose-deep and gold-deep fall under 3:1 against the card, while
+   the paper fill keeps every icon colour above it. */
+.feature-seal {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--paper);
+  border: 2px solid var(--frame);
+  box-shadow: 0 2px 0 rgba(107, 79, 44, 0.18);
+}
+
 /* ========================================================================
    Display heading helpers
    ======================================================================== */

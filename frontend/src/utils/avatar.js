@@ -12,6 +12,11 @@ export const getAvatarSrc = (level) => {
   return `/avatars/avatar_stage_${stage}.png`;
 };
 
+// Small WebP copies — about 13 KB each against roughly 400 KB for the PNGs —
+// for places that show several stages at once, such as the welcome page.
+export const getAvatarThumbSrc = (level) =>
+  `/avatars/avatar_stage_${getAvatarStage(level)}_small.webp`;
+
 export const getAvatarTitle = (level) => {
   const stage = getAvatarStage(level);
   const titles = {
