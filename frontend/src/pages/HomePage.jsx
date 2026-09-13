@@ -14,6 +14,7 @@ import SystemAlert from "../components/SystemAlert";
 import { useAppContext } from "../context/appContextValue";
 import { getAvatarStage, getExpForLevel } from "../utils/avatar";
 import { debugError, debugLog, debugWarn } from '../utils/logger';
+import { useQuestScheduler } from "../hooks/useQuestScheduler";
 
 // Time-limited ultra-micro engineering actions - Atomic habit style (5-10 seconds)
 const TIME_LIMITED_TASKS = [
@@ -89,8 +90,6 @@ const GUEST_REPEAT_RANGE_MS = [30_000, 120_000]; // 30s-2min between quests
 const REGISTERED_INITIAL_DELAY_RANGE_MS = [30 * 60_000, 90 * 60_000]; // 30-90min after load
 const REGISTERED_REPEAT_RANGE_MS = [3 * 3_600_000, 8 * 3_600_000]; // 3-8h between quests
 
-const randomInRange = ([min, max]) => Math.random() * (max - min) + min;
-
 export default function HomePage({
   currentUser,
   onNavigateToSettings,
@@ -135,7 +134,6 @@ export default function HomePage({
   // Time-limited task data
   const [currentTimeLimitedTask, setCurrentTimeLimitedTask] = useState(null);
   const [lastDismissedTask, setLastDismissedTask] = useState(null);
-  const [questSchedulerActive, setQuestSchedulerActive] = useState(false);
 
   const [user, setUser] = useState({
     name: currentUser || "",
@@ -601,78 +599,23 @@ export default function HomePage({
     checkSystem();
   }, [currentUser]); // re-run if user changes
 
-  // Random time-limited task system - appears at random intervals
-  useEffect(() => {
-    // Don't start multiple schedulers
-    if (questSchedulerActive) return;
-
-    setQuestSchedulerActive(true);
-
-    // No currentUser (shouldn't happen here, but defensively) falls back to
-    // the slower registered-user cadence, not the frequent demo one.
-    const isGuest = currentUser?.startsWith("guest_") ?? false;
-    const repeatRange = isGuest ? GUEST_REPEAT_RANGE_MS : REGISTERED_REPEAT_RANGE_MS;
-    const initialDelayRange = isGuest
+  // Time-limited quests fire on a random interval. Guest sessions get the fast
+  // demo cadence; registered users get one spread across hours of real use.
+  const isGuest = currentUser?.startsWith("guest_") ?? false;
+  useQuestScheduler({
+    initialDelayRange: isGuest
       ? GUEST_INITIAL_DELAY_RANGE_MS
-      : REGISTERED_INITIAL_DELAY_RANGE_MS;
-
-    const scheduleNextTimeLimitedTask = () => {
-      const randomDelay = randomInRange(repeatRange);
-
-      debugLog(
-        `⏰ Next time-limited quest scheduled in ${Math.round(randomDelay / 1000)} seconds`,
-      );
-
-      const timer = setTimeout(() => {
-        // Only show if no task is currently active
-        if (!showTimeLimitedTask && !currentTimeLimitedTask) {
-          const randomTask =
-            TIME_LIMITED_TASKS[
-              Math.floor(Math.random() * TIME_LIMITED_TASKS.length)
-            ];
-          debugLog(
-            "⚡ Triggering random time-limited quest:",
-            randomTask.title,
-          );
-
-          setCurrentTimeLimitedTask(randomTask);
-          setShowTimeLimitedTask(true);
-        }
-
-        // Schedule the next task
-        scheduleNextTimeLimitedTask();
-      }, randomDelay);
-
-      return timer;
-    };
-
-    // Start the first scheduled task after an initial delay
-    const initialDelay = randomInRange(initialDelayRange);
-    debugLog(
-      `🎮 Time-limited quest system starting, first quest in ${Math.round(initialDelay / 1000)} seconds`,
-    );
-
-    const initialTimer = setTimeout(() => {
-      if (!showTimeLimitedTask && !currentTimeLimitedTask) {
-        const randomTask =
-          TIME_LIMITED_TASKS[
-            Math.floor(Math.random() * TIME_LIMITED_TASKS.length)
-          ];
-        debugLog("⚡ Triggering initial time-limited quest:", randomTask.title);
-
-        setCurrentTimeLimitedTask(randomTask);
-        setShowTimeLimitedTask(true);
-      }
-
-      // Start the recurring schedule
-      scheduleNextTimeLimitedTask();
-    }, initialDelay);
-
-    return () => {
-      clearTimeout(initialTimer);
-      setQuestSchedulerActive(false);
-    };
-  }, []); // Only run once on mount
+      : REGISTERED_INITIAL_DELAY_RANGE_MS,
+    repeatRange: isGuest ? GUEST_REPEAT_RANGE_MS : REGISTERED_REPEAT_RANGE_MS,
+    isIdle: () => !showTimeLimitedTask && !currentTimeLimitedTask,
+    onOffer: () => {
+      const randomTask =
+        TIME_LIMITED_TASKS[Math.floor(Math.random() * TIME_LIMITED_TASKS.length)];
+      debugLog("⚡ Triggering time-limited quest:", randomTask.title);
+      setCurrentTimeLimitedTask(randomTask);
+      setShowTimeLimitedTask(true);
+    },
+  });
 
   debugLog("Homepage about to render, loading:", loading, "error:", error);
 
