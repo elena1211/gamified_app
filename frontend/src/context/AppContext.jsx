@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { AppContext } from "./appContextValue";
-import { debugLog } from "../utils/logger";
+import { debugError, debugLog } from '../utils/logger';
 import { apiRequest, API_ENDPOINTS } from "../config/api";
 
 // Provider component
@@ -39,7 +39,7 @@ export function AppProvider({ children }) {
         return parsed;
       }
     } catch (e) {
-      console.error("Failed to parse saved attributeStats:", e);
+      debugError("Failed to parse saved attributeStats:", e);
     }
     return {
       intelligence: 0,
@@ -63,7 +63,7 @@ export function AppProvider({ children }) {
         JSON.stringify(attributeStats),
       );
     } catch (e) {
-      console.error("Failed to save attributeStats to localStorage:", e);
+      debugError("Failed to save attributeStats to localStorage:", e);
     }
   }, [attributeStats]);
 

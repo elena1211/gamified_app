@@ -22,64 +22,6 @@ from .throttles import SystemChatIPThrottle
 
 logger = logging.getLogger(__name__)
 
-def get_or_create_user(username):
-    """Helper function to get or create a user with default attributes"""
-    try:
-        user = User.objects.get(username=username)
-        return user
-    except User.DoesNotExist:
-        # Create new user with default settings
-        # Generate a random password for auto-created users
-        random_password = secrets.token_urlsafe(12)
-        user = User.objects.create(
-            username=username,
-            password=make_password(random_password),  # Random secure password
-            level=1,
-            exp=0,
-            current_streak=0,
-            max_streak=0
-        )
-
-        # Create default user attributes
-        default_attributes = [
-            ('intelligence', 0),
-            ('discipline', 0),
-            ('energy', 0),
-            ('social', 0),
-            ('wellness', 0),
-            ('stress', 0)
-        ]
-
-        for attr_name, attr_value in default_attributes:
-            UserAttribute.objects.create(
-                user=user,
-                name=attr_name,
-                value=attr_value
-            )
-
-        # Create default goal
-        Goal.objects.create(
-            user=user,
-            title="Getting Started",
-            description="Learn how to use the gamified productivity system"
-        )
-
-        # Seed default daily tasks so the user always has tasks to start with
-        default_deadline = timezone.now() + timedelta(days=3650)
-        default_tasks_data = [
-            {'title': '🧹 Organise workspace',   'description': 'Clean and organise your desk',              'reward_point': 6, 'difficulty': 1, 'attribute': 'discipline'},
-            {'title': '📝 Write journal entry',  'description': "Reflect on today's experiences",           'reward_point': 5, 'difficulty': 1, 'attribute': 'discipline'},
-            {'title': '🏃\u200d♂️ 30-minute workout',   'description': 'Include cardio and strength training',     'reward_point': 9, 'difficulty': 2, 'attribute': 'energy'},
-            {'title': '💻 Practice coding',      'description': 'Solve a Leetcode problem',                  'reward_point': 8, 'difficulty': 2, 'attribute': 'intelligence'},
-            {'title': '🧘\u200d♀️ Meditation',         'description': '10 minutes of mindfulness',                 'reward_point': 4, 'difficulty': 1, 'attribute': 'energy'},
-            {'title': '📚 Learn something new',  'description': 'Read an educational article',               'reward_point': 7, 'difficulty': 1, 'attribute': 'intelligence'},
-        ]
-        for td in default_tasks_data:
-            Task.objects.create(user=user, deadline=default_deadline, **td)
-
-        logger.info(f"Auto-created new user: {username}")
-        return user
-
 REWARD_STRING_MAX_SEGMENTS = 5
 REWARD_STRING_MAX_DELTA = 10
 

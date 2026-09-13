@@ -24,14 +24,6 @@ export const getAvatarTitle = (level) => {
   return titles[stage] || 'Unknown';
 };
 
-// Get next level milestone for progression display
-export const getNextMilestone = (level) => {
-  if (level < 5) return 5;
-  if (level < 10) return 10;
-  if (level < 30) return 30;
-  if (level < 50) return 50;
-  return null; // Max level reached
-};
 
 // Calculate EXP required for each level (exponential growth)
 export const getExpForLevel = (level) => {
@@ -39,46 +31,5 @@ export const getExpForLevel = (level) => {
   return Math.floor(100 * Math.pow(1.3, level - 1));
 };
 
-// Calculate current level from total EXP
-export const getLevelFromExp = (totalExp) => {
-  let level = 1;
 
-  while (level < 100 && totalExp >= getExpForLevel(level + 1)) {
-    level++;
-  }
 
-  return level;
-};
-
-// Calculate progress to next level
-export const getLevelProgress = (totalExp) => {
-  const currentLevel = getLevelFromExp(totalExp);
-  const currentLevelExp = getExpForLevel(currentLevel);
-  const nextLevelExp = getExpForLevel(currentLevel + 1);
-
-  const progressExp = totalExp - currentLevelExp;
-  const expNeeded = nextLevelExp - currentLevelExp;
-
-  return {
-    currentLevel,
-    progressExp,
-    expNeeded,
-    progressPercent: Math.min(100, Math.floor((progressExp / expNeeded) * 100))
-  };
-};
-
-// Check if leveled up
-export const checkLevelUp = (oldExp, newExp) => {
-  const oldLevel = getLevelFromExp(oldExp);
-  const newLevel = getLevelFromExp(newExp);
-
-  return {
-    leveledUp: newLevel > oldLevel,
-    oldLevel,
-    newLevel,
-    levelsGained: newLevel - oldLevel,
-    oldStage: getAvatarStage(oldLevel),
-    newStage: getAvatarStage(newLevel),
-    stageChanged: getAvatarStage(newLevel) > getAvatarStage(oldLevel)
-  };
-};
