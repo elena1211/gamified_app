@@ -1070,6 +1070,42 @@ class DynamicTaskUncompleteViewTests(TestCase):
         self.assertEqual(wellness.value, 0)
         self.assertEqual(energy.value, 0)
 
+    def test_a_substring_does_not_match_an_unrelated_task(self):
+        # The lookup used to fall back to icontains and then to any word over
+        # three characters, so {"task_title": "a"} reversed the completion of
+        # whichever task happened to contain an "a" — subtracting the wrong EXP
+        # and attributes from a task the user never touched.
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        Task.objects.create(
+            user=self.user, title="Read a chapter", description="", attribute="intelligence",
+            reward_point=6, difficulty=1, deadline=timezone.now() + timedelta(days=1),
+        )
+        self.client.post(self.complete_url, {
+            "task_title": "Read a chapter", "task_type": "daily",
+            "reward_points": 6, "attribute": "intelligence",
+        }, format="json")
+        intelligence = UserAttribute.objects.get(user=self.user, name="intelligence")
+        self.assertEqual(intelligence.value, 3)
+
+        response = self.client.post(self.uncomplete_url, {"task_title": "a"}, format="json")
+        self.assertEqual(response.status_code, 404)
+
+        intelligence.refresh_from_db()
+        self.assertEqual(intelligence.value, 3)
+
+    def test_rejects_empty_and_oversized_titles(self):
+        self.assertEqual(
+            self.client.post(self.uncomplete_url, {"task_title": "   "}, format="json").status_code,
+            400,
+        )
+        self.assertEqual(
+            self.client.post(self.uncomplete_url, {"task_title": "x" * 151}, format="json").status_code,
+            400,
+        )
+
     def test_uncomplete_without_reward_string_still_reverses_correctly(self):
         from datetime import timedelta
 
@@ -1219,6 +1255,20 @@ class HealthViewTests(TestCase):
     def test_health_check_is_public_and_ok(self):
         response = APIClient().get(reverse("health"))
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["database"], "connected")
+
+    def test_health_check_reports_degraded_when_the_database_is_unreachable(self):
+        # It used to report "connected" without touching the database, so Render
+        # saw a healthy service throughout an outage and never restarted it.
+        from unittest import mock
+
+        from django.db import OperationalError
+
+        with mock.patch("backend.views.connection.cursor", side_effect=OperationalError("down")):
+            response = APIClient().get(reverse("health"))
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.data["database"], "unreachable")
 
 
 class SettingsGuardTests(TestCase):

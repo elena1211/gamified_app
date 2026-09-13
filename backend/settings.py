@@ -232,3 +232,41 @@ CACHES = {
         'LOCATION': 'django_cache',
     }
 }
+
+# Django's default configuration only surfaces logs when DEBUG is on, so in
+# production every logger.exception() call in views.py went nowhere. Render
+# captures stdout, so a console handler is all that is needed to make them
+# visible — without it, the switch from returning str(e) to logging it would
+# have traded a leak for silence.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'standard': {
+            'format': '{levelname} {asctime} {name} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'standard',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'WARNING',
+    },
+    'loggers': {
+        'backend': {
+            'handlers': ['console'],
+            'level': 'DEBUG' if DEBUG else 'INFO',
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+    },
+}

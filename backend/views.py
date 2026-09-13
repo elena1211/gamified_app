@@ -9,7 +9,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError
+from django.db import IntegrityError, OperationalError, connection
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import status
@@ -366,8 +366,9 @@ class TaskListView(APIView):
 
             return Response(task_data, status=201)
 
-        except Exception as e:
-            return Response({"error": str(e)}, status=400)
+        except Exception:
+            logger.exception(f"Task creation failed for '{user.username}'")
+            return Response({"error": "Could not create task"}, status=500)
 
 class TaskDetailView(APIView):
     """API view for individual task details"""
@@ -639,8 +640,9 @@ class TaskCompleteView(APIView):
 
         except (Task.DoesNotExist, User.DoesNotExist):
             return Response({"error": "Task or user not found"}, status=404)
-        except Exception as e:
-            return Response({"error": str(e)}, status=500)
+        except Exception:
+            logger.exception(f"Task completion failed for '{user.username}'")
+            return Response({"error": "Could not complete task"}, status=500)
 
 
 class UserStatsView(APIView):
@@ -672,8 +674,11 @@ class UserStatsView(APIView):
 
             return Response(stats)
 
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception:
+            logger.exception(f"UserStatsView failed for '{user.username}'")
+            return Response(
+                {"error": "Could not load stats"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class RegisterView(APIView):
     """API view for user registration"""
@@ -842,9 +847,10 @@ class RegisterView(APIView):
                 "goal": goal_title
             }, status=status.HTTP_201_CREATED)
 
-        except Exception as e:
+        except Exception:
+            logger.exception("Registration failed")
             return Response({
-                "error": str(e)
+                "error": "Could not create account"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -969,9 +975,10 @@ class LoginView(APIView):
                     "error": "Invalid username or password"
                 }, status=status.HTTP_401_UNAUTHORIZED)
 
-        except Exception as e:
+        except Exception:
+            logger.exception("Login failed")
             return Response({
-                "error": str(e)
+                "error": "Could not sign in"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -1075,8 +1082,11 @@ class WeeklyStatsView(APIView):
                 'daily_breakdown': daily_stats
             })
 
-        except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception:
+            logger.exception(f"WeeklyStatsView failed for '{user.username}'")
+            return Response(
+                {'error': 'Could not load weekly stats'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class DynamicTaskCompleteView(APIView):
@@ -1295,10 +1305,11 @@ class DynamicTaskCompleteView(APIView):
                 'success': False,
                 'error': 'User not found'
             }, status=404)
-        except Exception as e:
+        except Exception:
+            logger.exception(f"Dynamic task completion failed for '{user.username}'")
             return Response({
                 'success': False,
-                'error': str(e)
+                'error': 'Could not complete task'
             }, status=500)
 
 
@@ -1306,73 +1317,39 @@ class DynamicTaskUncompleteView(APIView):
     """API view for uncompleting dynamic daily tasks"""
     def post(self, request):
         user = request.user
-        task_title = request.data.get('task_title', '')
 
-        logger.info(f"DynamicTaskUncompleteView: Uncompleting task '{task_title}' for user '{user.username}'")
-        logger.info(f"Request data: {request.data}")
+        # Validated the same way DynamicTaskCompleteView validates it — this
+        # endpoint reverses a completion, so it is as sensitive as the one that
+        # records it.
+        task_title = (request.data.get('task_title') or '').strip()
+        if not task_title:
+            return Response({'error': 'task_title cannot be empty'}, status=400)
+        if len(task_title) > 150:
+            return Response({'error': 'task_title must be 150 characters or fewer'}, status=400)
 
         try:
-            logger.info(f"Found user: {user.username}")
-
-            # Find the task by title for this user (both random and regular tasks)
-            # First try exact match
-            task = Task.objects.filter(
-                title=task_title,
-                user=user
-            ).first()
-
-            # If exact match fails, try partial match for common title mismatches
+            # Exact match only. This used to fall back to a chain of fuzzy
+            # strategies — icontains on the raw input, then on an
+            # emoji-stripped version, then on any word over three characters —
+            # so {"task_title": "a"} matched the first task containing an "a"
+            # and reversed that completion instead, subtracting the wrong EXP
+            # and attributes. Each attempt was also an unindexed LIKE '%…%'
+            # scan on unbounded input.
+            #
+            # The timestamp suffix is stripped because time-limited tasks are
+            # stored as "<title> - HH:MM:SS"; that is a known, exact shape
+            # rather than a guess.
+            task = Task.objects.filter(title=task_title, user=user).first()
             if not task:
-                # Remove potential timestamp from the search title
-                clean_search_title = re.sub(r' - \d{2}:\d{2}:\d{2}$', '', task_title)
-                clean_core_title = re.sub(r'[^\w\s-]', '', clean_search_title).strip()
-
-                # Enhanced fallback search strategies
-                possible_titles = [
-                    task_title,
-                    task_title.strip(),
-                    clean_search_title,
-                    clean_core_title
-                ]
-
-                # Also try removing common emoji patterns and special characters
-                emoji_cleaned = re.sub(r'[^\w\s-]', '', task_title).strip()
-                possible_titles.append(emoji_cleaned)
-
-                # Try various matching strategies
-                for search_title in possible_titles:
-                    if search_title:
-                        # Try exact match first
-                        task = Task.objects.filter(title=search_title, user=user).first()
-                        if task:
-                            break
-
-                        # Try case-insensitive contains match
-                        task = Task.objects.filter(title__icontains=search_title, user=user).first()
-                        if task:
-                            break
-
-                # If still not found, try finding by similar keywords
-                if not task and len(clean_core_title) > 3:
-                    words = clean_core_title.lower().split()
-                    for word in words:
-                        if len(word) > 3:  # Only search meaningful words
-                            task = Task.objects.filter(title__icontains=word, user=user).first()
-                            if task:
-                                logger.info(f"Found task by keyword '{word}': {task.title}")
-                                break
-
-            logger.info(f"Task search result: {task}")
-            if task:
-                logger.info(f"Found task ID: {task.id}, Title: '{task.title}'")
+                without_timestamp = re.sub(r' - \d{2}:\d{2}:\d{2}$', '', task_title)
+                if without_timestamp != task_title:
+                    task = Task.objects.filter(title=without_timestamp, user=user).first()
 
             if not task:
-                logger.warning(f"Task '{task_title}' not found for user '{user.username}'")
-                # List all tasks for debugging
-                all_tasks = Task.objects.filter(user=user)
-                logger.info(f"Available tasks for user '{user.username}':")
-                for t in all_tasks:
-                    logger.info(f"  ID: {t.id}, Title: '{t.title}'")
+                # Previously logged every task the user owns, one line each, on
+                # every miss — an unauthenticated-adjacent way to drive log
+                # spend, and a copy of the user's task titles in the logs.
+                logger.warning("Uncomplete: no matching task for this user")
                 return Response({
                     'success': False,
                     'error': 'Dynamic task not found'
@@ -1387,7 +1364,6 @@ class DynamicTaskUncompleteView(APIView):
                 completed_at__date=today
             )
 
-            logger.info(f"Found {completion_logs.count()} completion logs for task '{task_title}' on {today}")
 
             completion_log = completion_logs.first()
 
@@ -1418,14 +1394,10 @@ class DynamicTaskUncompleteView(APIView):
                 new_level = calculate_level_from_exp(user.exp)
                 user.level = new_level
 
-                # Delete the completion log
-                log_id = completion_log.id
                 completion_log.delete()
-                logger.info(f"Deleted completion log with ID {log_id}")
 
                 # Update user streak
                 user.update_streak()
-                logger.info(f"Updated user streak to {user.current_streak}")
 
                 # Save user changes
                 user.save()
@@ -1454,10 +1426,11 @@ class DynamicTaskUncompleteView(APIView):
                     'streak': user.current_streak
                 })
 
-        except Exception as e:
+        except Exception:
+            logger.exception(f"Dynamic task uncompletion failed for '{user.username}'")
             return Response({
                 'success': False,
-                'error': str(e)
+                'error': 'Could not undo completion'
             }, status=500)
 
 
@@ -1467,7 +1440,6 @@ class CompletedTasksHistoryView(APIView):
         user = request.user
         limit = int(request.GET.get('limit', 50))  # Default to 50 recent completed tasks
 
-        logger.info(f"CompletedTasksHistoryView: Fetching completed tasks for user '{user.username}' (limit: {limit})")
 
         try:
 
@@ -1477,7 +1449,6 @@ class CompletedTasksHistoryView(APIView):
                 status='completed'
             ).select_related('task').order_by('-completed_at')[:limit]
 
-            logger.info(f"Found {completed_logs.count()} completed task logs")
 
             completed_tasks = []
             for log in completed_logs:
@@ -1503,13 +1474,14 @@ class CompletedTasksHistoryView(APIView):
                 'total_count': len(completed_tasks)
             })
 
-        except Exception as e:
-            return Response({
-                'success': False,
-                'error': str(e),
-                'completed_tasks': [],
-                'total_count': 0
-            })
+        except Exception:
+            # Returned HTTP 200 with the exception text and an empty list, so a
+            # crash was indistinguishable from "you have completed nothing".
+            logger.exception(f"CompletedTasksHistoryView failed for '{user.username}'")
+            return Response(
+                {'success': False, 'error': 'Could not load completion history'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
 
 class ProgressStatsView(APIView):
@@ -1570,9 +1542,10 @@ class ProgressStatsView(APIView):
             return Response({
                 "error": "User not found"
             }, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
+        except Exception:
+            logger.exception(f"ProgressStatsView failed for '{user.username}'")
             return Response({
-                "error": str(e)
+                "error": "Could not load progress"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -1711,10 +1684,25 @@ class HealthView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
+        # This used to report "database": "connected" unconditionally without
+        # touching the database, so Render saw a healthy service throughout a
+        # Postgres outage and never restarted or alerted on it.
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+            database = "connected"
+        except OperationalError:
+            logger.exception("Health check: database unreachable")
+            return Response({
+                "status": "degraded",
+                "timestamp": timezone.now().isoformat(),
+                "database": "unreachable",
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
         return Response({
             "status": "healthy",
             "timestamp": timezone.now().isoformat(),
-            "database": "connected"
+            "database": database,
         })
 
 
