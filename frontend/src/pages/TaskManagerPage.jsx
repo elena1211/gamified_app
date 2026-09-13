@@ -188,6 +188,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
 
   // Local state for UI only
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [editData, setEditData] = useState(null);
@@ -292,18 +293,14 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
         }));
 
       updateTasksState(transformedTasks);
+      setLoadError(null);
 
     } catch (error) {
+      // The static fallback this replaced used ids 1-5, which are real primary
+      // keys — editing or deleting one of those cards sent a PUT or DELETE to
+      // whichever task actually holds that id.
       debugError('❌ Error fetching tasks:', error);
-      debugLog('🔄 Falling back to static task data');
-      // Fallback to static data if API fails
-      updateTasksState([
-        {id: 1, title: "🧹 Organise workspace", description: "Clean and organise your desk", reward_point: 4, reward: "+2 Discipline", difficulty: 1, attribute: "discipline"},
-        {id: 2, title: "📝 Write journal entry", description: "Reflect on today's experiences", reward_point: 3, reward: "+1 Discipline", difficulty: 1, attribute: "discipline"},
-        {id: 3, title: "🏃‍♂️ 30-minute workout", description: "Include cardio and strength training", reward_point: 5, reward: "+2 Energy, +1 Discipline", difficulty: 2, attribute: "energy"},
-        {id: 4, title: "📚 Learn something new", description: "Read an educational article or watch a tutorial", reward_point: 4, reward: "+2 Intelligence", difficulty: 1, attribute: "intelligence"},
-        {id: 5, title: "🧘‍♀️ Meditation session", description: "10 minutes of mindfulness meditation", reward_point: 3, reward: "+1 Energy", difficulty: 1, attribute: "energy"}
-      ]);
+      setLoadError('Could not load your quests.');
     } finally {
       setLoading(false);
     }
@@ -749,7 +746,14 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
 
             <div>
               <h2 className="font-display text-base text-ink mb-3">Active Quests</h2>
-              {tasks.length === 0 ? (
+              {loadError ? (
+                <div className="text-center py-8">
+                  <p role="alert" className="text-sm text-ink-soft mb-3">{loadError}</p>
+                  <button onClick={fetchAllTasks} className="rpg-btn-secondary text-xs">
+                    Retry
+                  </button>
+                </div>
+              ) : tasks.length === 0 ? (
                 <p className="text-center py-8 text-sm text-ink-mute italic">
                   No active quests — create your first one above!
                 </p>
