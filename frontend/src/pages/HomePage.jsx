@@ -114,6 +114,8 @@ export default function HomePage({
   // `statsWarning` means the page is usable but one panel may be stale.
   const [error, setError] = useState(null);
   const [statsWarning, setStatsWarning] = useState(null);
+  // Set when an action the user just took could not be saved.
+  const [actionError, setActionError] = useState(null);
   const [showTimeLimitedTask, setShowTimeLimitedTask] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
   const [warningType, setWarningType] = useState("");
@@ -299,8 +301,24 @@ export default function HomePage({
     }
   };
 
+  // Flip every sign in a reward string, e.g. "+5 Discipline, -1 Stress" becomes
+  // "-5 Discipline, +1 Stress". Replacing '+' with '-' would leave the "-1 Stress"
+  // untouched and subtract from stress twice.
+  //
+  // Note this is only an exact inverse when the original change wasn't clamped.
+  // Task rewards are all-positive and attributes start well below the ceiling,
+  // so a completion never clamps and the round trip is exact; a term that did
+  // hit 0 or the cap would over-correct on revert.
+  const invertSigns = (s) =>
+    s.replace(/([+-])(\d+)/g, (_, sign, num) => `${sign === "+" ? "-" : "+"}${num}`);
+
   const handleTaskComplete = async (task) => {
     const willComplete = !task.completed;
+    // The exact string applied optimistically, so a failure can undo precisely
+    // what was done rather than recomputing it.
+    const appliedChange = task.reward
+      ? (willComplete ? task.reward : invertSigns(task.reward))
+      : null;
 
     // === OPTIMISTIC UPDATE — instant UI response, no waiting for API ===
     setTasks((prev) =>
@@ -308,15 +326,20 @@ export default function HomePage({
         t.id === task.id ? { ...t, completed: willComplete } : t,
       ),
     );
-    if (task.reward) {
-      // Apply or reverse stat changes immediately so the stats panel reacts at once.
-      // For uncompletion we must flip BOTH signs (e.g. "+5 Discipline, -1 Stress"
-      // becomes "-5 Discipline, +1 Stress") — naïvely replacing '+' with '-' would
-      // leave the "-1 Stress" untouched and double-subtract from stress.
-      const invertSigns = (s) =>
-        s.replace(/([+-])(\d+)/g, (_, sign, num) => `${sign === "+" ? "-" : "+"}${num}`);
-      applyStatChanges(willComplete ? task.reward : invertSigns(task.reward));
+    if (appliedChange) {
+      applyStatChanges(appliedChange);
     }
+
+    const revertOptimisticUpdate = () => {
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === task.id ? { ...t, completed: task.completed } : t,
+        ),
+      );
+      if (appliedChange) {
+        applyStatChanges(invertSigns(appliedChange));
+      }
+    };
 
     try {
       debugLog(
@@ -326,36 +349,35 @@ export default function HomePage({
         willComplete ? "complete" : "incomplete",
       );
 
-      let data = null;
-
-      if (willComplete) {
-        // Complete: use dynamicTaskComplete which saves attribute changes to DB
-        const res = await fetch(API_ENDPOINTS.dynamicTaskComplete, {
-          method: "POST",
-          mode: "cors",
-          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-          body: JSON.stringify({
+      const endpoint = willComplete
+        ? API_ENDPOINTS.dynamicTaskComplete
+        : API_ENDPOINTS.dynamicTaskUncomplete;
+      const body = willComplete
+        ? {
             task_title: task.title,
             task_type: "daily",
             reward_points: parseInt(task.reward?.match(/\+(\d+)/)?.[1] || "1"),
             attribute: task.attribute || "discipline",
-          }),
-        });
-        if (res.ok) data = await res.json();
-      } else {
-        // Uncomplete: use dynamicTaskUncomplete which reverses attribute changes in DB.
-        // reward_string isn't sent — the backend derives the exact reversal from the
-        // task's own stored fields so it always matches what complete actually applied.
-        const res = await fetch(API_ENDPOINTS.dynamicTaskUncomplete, {
-          method: "POST",
-          mode: "cors",
-          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-          body: JSON.stringify({
-            task_title: task.title,
-          }),
-        });
-        if (res.ok) data = await res.json();
+          }
+        // reward_string isn't sent — the backend derives the exact reversal from
+        // the task's own stored fields so it always matches what complete applied.
+        : { task_title: task.title };
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        mode: "cors",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify(body),
+      });
+
+      // A non-OK response used to leave `data` null and fall through silently,
+      // so a rejected completion still looked successful on screen.
+      if (!res.ok) {
+        throw new Error(`Server returned ${res.status}`);
       }
+      const data = await res.json();
+
+      setActionError(null);
 
       // Update level / streak / EXP from API response
       if (data?.user_stats) {
@@ -388,8 +410,16 @@ export default function HomePage({
       // Refresh weekly stats panel
       setTimeout(() => setRefreshTrigger((prev) => prev + 1), 300);
     } catch (err) {
+      // Keeping the optimistic change on failure is what let the UI drift away
+      // from the database: the quest looked done and the stats had moved, but
+      // the server had recorded nothing.
       debugError("Error completing task:", err);
-      // Optimistic changes already applied — keep them, don't revert
+      revertOptimisticUpdate();
+      setActionError(
+        willComplete
+          ? "Could not save that completion. Please try again."
+          : "Could not undo that completion. Please try again.",
+      );
     }
   };
 
@@ -826,6 +856,15 @@ export default function HomePage({
         {/* Today's Tasks */}
         <div className="rpg-window">
           <div className="rpg-header">Today's Quests</div>
+          {actionError && (
+            <p
+              role="alert"
+              className="mx-4 mt-3 px-3 py-2 text-xs rounded-sm"
+              style={{ background: "var(--paper-shadow)", color: "var(--accent-rust)" }}
+            >
+              {actionError}
+            </p>
+          )}
           <TaskList tasks={tasks} onTaskComplete={handleTaskComplete} />
           <div className="px-5 pb-5">
             <div className="paper-divider mb-3">

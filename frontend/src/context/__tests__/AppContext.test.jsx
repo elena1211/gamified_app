@@ -62,3 +62,57 @@ describe('getAttributePoints', () => {
     expect(screen.getByTestId('total').textContent).toBe('5');
   });
 });
+
+// A completion applies a reward string; a failed request has to undo exactly
+// that string. Both go through applyStatChanges, so inverting and re-applying
+// must land back on the original value.
+function StatChangeProbe({ change }) {
+  const { attributeStats, applyStatChanges } = useAppContext();
+  const invertSigns = (s) =>
+    s.replace(/([+-])(\d+)/g, (_, sign, num) => `${sign === '+' ? '-' : '+'}${num}`);
+
+  return (
+    <div>
+      <span data-testid="discipline">{attributeStats.discipline}</span>
+      <span data-testid="intelligence">{attributeStats.intelligence}</span>
+      <button onClick={() => applyStatChanges(change)}>apply</button>
+      <button onClick={() => applyStatChanges(invertSigns(change))}>revert</button>
+    </div>
+  );
+}
+
+describe('applyStatChanges round-trip', () => {
+  it('returns every attribute to its starting value when a reward is reverted', () => {
+    render(
+      <AppProvider>
+        <StatChangeProbe change="+3 Discipline, +2 Intelligence" />
+      </AppProvider>,
+    );
+
+    fireEvent.click(screen.getByText('apply'));
+    expect(screen.getByTestId('discipline').textContent).toBe('3');
+    expect(screen.getByTestId('intelligence').textContent).toBe('2');
+
+    fireEvent.click(screen.getByText('revert'));
+    expect(screen.getByTestId('discipline').textContent).toBe('0');
+    expect(screen.getByTestId('intelligence').textContent).toBe('0');
+  });
+
+  it('flips every sign, not just the leading one', () => {
+    // A naive '+' -> '-' replacement would leave a negative term untouched and
+    // apply it twice in the same direction.
+    render(
+      <AppProvider>
+        <StatChangeProbe change="+6 Discipline, +4 Intelligence" />
+      </AppProvider>,
+    );
+
+    fireEvent.click(screen.getByText('apply'));
+    fireEvent.click(screen.getByText('apply'));
+    expect(screen.getByTestId('discipline').textContent).toBe('12');
+
+    fireEvent.click(screen.getByText('revert'));
+    expect(screen.getByTestId('discipline').textContent).toBe('6');
+    expect(screen.getByTestId('intelligence').textContent).toBe('4');
+  });
+});

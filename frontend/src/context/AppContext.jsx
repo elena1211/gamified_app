@@ -80,26 +80,23 @@ export function AppProvider({ children }) {
       debugLog("Loading user data for:", username);
       const { data } = await apiRequest(API_ENDPOINTS.userStats);
 
-      // Merge DB attribute values with localStorage — keep the higher value
-      // (protects against Render cold-starts returning stale zeros)
+      // The database is the source of truth for attributes. This used to keep
+      // whichever value was higher, local or remote, to guard against a cold
+      // start returning zeros — but the guard below already skips an empty
+      // response, and taking the maximum meant local values could only ever
+      // rise. Every decrease the server applied (a missed-task penalty, a
+      // drop in stress) was silently discarded on the next load, so the
+      // punishment half of the loop never survived a refresh.
       if (data.attributes && Object.keys(data.attributes).length > 0) {
         setAttributeStats((prev) => {
-          const merged = { ...prev };
+          const synced = { ...prev };
           Object.keys(data.attributes).forEach((key) => {
-            if (Object.prototype.hasOwnProperty.call(merged, key)) {
-              merged[key] = Math.max(
-                merged[key] || 0,
-                data.attributes[key] || 0,
-              );
+            if (Object.prototype.hasOwnProperty.call(synced, key)) {
+              synced[key] = data.attributes[key] ?? 0;
             }
           });
-          debugLog(
-            "📊 loadUserData: DB attrs",
-            data.attributes,
-            "→ merged",
-            merged,
-          );
-          return merged;
+          debugLog("📊 loadUserData: synced attributes from DB", synced);
+          return synced;
         });
       }
 
