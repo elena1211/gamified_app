@@ -9,12 +9,14 @@ suite doesn't touch those tables directly, Django's test runner creates and
 tears down an isolated test database around them.
 """
 import os
+from datetime import timedelta
 from unittest import mock
 
 from django.conf import settings
 from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
@@ -1269,6 +1271,67 @@ class HealthViewTests(TestCase):
 
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.data["database"], "unreachable")
+
+
+class CompletedHistoryLimitTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="historyreader", password="pw12345")
+        self.token = Token.objects.create(user=self.user)
+        self.client = APIClient()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
+        self.url = reverse("completed-tasks-history")
+
+    def test_non_numeric_limit_is_a_400_not_a_500(self):
+        # A bare int() on the query parameter, outside the try block, made this
+        # an unhandled ValueError.
+        response = self.client.get(self.url, {"limit": "abc"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_negative_limit_is_a_400_not_a_500(self):
+        # Became a negative slice, which Django refuses.
+        response = self.client.get(self.url, {"limit": "-1"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_oversized_limit_is_capped_rather_than_run_unbounded(self):
+        response = self.client.get(self.url, {"limit": "999999999"})
+        self.assertEqual(response.status_code, 200)
+
+    def test_default_limit_works(self):
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+
+
+class DuplicateTaskTitleTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="titleowner", password="pw12345")
+        self.token = Token.objects.create(user=self.user)
+        self.client = APIClient()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
+        self.url = reverse("task-list")
+
+    def test_rejects_a_second_task_with_the_same_title(self):
+        # Endpoints that find a task by (user, title) cannot tell duplicates
+        # apart, so the reward applied depends on which row comes back.
+        payload = {"title": "Morning pages", "reward_point": 4, "difficulty": 1,
+                   "attribute": "discipline"}
+        self.assertEqual(self.client.post(self.url, payload, format="json").status_code, 201)
+        self.assertEqual(self.client.post(self.url, payload, format="json").status_code, 400)
+        self.assertEqual(Task.objects.filter(user=self.user, title="Morning pages").count(), 1)
+
+    def test_another_user_may_still_use_that_title(self):
+        # The constraint is per user, not global.
+        Task.objects.create(
+            user=self.user, title="Morning pages", description="",
+            attribute="discipline", reward_point=4, difficulty=1,
+            deadline=timezone.now() + timedelta(days=1),
+        )
+        other = User.objects.create_user(username="titlestranger", password="pw12345")
+        other_client = APIClient()
+        other_client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=other).key}")
+        response = other_client.post(self.url, {
+            "title": "Morning pages", "reward_point": 4, "difficulty": 1,
+            "attribute": "discipline",
+        }, format="json")
+        self.assertEqual(response.status_code, 201)
 
 
 class ConcurrencyTests(TestCase):

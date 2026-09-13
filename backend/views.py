@@ -333,6 +333,18 @@ class TaskListView(APIView):
         if attribute not in dict(Task.ATTRIBUTE_CHOICES):
             return Response({"error": "Invalid attribute"}, status=400)
 
+        # Several endpoints find a task by (user, title), so two tasks sharing a
+        # title make which one they act on ambiguous. There is no database
+        # constraint enforcing this — adding one would need a migration that
+        # fails on any account already holding duplicates, so existing data has
+        # to be audited first. Rejecting new ones stops the problem growing in
+        # the meantime, and the lookups order explicitly so they are at least
+        # deterministic for accounts that already have them.
+        if Task.objects.filter(user=user, title=title).exists():
+            return Response(
+                {"error": "You already have a task with this title"}, status=400
+            )
+
         try:
             # Deadline isn't client-writable (mirrors TaskDetailView.put,
             # which doesn't expose it for editing either) — always 24 hours
@@ -1255,7 +1267,12 @@ class DynamicTaskCompleteView(APIView):
                     # Looked up explicitly (not get_or_create with a reward_point
                     # default) so an existing task is never re-parameterized by
                     # whatever the client happened to send this time.
-                    task = Task.objects.filter(title=task_title, user=user).first()
+                    # Ordered explicitly: Task has no uniqueness constraint on
+                    # (user, title), and an unordered .first() picks whichever
+                    # row the database happens to return — so an account that
+                    # already holds duplicates could have a different one's
+                    # reward applied on different requests.
+                    task = Task.objects.filter(title=task_title, user=user).order_by('id').first()
                     if not task:
                         task = Task.objects.create(
                             title=task_title,
@@ -1386,11 +1403,11 @@ class DynamicTaskUncompleteView(APIView):
                 # The timestamp suffix is stripped because time-limited tasks are
                 # stored as "<title> - HH:MM:SS"; that is a known, exact shape
                 # rather than a guess.
-                task = Task.objects.filter(title=task_title, user=user).first()
+                task = Task.objects.filter(title=task_title, user=user).order_by('id').first()
                 if not task:
                     without_timestamp = re.sub(r' - \d{2}:\d{2}:\d{2}$', '', task_title)
                     if without_timestamp != task_title:
-                        task = Task.objects.filter(title=without_timestamp, user=user).first()
+                        task = Task.objects.filter(title=without_timestamp, user=user).order_by('id').first()
 
                 if not task:
                     # Previously logged every task the user owns, one line each, on
@@ -1483,10 +1500,24 @@ class DynamicTaskUncompleteView(APIView):
 
 class CompletedTasksHistoryView(APIView):
     """API view to get user's completed tasks history"""
+
+    DEFAULT_LIMIT = 50
+    MAX_LIMIT = 200
+
     def get(self, request):
         user = request.user
-        limit = int(request.GET.get('limit', 50))  # Default to 50 recent completed tasks
 
+        # This was a bare int() on a query parameter, outside the try below, so
+        # ?limit=abc raised ValueError and ?limit=-1 became a negative slice
+        # Django refuses — both surfacing as unhandled 500s. An arbitrarily
+        # large value was accepted and ran unbounded.
+        try:
+            limit = int(request.GET.get('limit', self.DEFAULT_LIMIT))
+        except (TypeError, ValueError):
+            return Response({'error': 'limit must be a number'}, status=400)
+        if limit < 1:
+            return Response({'error': 'limit must be at least 1'}, status=400)
+        limit = min(limit, self.MAX_LIMIT)
 
         try:
 
