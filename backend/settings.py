@@ -144,7 +144,14 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+# The app's day boundary has to match the user's, not the server's. Stored
+# datetimes stay UTC (USE_TZ below); this is the zone Django converts to when
+# it needs a calendar date — which is what "today" means for a streak, a
+# daily reset, or the missed-task check.
+#
+# A single zone is correct while the users are in one place. Per-user zones
+# are the real answer and are noted in the README as a known limitation.
+TIME_ZONE = 'Europe/London'
 
 USE_I18N = True
 

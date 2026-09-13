@@ -1,7 +1,8 @@
-from datetime import date, timedelta
+from datetime import timedelta
 
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.utils import timezone
 
 PERSONALITY_CHOICES = [
     ('logical', 'Logical'),
@@ -29,7 +30,7 @@ class User(AbstractUser):
 
     def update_streak(self):
         """Update user's streak based on daily activity (completing at least one task)"""
-        today = date.today()
+        today = timezone.localdate()
 
         # Check if any task was completed today
         completed_today = UserTaskLog.objects.filter(

@@ -9,8 +9,10 @@ suite doesn't touch those tables directly, Django's test runner creates and
 tears down an isolated test database around them.
 """
 import os
-from datetime import timedelta
+from contextlib import contextmanager
+from datetime import date, datetime, timedelta
 from unittest import mock
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.core.cache import cache
@@ -38,6 +40,14 @@ from .views import (
 # class that also hits an account_create/system_chat-scoped view, and the
 # combined total can trip a real 429 in what should be an isolated test.
 TEST_CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+
+
+@contextmanager
+def patch_localdate(fixed):
+    """Pin timezone.localdate() so a test can assert what "today" resolves to
+    without waiting for a real date to arrive."""
+    with mock.patch("django.utils.timezone.localdate", return_value=fixed):
+        yield
 
 
 class LevelMathTests(TestCase):
@@ -1332,6 +1342,66 @@ class DuplicateTaskTitleTests(TestCase):
             "attribute": "discipline",
         }, format="json")
         self.assertEqual(response.status_code, 201)
+
+
+class TimezoneBoundaryTests(TestCase):
+    """\"Today\" has to mean the user's calendar day. With TIME_ZONE on UTC and
+    date.today() reading the server clock, the day rolled over at midnight UTC —
+    01:00 British Summer Time, so for seven months a year a task completed late
+    in the evening counted toward the following day."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="bsttester", password="pw12345")
+        for name in ["intelligence", "discipline", "energy", "social", "wellness", "stress"]:
+            UserAttribute.objects.create(user=self.user, name=name, value=0)
+        self.task = Task.objects.create(
+            user=self.user, title="Evening review", description="", attribute="discipline",
+            reward_point=4, difficulty=1, deadline=timezone.now() + timedelta(days=1),
+        )
+
+    def test_the_configured_zone_is_the_users_not_utc(self):
+        self.assertEqual(settings.TIME_ZONE, "Europe/London")
+
+    def test_a_completion_late_on_a_summer_evening_counts_as_that_day(self):
+        # 23:30 on 15 June is 22:30 UTC — the same calendar day either way, so
+        # this is the control for the case below.
+        london = ZoneInfo("Europe/London")
+        local_evening = datetime(2025, 6, 15, 23, 30, tzinfo=london)
+
+        UserTaskLog.objects.create(
+            user=self.user, task=self.task, status="completed", completed_at=local_evening,
+        )
+        with patch_localdate(date(2025, 6, 15)):
+            count = UserTaskLog.objects.filter(
+                user=self.user, status="completed",
+                completed_at__date=timezone.localdate(),
+            ).count()
+        self.assertEqual(count, 1)
+
+    def test_a_completion_just_after_midnight_bst_belongs_to_the_new_day(self):
+        # 00:30 on 16 June BST is 23:30 UTC on the 15th. Under the old UTC
+        # setting this counted toward the 15th — a day the user had already
+        # finished — so the streak for the 16th looked empty.
+        london = ZoneInfo("Europe/London")
+        just_after_midnight = datetime(2025, 6, 16, 0, 30, tzinfo=london)
+
+        UserTaskLog.objects.create(
+            user=self.user, task=self.task, status="completed", completed_at=just_after_midnight,
+        )
+
+        with patch_localdate(date(2025, 6, 16)):
+            same_day = UserTaskLog.objects.filter(
+                user=self.user, status="completed",
+                completed_at__date=timezone.localdate(),
+            ).count()
+        self.assertEqual(same_day, 1, "a completion at 00:30 BST belongs to that morning")
+
+    def test_localdate_and_the_date_lookup_agree(self):
+        # The real bug was two different clocks: date.today() read the server's
+        # OS date while completed_at__date used Django's TIME_ZONE. They matched
+        # only because both happened to be UTC; changing one alone would have
+        # made them disagree.
+        self.assertEqual(timezone.localdate(), timezone.localtime(timezone.now()).date())
 
 
 class ConcurrencyTests(TestCase):
