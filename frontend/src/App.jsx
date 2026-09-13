@@ -7,8 +7,10 @@ import WelcomePage from './pages/WelcomePage';
 import SystemSettingsPage from './pages/SystemSettingsPage';
 import SystemPage from './pages/SystemPage';
 import ErrorBoundary from './components/ErrorBoundary';
-import OnboardingTutorial, { hasSeenOnboarding } from './components/OnboardingTutorial';
-import { AppProvider, useAppContext } from './context/AppContext';
+import OnboardingTutorial from './components/OnboardingTutorial';
+import { hasSeenOnboarding } from './utils/onboarding';
+import { AppProvider } from './context/AppContext';
+import { useAppContext } from './context/appContextValue';
 import { debugLog } from './utils/logger';
 
 function AppRoutes() {
@@ -60,10 +62,6 @@ function AppRoutes() {
 
   const handleNavigateToHome = () => {
     navigate('/home');
-  };
-
-  const handleNavigateToSystem = () => {
-    navigate('/system');
   };
 
   const handleLogoutAndNavigate = () => {

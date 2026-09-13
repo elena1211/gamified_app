@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { AppProvider, useAppContext } from '../AppContext';
+import { AppProvider } from '../AppContext';
+import { useAppContext } from '../appContextValue';
 
 // Minimal consumer to exercise getAttributePoints through the real context.
 function AttributePointsProbe({ attribute, tasks }) {

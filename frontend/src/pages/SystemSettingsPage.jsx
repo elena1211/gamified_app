@@ -3,6 +3,7 @@ import { User, Bell } from 'lucide-react';
 import Modal from '../components/Modal.jsx';
 import BottomNav from '../components/BottomNav.jsx';
 import { API_ENDPOINTS, apiRequest } from '../config/api.js';
+import { resetOnboarding } from '../utils/onboarding.js';
 
 export default function SystemSettingsPage({ currentUser, onLogout, onUpgradeSuccess, onNavigateToHome, onNavigateToTaskManager }) {
   const [activeSection, setActiveSection] = useState('account');
@@ -268,7 +269,7 @@ export default function SystemSettingsPage({ currentUser, onLogout, onUpgradeSuc
         </div>
         <button
           onClick={() => {
-            localStorage.removeItem('levelup_onboarding_done');
+            resetOnboarding();
             window.dispatchEvent(new Event('levelup:show-tutorial'));
           }}
           className="rpg-btn-secondary text-xs"

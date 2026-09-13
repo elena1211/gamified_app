@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Cpu, Send } from 'lucide-react';
 import { API_ENDPOINTS, apiRequest } from '../config/api.js';
-import { useAppContext } from '../context/AppContext.jsx';
+import { useAppContext } from '../context/appContextValue.js';
 import BottomNav from '../components/BottomNav.jsx';
 import SystemMessageBox from '../components/SystemMessageBox.jsx';
 
