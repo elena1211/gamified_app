@@ -12,11 +12,10 @@ export const logger = {
     console.error(...args);
   },
 
-  warn: () => {
-    // Temporarily disable to reduce flicker
-    // if (isDevelopment) {
-    //   console.warn(...args);
-    // }
+  warn: (...args) => {
+    if (isDevelopment) {
+      console.warn(...args);
+    }
   },
 
   debug: (...args) => {

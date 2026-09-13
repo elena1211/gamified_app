@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { cleanTaskTitle } from "../utils/taskUtils";
+import { debugWarn } from '../utils/logger';
 
 export default function TaskList({ tasks: initialTasks, onTaskComplete }) {
   const [tasks, setTasks] = useState(initialTasks);
@@ -23,7 +24,7 @@ export default function TaskList({ tasks: initialTasks, onTaskComplete }) {
         !task.title ||
         task.title.trim() === ""
       ) {
-        console.warn("Filtering out problematic task:", task);
+        debugWarn("Filtering out problematic task:", task);
         return false;
       }
       return true;

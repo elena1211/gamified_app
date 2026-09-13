@@ -1,5 +1,5 @@
 // API configuration and helper functions
-import { debugLog } from "../utils/logger";
+import { debugError, debugLog } from '../utils/logger';
 
 // Environment-based API configuration
 const API_BASE =
@@ -91,7 +91,7 @@ export const apiRequest = async (url, options = {}) => {
           // DRF puts throttle/auth messages under "detail", our views use "error"
           errorMessage = errorData.error || errorData.detail || errorMessage;
         } catch (parseError) {
-          console.error("Failed to parse error response:", parseError);
+          debugError("Failed to parse error response:", parseError);
         }
         throw new Error(errorMessage);
       }
@@ -107,7 +107,7 @@ export const apiRequest = async (url, options = {}) => {
 
       // On the final attempt, or on a non-retryable error, stop trying.
       if (!isNetworkError || attempt === RETRY_DELAYS_MS.length) {
-        console.error("API request failed:", error);
+        debugError("API request failed:", error);
         if (isNetworkError) {
           throw new Error(
             "Connection error: Unable to connect to server. Please check if the backend is running.",

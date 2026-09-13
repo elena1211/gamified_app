@@ -8,7 +8,7 @@ import LevelUpModal from '../components/LevelUpModal';
 import Modal from '../components/Modal';
 import { useAppContext } from '../context/appContextValue';
 import { getAvatarStage } from '../utils/avatar';
-import { debugLog } from '../utils/logger';
+import { debugError, debugLog } from '../utils/logger';
 import { cleanTaskTitle } from '../utils/taskUtils';
 
 // Move TaskCard outside the main component to prevent re-creation
@@ -294,8 +294,8 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
       updateTasksState(transformedTasks);
 
     } catch (error) {
-      console.error('❌ Error fetching tasks:', error);
-      console.log('🔄 Falling back to static task data');
+      debugError('❌ Error fetching tasks:', error);
+      debugLog('🔄 Falling back to static task data');
       // Fallback to static data if API fails
       updateTasksState([
         {id: 1, title: "🧹 Organise workspace", description: "Clean and organise your desk", reward_point: 4, reward: "+2 Discipline", difficulty: 1, attribute: "discipline"},
@@ -333,7 +333,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
         updateCompletedTasksState([]);
       }
     } catch (error) {
-      console.error('❌ Error fetching completed tasks history:', error);
+      debugError('❌ Error fetching completed tasks history:', error);
       // Don't show fallback data for completed history
       updateCompletedTasksState([]);
     }
@@ -382,7 +382,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
       setShowAddForm(false);
 
     } catch (error) {
-      console.error('Error adding task:', error);
+      debugError('Error adding task:', error);
       // Show user-friendly error message
       alert(`Error creating task: ${error.message}`);
       // Don't hide the form so user can try again
@@ -415,7 +415,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
       setEditingTask(null);
       setEditData(null);
     } catch (error) {
-      console.error('Error editing task:', error);
+      debugError('Error editing task:', error);
       alert(`Failed to save changes: ${error.message}. Please try again.`);
     } finally {
       savingIds.current.delete(taskId);
@@ -546,7 +546,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
         throw new Error(data.message || 'Failed to complete task');
       }
     } catch (error) {
-      console.error('Error completing task:', error);
+      debugError('Error completing task:', error);
       alert(`Failed to complete task: ${error.message}. Please try again.`);
     } finally {
       completingIds.current.delete(task.id);
@@ -577,7 +577,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
       if (error.message === 'Task not found') {
         updateTasksState(prev => prev.filter(task => task.id !== taskId));
       } else {
-        console.error('Error deleting task:', error);
+        debugError('Error deleting task:', error);
         alert(`Failed to delete task: ${error.message}. Please try again.`);
       }
     } finally {

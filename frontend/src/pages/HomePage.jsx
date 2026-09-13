@@ -13,7 +13,7 @@ import LevelUpModal from "../components/LevelUpModal";
 import SystemAlert from "../components/SystemAlert";
 import { useAppContext } from "../context/appContextValue";
 import { getAvatarStage, getExpForLevel } from "../utils/avatar";
-import { debugLog } from "../utils/logger";
+import { debugError, debugLog, debugWarn } from '../utils/logger';
 
 // Time-limited ultra-micro engineering actions - Atomic habit style (5-10 seconds)
 const TIME_LIMITED_TASKS = [
@@ -234,7 +234,7 @@ export default function HomePage({
           }
         }
       } catch (error) {
-        console.error("Error completing time-limited task:", error);
+        debugError("Error completing time-limited task:", error);
         // Fallback to local changes
         applyStatChanges(currentTimeLimitedTask.reward);
         setRefreshTrigger((prev) => prev + 1);
@@ -385,7 +385,7 @@ export default function HomePage({
       // Refresh weekly stats panel
       setTimeout(() => setRefreshTrigger((prev) => prev + 1), 300);
     } catch (err) {
-      console.error("Error completing task:", err);
+      debugError("Error completing task:", err);
       // Optimistic changes already applied — keep them, don't revert
     }
   };
@@ -475,7 +475,7 @@ export default function HomePage({
           selectedTasks.map((t) => ({ id: t.id, title: t.title })),
         );
       } catch (err) {
-        console.error("Error fetching tasks:", err);
+        debugError("Error fetching tasks:", err);
         debugLog("⚠️ API failed, loading fallback tasks...");
         // Set default tasks if API fails - enhanced rewards (1-10 points)
         const fallbackTasks = [
@@ -574,7 +574,7 @@ export default function HomePage({
         streak: data.current_streak,
       }));
     } catch (err) {
-      console.error("Failed to fetch user stats:", err);
+      debugError("Failed to fetch user stats:", err);
       // Set default user stats if API fails
       setLocalUserStats({
         level: 5,
@@ -614,7 +614,7 @@ export default function HomePage({
           applyStatChanges(punish.penalty);
         }
       } catch (err) {
-        console.warn('System punishment check unavailable:', err.message);
+        debugWarn('System punishment check unavailable:', err.message);
       }
 
       try {
@@ -625,7 +625,7 @@ export default function HomePage({
         if (!status.has_seen_morning_brief) setShowMorningBriefBanner(true);
         if (status.active_title) setActiveTitle(status.active_title);
       } catch (err) {
-        console.warn('System daily status unavailable:', err.message);
+        debugWarn('System daily status unavailable:', err.message);
       }
     };
     checkSystem();

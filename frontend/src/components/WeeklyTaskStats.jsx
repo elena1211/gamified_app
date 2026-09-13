@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { API_ENDPOINTS, apiRequest } from "../config/api.js";
-import { debugLog } from "../utils/logger";
+import { debugError, debugLog } from '../utils/logger';
 
 export default function WeeklyTaskStats({ currentUser, refreshTrigger }) {
   const [weeklyStats, setWeeklyStats] = useState(null);
@@ -16,7 +16,7 @@ export default function WeeklyTaskStats({ currentUser, refreshTrigger }) {
       const { data } = await apiRequest(API_ENDPOINTS.weeklyStats);
       setWeeklyStats(data);
     } catch (error) {
-      console.error("Error fetching weekly stats:", error);
+      debugError("Error fetching weekly stats:", error);
       setError(error.message);
       setWeeklyStats(null);
     } finally {
