@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getAvatarStage, getAvatarSrc, getAvatarTitle, getExpForLevel } from '../avatar';
+import { getAvatarStage, getAvatarSrc, getAvatarThumbSrc, getAvatarTitle, getExpForLevel } from '../avatar';
 
 describe('getAvatarStage', () => {
   // Each pair sits either side of a threshold, so moving a boundary by one
@@ -25,6 +25,12 @@ describe('getAvatarSrc', () => {
     const src = getAvatarSrc(level);
     // A renamed or missing file would otherwise surface only as a broken image.
     expect(existsSync(resolve(publicDir, src.slice(1)))).toBe(true);
+  });
+});
+
+describe('getAvatarThumbSrc', () => {
+  it.each([1, 5, 10, 30, 50])('points at a small copy that exists for level %i', (level) => {
+    expect(existsSync(resolve(publicDir, getAvatarThumbSrc(level).slice(1)))).toBe(true);
   });
 });
 

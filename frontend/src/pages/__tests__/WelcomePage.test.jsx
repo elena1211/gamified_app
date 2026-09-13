@@ -24,6 +24,24 @@ const signInWith = (username, password) => {
 describe('WelcomePage', () => {
   beforeEach(() => apiRequest.mockReset());
 
+  it('shows the character growing through every avatar stage', () => {
+    renderPage();
+    // Asserted as the exact string: an earlier version split this sentence
+    // across spans and the spaces at their edges were dropped ("NovicetoLv").
+    const progression = screen.getByRole('figure', {
+      name: 'Your character grows through five stages, from Lost Novice at level 1 to Queen at level 50.',
+    });
+    const figures = [...progression.querySelectorAll('img')].map((img) => img.getAttribute('src'));
+    expect(figures).toEqual([1, 2, 3, 4, 5].map((stage) => `/avatars/avatar_stage_${stage}_small.webp`));
+  });
+
+  it('gives both views a top-level heading', () => {
+    renderPage();
+    expect(screen.getByRole('heading', { level: 1, name: 'Level Up' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
+    expect(screen.getByRole('heading', { level: 1, name: 'Welcome Back' })).toBeInTheDocument();
+  });
+
   it('sends a new player to registration', () => {
     const { onNavigateToRegister } = renderPage();
     fireEvent.click(screen.getByRole('button', { name: 'Create Account' }));

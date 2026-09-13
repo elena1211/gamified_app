@@ -1,5 +1,62 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
+import { ChartColumn, Flame, ScrollText, Target } from 'lucide-react';
 import { apiRequest, API_ENDPOINTS } from '../config/api.js';
+import { getAvatarThumbSrc, getAvatarTitle } from '../utils/avatar';
+
+// One level from each avatar stage, lowest first.
+const STAGE_LEVELS = [1, 5, 10, 30, 50];
+const FIRST_LEVEL = STAGE_LEVELS[0];
+const LAST_LEVEL = STAGE_LEVELS[STAGE_LEVELS.length - 1];
+const FIRST_TITLE = getAvatarTitle(FIRST_LEVEL);
+const LAST_TITLE = getAvatarTitle(LAST_LEVEL);
+const STAGGER_MS = 90;
+// Each stage stands a little taller than the last. Larger from md up, where the
+// progression has a whole column to itself.
+const FIGURE_HEIGHTS = [
+  'h-14 md:h-20',
+  'h-[4.5rem] md:h-[6.5rem]',
+  'h-[5.5rem] md:h-32',
+  'h-[6.5rem] md:h-[9.5rem]',
+  'h-[7.5rem] md:h-44',
+];
+
+const FEATURES = [
+  { Icon: Target, colour: 'var(--accent-rose-deep)', title: 'Set Your Goals', desc: 'Define your path to success' },
+  { Icon: ScrollText, colour: 'var(--accent-gold-deep)', title: 'Daily Random Quests', desc: 'Complete challenges to level up' },
+  { Icon: Flame, colour: 'var(--accent-rust)', title: 'Track Progress', desc: 'Maintain momentum and stay motivated' },
+  { Icon: ChartColumn, colour: 'var(--frame-deep)', title: 'View Stats', desc: 'Watch your skills grow over time' },
+];
+
+// The five avatar stages side by side. The character growing as tasks get done
+// is the whole premise of the app, so it is the first thing a visitor sees.
+function StageProgression() {
+  const captionId = useId();
+
+  return (
+    <figure aria-labelledby={captionId}>
+      <div className="flex items-end justify-between gap-1 px-1">
+        {STAGE_LEVELS.map((level, i) => (
+          <div key={level} className={`stagger-item w-[18%] ${FIGURE_HEIGHTS[i]}`} style={{ animationDelay: `${i * STAGGER_MS}ms` }}>
+            <img src={getAvatarThumbSrc(level)} alt="" className="h-full w-full object-contain object-bottom" />
+          </div>
+        ))}
+      </div>
+      <div className="mt-1" style={{ borderTop: '2px dashed var(--frame)', opacity: 0.5 }} />
+      {/* The caption names the figure. Browsers derive that from <figcaption> on
+          their own, but screen reader support for it is uneven, so
+          aria-labelledby says it outright. Screen readers get one whole
+          sentence; the two corner labels are the same facts laid out for the
+          eye, so they are hidden from them rather than read twice. */}
+      <figcaption id={captionId} className="mt-2 flex justify-between text-[11px] tracking-wide text-ink-soft">
+        <span className="sr-only">
+          {`Your character grows through five stages, from ${FIRST_TITLE} at level ${FIRST_LEVEL} to ${LAST_TITLE} at level ${LAST_LEVEL}.`}
+        </span>
+        <span aria-hidden="true">Lv. {FIRST_LEVEL} · {FIRST_TITLE}</span>
+        <span aria-hidden="true">Lv. {LAST_LEVEL} · {LAST_TITLE}</span>
+      </figcaption>
+    </figure>
+  );
+}
 
 export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
   const [isLoginMode, setIsLoginMode] = useState(false);
@@ -71,64 +128,62 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
     setIsLoginMode(loginMode);
   };
 
-  const FEATURES = [
-    { icon: '🎯', title: 'Set Your Goals', desc: 'Define your path to success' },
-    { icon: '📋', title: 'Daily Random Quests', desc: 'Complete challenges to level up' },
-    { icon: '🔥', title: 'Track Progress', desc: 'Maintain momentum and stay motivated' },
-    { icon: '📊', title: 'View Stats', desc: 'Watch your skills grow over time' },
-  ];
-
   if (!isLoginMode) {
     return (
-      <div className="paper-bg min-h-screen flex items-center justify-center p-4">
-        <div className="rpg-window max-w-md w-full page-enter">
-          <div className="rpg-header text-base">Level Up — Growth Journal</div>
-          <div className="px-6 py-6">
-            <p className="text-ink-soft text-sm mb-6 text-center italic">
-              Transform your daily life into an epic adventure
+      <div className="paper-bg min-h-screen flex items-center justify-center p-4 sm:p-8">
+        <div className="page-enter w-full max-w-4xl grid gap-8 md:grid-cols-2 md:items-center">
+          <section className="text-center md:text-left">
+            <p className="text-xs uppercase tracking-[0.2em] text-ink-soft">Growth Journal</p>
+            <h1 className="font-display text-4xl sm:text-5xl text-ink mt-2">Level Up</h1>
+            <p className="text-ink-soft mt-3">
+              Complete real tasks. Watch your character grow from {FIRST_TITLE} to {LAST_TITLE}.
             </p>
-
-            <div className="space-y-4 mb-8">
-              {FEATURES.map(f => (
-                <div key={f.title} className="flex items-start gap-3">
-                  <span className="text-xl mt-0.5">{f.icon}</span>
-                  <div>
-                    <h3 className="font-semibold text-ink text-sm">{f.title}</h3>
-                    <p className="text-xs text-ink-mute">{f.desc}</p>
-                  </div>
-                </div>
-              ))}
+            <div className="mt-8 max-w-sm mx-auto md:mx-0 md:max-w-none">
+              <StageProgression />
             </div>
+          </section>
 
-            <div className="paper-divider mb-5"><span>begin your journey</span></div>
+          <div className="rpg-window w-full max-w-md mx-auto">
+            <div className="rpg-header">Begin your journey</div>
+            <div className="px-6 py-6">
+              <ul className="space-y-4 mb-7">
+                {FEATURES.map(({ Icon, colour, title, desc }) => (
+                  <li key={title} className="flex items-start gap-3">
+                    <span className="feature-seal" style={{ color: colour }} aria-hidden="true">
+                      <Icon size={18} strokeWidth={2} />
+                    </span>
+                    <div>
+                      <h2 className="font-semibold text-ink text-sm">{title}</h2>
+                      <p className="text-xs text-ink-soft">{desc}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
 
-            {errorBox}
+              {errorBox}
 
-            <div className="space-y-3">
-              <button
-                onClick={onNavigateToRegister}
-                className="rpg-btn-primary w-full"
-              >
-                Create Account
-              </button>
-              <button
-                onClick={() => switchMode(true)}
-                className="rpg-btn-secondary w-full"
-              >
-                Sign In
-              </button>
-              <button
-                onClick={handleGuest}
-                disabled={loading}
-                className="w-full text-xs text-ink-mute hover:text-ink underline transition-colors py-1"
-              >
-                {loading ? 'Starting guest session…' : 'Continue as guest (no account needed)'}
-              </button>
+              <div className="space-y-3">
+                <button
+                  onClick={onNavigateToRegister}
+                  className="rpg-btn-primary w-full"
+                >
+                  Create Account
+                </button>
+                <button
+                  onClick={() => switchMode(true)}
+                  className="rpg-btn-secondary w-full"
+                >
+                  Sign In
+                </button>
+                <button
+                  onClick={handleGuest}
+                  disabled={loading}
+                  className="w-full text-xs text-ink-soft hover:text-ink underline transition-colors py-1"
+                >
+                  {loading ? 'Starting guest session…' : 'Continue as guest (no account needed)'}
+                </button>
+              </div>
             </div>
-
-            <p className="text-xs text-ink-mute text-center mt-6">
-              Join other adventurers on their path to success
-            </p>
           </div>
         </div>
       </div>
@@ -138,7 +193,7 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
   return (
     <div className="paper-bg min-h-screen flex items-center justify-center p-4">
       <div className="rpg-window max-w-sm w-full page-enter">
-        <div className="rpg-header">Welcome Back</div>
+        <h1 className="rpg-header">Welcome Back</h1>
         <div className="px-6 py-6">
           {errorBox}
 
