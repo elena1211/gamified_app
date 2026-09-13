@@ -213,6 +213,10 @@ REST_FRAMEWORK = {
         # Account creation (register + guest login) is IP-throttled for the
         # same reason.
         'account_create': '10/hour',
+        # Failed logins are the cheap half of credential stuffing, so this is
+        # deliberately tighter than account creation. Legitimate users rarely
+        # need more than a handful of attempts in an hour.
+        'login': '20/hour',
     },
     # Render sits behind one reverse proxy; without this, every client would
     # share the proxy's IP and IP throttles would lump all users together.

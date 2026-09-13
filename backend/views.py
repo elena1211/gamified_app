@@ -7,6 +7,8 @@ from datetime import date, datetime, timedelta
 
 from django.contrib.auth import authenticate
 from django.contrib.auth.hashers import make_password
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.http import HttpResponse
 from django.utils import timezone
@@ -732,6 +734,17 @@ class RegisterView(APIView):
                     "error": "Username already exists"
                 }, status=status.HTTP_400_BAD_REQUEST)
 
+            # AUTH_PASSWORD_VALIDATORS has been configured since the project was
+            # generated, but make_password() below hashes whatever it is handed —
+            # the validators only run when validate_password() is called, which
+            # nothing did. "a" was an accepted password.
+            try:
+                validate_password(password, user=User(username=username, email=email))
+            except ValidationError as exc:
+                return Response({
+                    "error": " ".join(exc.messages)
+                }, status=status.HTTP_400_BAD_REQUEST)
+
             # Create user
             user = User.objects.create(
                 username=username,
@@ -863,9 +876,15 @@ class UpgradeGuestView(APIView):
             return Response(
                 {"error": "Username must be 150 characters or fewer"}, status=status.HTTP_400_BAD_REQUEST
             )
-        if len(password) < 6:
+        # Same validators as registration — the two paths both set a password
+        # and previously disagreed about what counted as acceptable, with this
+        # one enforcing a bare 6-character minimum and registration enforcing
+        # nothing at all.
+        try:
+            validate_password(password, user=User(username=username, email=email))
+        except ValidationError as exc:
             return Response(
-                {"error": "Password must be at least 6 characters"}, status=status.HTTP_400_BAD_REQUEST
+                {"error": " ".join(exc.messages)}, status=status.HTTP_400_BAD_REQUEST
             )
         if username.startswith('guest_'):
             # Would make this account indistinguishable from a fresh guest
@@ -901,7 +920,12 @@ class UpgradeGuestView(APIView):
             # and this save (two guests racing for the same name).
             return Response({"error": "Username already exists"}, status=status.HTTP_400_BAD_REQUEST)
 
-        token, _ = Token.objects.get_or_create(user=user)
+        # Issue a fresh token and invalidate the old one. The guest id that
+        # produced the previous token was, until this upgrade, the only thing
+        # standing between anyone who knew it and this account — so it must not
+        # keep working once the account has a real password behind it.
+        Token.objects.filter(user=user).delete()
+        token = Token.objects.create(user=user)
         return Response({
             "success": True,
             "username": username,
@@ -912,6 +936,10 @@ class UpgradeGuestView(APIView):
 class LoginView(APIView):
     """API view for user login"""
     permission_classes = [AllowAny]
+    # Without a scope, ScopedRateThrottle does nothing and this endpoint accepts
+    # unlimited password guesses. Register and guest login were given a scope;
+    # login was missed, which is the one that actually guards a password.
+    throttle_scope = 'login'
 
     def post(self, request):
         try:
@@ -954,36 +982,41 @@ class GuestLoginView(APIView):
     # to mint fresh identities.
     throttle_scope = 'account_create'
 
-    def post(self, request):
-        guest_id = (request.data.get('guest_id') or '').strip()
-        if not re.match(r'^guest_[a-z0-9]{1,12}$', guest_id):
-            return Response({'error': 'Invalid guest ID'}, status=status.HTTP_400_BAD_REQUEST)
+    # A guest id is not just a name — possession of it is what grants access to
+    # that account and everything in it. It therefore has to be unguessable, so
+    # the server mints it. The client used to choose it with
+    # Math.random().toString(36).slice(2, 8): not a CSPRNG, around 31 bits at
+    # best, sometimes fewer than 6 characters, and the old pattern accepted a
+    # single character, leaving a 1-2 character space of 1,332 ids that could be
+    # walked from a handful of addresses.
+    GUEST_ID_BYTES = 16
 
-        user, created = User.objects.get_or_create(
+    def post(self, request):
+        guest_id = f"guest_{secrets.token_hex(self.GUEST_ID_BYTES)}"
+
+        user = User.objects.create(
             username=guest_id,
-            defaults={
-                'password': make_password(secrets.token_urlsafe(16)),
-                'level': 1, 'exp': 0, 'current_streak': 0, 'max_streak': 0,
-            }
+            password=make_password(secrets.token_urlsafe(16)),
+            level=1, exp=0, current_streak=0, max_streak=0,
         )
-        if created:
-            for attr_name in ['intelligence', 'discipline', 'energy', 'social', 'wellness', 'stress']:
-                UserAttribute.objects.create(user=user, name=attr_name, value=0)
-            Goal.objects.create(
-                user=user,
-                title='Getting Started',
-                description='Learn how to use the gamified productivity system',
-            )
-            default_deadline = timezone.now() + timedelta(days=3650)
-            for td in [
-                {'title': '🧹 Organise workspace',  'description': 'Clean and organise your desk',         'reward_point': 6, 'difficulty': 1, 'attribute': 'discipline'},
-                {'title': '📝 Write journal entry', 'description': "Reflect on today's experiences",      'reward_point': 5, 'difficulty': 1, 'attribute': 'discipline'},
-                {'title': '🏃 30-minute workout',   'description': 'Include cardio and strength training', 'reward_point': 9, 'difficulty': 2, 'attribute': 'energy'},
-                {'title': '💻 Practice coding',     'description': 'Solve a Leetcode problem',             'reward_point': 8, 'difficulty': 2, 'attribute': 'intelligence'},
-                {'title': '🧘 Meditation',          'description': '10 minutes of mindfulness',            'reward_point': 4, 'difficulty': 1, 'attribute': 'energy'},
-                {'title': '📚 Learn something new', 'description': 'Read an educational article',          'reward_point': 7, 'difficulty': 1, 'attribute': 'intelligence'},
-            ]:
-                Task.objects.create(user=user, deadline=default_deadline, **td)
+
+        for attr_name in ['intelligence', 'discipline', 'energy', 'social', 'wellness', 'stress']:
+            UserAttribute.objects.create(user=user, name=attr_name, value=0)
+        Goal.objects.create(
+            user=user,
+            title='Getting Started',
+            description='Learn how to use the gamified productivity system',
+        )
+        default_deadline = timezone.now() + timedelta(days=3650)
+        for td in [
+            {'title': '🧹 Organise workspace',  'description': 'Clean and organise your desk',         'reward_point': 6, 'difficulty': 1, 'attribute': 'discipline'},
+            {'title': '📝 Write journal entry', 'description': "Reflect on today's experiences",      'reward_point': 5, 'difficulty': 1, 'attribute': 'discipline'},
+            {'title': '🏃 30-minute workout',   'description': 'Include cardio and strength training', 'reward_point': 9, 'difficulty': 2, 'attribute': 'energy'},
+            {'title': '💻 Practice coding',     'description': 'Solve a Leetcode problem',             'reward_point': 8, 'difficulty': 2, 'attribute': 'intelligence'},
+            {'title': '🧘 Meditation',          'description': '10 minutes of mindfulness',            'reward_point': 4, 'difficulty': 1, 'attribute': 'energy'},
+            {'title': '📚 Learn something new', 'description': 'Read an educational article',          'reward_point': 7, 'difficulty': 1, 'attribute': 'intelligence'},
+        ]:
+            Task.objects.create(user=user, deadline=default_deadline, **td)
 
         token, _ = Token.objects.get_or_create(user=user)
         return Response({'username': guest_id, 'token': token.key})
