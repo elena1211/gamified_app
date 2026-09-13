@@ -1,0 +1,4 @@
+# Development and CI only — not installed on Render.
+-r requirements.txt
+
+ruff==0.16.7
