@@ -82,6 +82,7 @@ and an automated test suite.
 - [API Reference](#api-reference)
 - [Project Structure](#project-structure)
 - [Deployment](#deployment)
+- [Project History](#project-history)
 - [Known Limitations](#known-limitations)
 
 ---
@@ -432,6 +433,23 @@ gamified_app/
 2. Set the root directory to `frontend`.
 3. Add the environment variable `VITE_API_URL=https://gamified-app-p9ao.onrender.com/api`.
 4. Deploy.
+
+---
+
+## Project History
+
+This repository's history covers the dissertation build (mid-2025), a Railway
+deployment that never stabilised, the migration to Render + Vercel + Neon in early
+2026, and the hardening work since.
+
+The early commits are messy. August 2025 was the heaviest month — most of the feature
+work landed then, alongside roughly forty commits of deployment debugging: repeated
+attempts at build commands, static files and start-up configuration against a platform
+I did not yet understand. Rather than keep patching it, I moved the stack to Render
+with a managed Neon database, which is what the app runs on today.
+
+Commits from 2026 onward follow a consistent convention, and each one is a single
+reviewed change with its reasoning in the message body.
 
 ---
 
