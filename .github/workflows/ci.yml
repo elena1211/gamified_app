@@ -38,7 +38,12 @@ jobs:
           DATABASE_URL: "postgres://user:pass@localhost:5432/placeholder"
           ALLOWED_HOSTS: "example.com"
         run: python manage.py check --deploy --fail-level WARNING
-      - run: python manage.py test backend
+      # Runs the suite under coverage so the figure is measured on every PR
+      # rather than whenever someone remembers. The floor is in pyproject.toml.
+      - name: Tests with coverage
+        run: |
+          coverage run manage.py test backend
+          coverage report
 
   frontend:
     runs-on: ubuntu-latest

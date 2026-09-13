@@ -1,4 +1,5 @@
 # Development and CI only — not installed on Render.
 -r requirements.txt
 
+coverage==7.16.0
 ruff==0.16.7

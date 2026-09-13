@@ -16,3 +16,14 @@ ignore = ["E501"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["backend"]
+
+[tool.coverage.run]
+source = ["backend"]
+omit = ["*/migrations/*", "*/tests.py", "*/asgi.py", "*/wsgi.py"]
+
+[tool.coverage.report]
+# Set just under the current figure so a real drop fails the build while
+# ordinary churn does not. Raise it as coverage rises rather than leaving it
+# as a number nobody revisits.
+fail_under = 80
+skip_covered = true

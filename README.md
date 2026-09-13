@@ -253,6 +253,10 @@ npm test
 
 Both suites run automatically on pushes to `main` and on pull requests targeting `main`, via [GitHub Actions](.github/workflows/ci.yml).
 
+The backend suite runs under `coverage` with a floor configured in `pyproject.toml`, so a drop fails the build rather than going unnoticed. Current backend coverage is **82%** across 153 tests; `views.py`, which holds the API, is at 78%.
+
+Every endpoint has an authentication test — the list is data-driven, so adding a view without protecting it fails the suite rather than reaching production. Cross-user isolation is asserted separately: reads return only the caller's rows, and writes against another user's row are rejected.
+
 ---
 
 ## Environment Variables
