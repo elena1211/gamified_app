@@ -3,7 +3,7 @@ import math
 import random
 import re
 import secrets
-from datetime import date, datetime, timedelta
+from datetime import timedelta
 
 from django.contrib.auth import authenticate
 from django.contrib.auth.hashers import make_password
@@ -182,7 +182,7 @@ class TaskListView(APIView):
 
     def get(self, request):
         user = request.user
-        today = date.today()
+        today = timezone.localdate()
 
         completed_task_ids = UserTaskLog.objects.filter(
             user=user,
@@ -350,7 +350,10 @@ class TaskListView(APIView):
             # which doesn't expose it for editing either) — always 24 hours
             # from creation, so a malformed value can't reach Task.objects.create
             # and bubble a raw exception string back to the client.
-            deadline = datetime.now() + timedelta(days=1)
+            # timezone.now(), not datetime.now(): with USE_TZ on, a naive
+            # datetime makes Django warn and store a value shifted by
+            # whatever the server's clock is set to.
+            deadline = timezone.now() + timedelta(days=1)
 
             # Create new task
             task = Task.objects.create(
@@ -429,7 +432,7 @@ class TaskDetailView(APIView):
             # desync the XP/attribute reversal from what was actually granted.
             completed_today = UserTaskLog.objects.filter(
                 task=task, user=request.user, status='completed',
-                completed_at__date=date.today()
+                completed_at__date=timezone.localdate()
             ).exists()
             if completed_today:
                 return Response(
@@ -575,7 +578,7 @@ class TaskCompleteView(APIView):
                 task = Task.objects.get(id=task_id, user=user)
 
                 # Check if task is already completed today
-                today = date.today()
+                today = timezone.localdate()
                 existing_log = UserTaskLog.objects.filter(
                     user=user,
                     task=task,
@@ -1062,7 +1065,7 @@ class WeeklyStatsView(APIView):
         try:
 
             # Calculate date range for current week (Monday to Sunday)
-            today = date.today()
+            today = timezone.localdate()
             monday = today - timedelta(days=today.weekday())
             sunday = monday + timedelta(days=6)
 
@@ -1175,7 +1178,7 @@ class DynamicTaskCompleteView(APIView):
                         user=user,
                         status='completed',
                         task__is_random=True,
-                        completed_at__date=date.today(),
+                        completed_at__date=timezone.localdate(),
                     ).count()
                     if completed_today >= MAX_TIME_LIMITED_COMPLETIONS_PER_DAY:
                         return Response({
@@ -1285,7 +1288,7 @@ class DynamicTaskCompleteView(APIView):
                             is_random=True
                         )
 
-                    today = date.today()
+                    today = timezone.localdate()
                     existing_log = UserTaskLog.objects.filter(
                         user=user,
                         task=task,
@@ -1420,7 +1423,7 @@ class DynamicTaskUncompleteView(APIView):
                     }, status=404)
 
                 # Find today's completion log for this task
-                today = date.today()
+                today = timezone.localdate()
                 completion_logs = UserTaskLog.objects.filter(
                     user=user,
                     task=task,
@@ -1569,7 +1572,7 @@ class ProgressStatsView(APIView):
         range_type = request.GET.get('range', 'today')  # today, week, month
 
         try:
-            today = date.today()
+            today = timezone.localdate()
 
             if range_type == 'today':
                 start_date = today
@@ -1852,7 +1855,7 @@ def _build_user_prompt(user, context_type: str, user_message: str) -> str:
     goal_title = (goal.title if goal else 'No goal set')[:150]
     goal_desc = (goal.description if goal else '')[:500]
 
-    week_ago = date.today() - timedelta(days=7)
+    week_ago = timezone.localdate() - timedelta(days=7)
     recent_logs = UserTaskLog.objects.filter(
         user=user, assigned_at__date__gte=week_ago
     )
@@ -1916,7 +1919,7 @@ def _check_and_award_titles(user) -> list:
             awarded.append('consistent_scholar')
 
     today_completed = UserTaskLog.objects.filter(
-        user=user, status='completed', completed_at__date=date.today()
+        user=user, status='completed', completed_at__date=timezone.localdate()
     ).count()
     if today_completed >= 5:
         if _award_title(user, 'overachiever'):
@@ -2142,7 +2145,7 @@ class SystemDailyStatusView(APIView):
     """GET /api/system/daily-status/"""
     def get(self, request):
         user = request.user
-        today = date.today()
+        today = timezone.localdate()
 
         has_brief_today = SystemLog.objects.filter(
             user=user,
@@ -2172,7 +2175,7 @@ class PunishmentCheckView(APIView):
     """
     def post(self, request):
         user = request.user
-        today = date.today()
+        today = timezone.localdate()
         yesterday = today - timedelta(days=1)
 
         # Only apply punishment once per day

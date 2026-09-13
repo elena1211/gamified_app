@@ -462,6 +462,7 @@ reviewed change with its reasoning in the message body.
 - Authentication uses DRF tokens, which do not expire and cannot yet be revoked server-side (there is no logout endpoint). Rotating refresh tokens are the intended next step; there is no OAuth or social login.
 - Guest session IDs are generated client-side and act as the only credential for that account, so a guessed ID grants access to it. Guest accounts are intended for trying the demo, not for real data.
 - The goal is set at registration and cannot be edited afterwards.
+- Day boundaries use a single timezone (`Europe/London`) rather than each user's own, so streaks and the daily reset roll over at UK midnight regardless of where the user is. Per-user timezones are the next step.
 - There is no password reset, and account deletion and data export are not yet implemented — both are prerequisites for opening the app to real users.
 - Automated tests cover core models and API views (backend) and key components (frontend) — see [Testing](#testing). Coverage is not exhaustive.
 
