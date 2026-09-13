@@ -11,6 +11,7 @@ tears down an isolated test database around them.
 import os
 from unittest import mock
 
+from django.conf import settings
 from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -148,6 +149,33 @@ class RegisterViewTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(User.objects.filter(username="wordyplayer2").exists())
 
+    def test_register_rejects_a_weak_password(self):
+        # AUTH_PASSWORD_VALIDATORS was configured but never invoked, because
+        # make_password() hashes whatever it is given. "a" was accepted.
+        response = self.client.post(self.url, {
+            "username": "weakpassplayer",
+            "password": "a",
+            "goal_title": "Get fit",
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(User.objects.filter(username="weakpassplayer").exists())
+
+    def test_register_rejects_a_common_password(self):
+        response = self.client.post(self.url, {
+            "username": "commonpassplayer",
+            "password": "password123",
+            "goal_title": "Get fit",
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_register_rejects_a_password_too_similar_to_the_username(self):
+        response = self.client.post(self.url, {
+            "username": "seraphina",
+            "password": "seraphina",
+            "goal_title": "Get fit",
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+
     def test_register_rejects_oversized_username(self):
         # Matches the check UpgradeGuestView already applies -- without it,
         # an overlong username hits User's DB-level constraint and surfaces
@@ -160,8 +188,10 @@ class RegisterViewTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
 
+@override_settings(CACHES=TEST_CACHES)
 class LoginViewTests(TestCase):
     def setUp(self):
+        cache.clear()
         self.client = APIClient()
         self.url = reverse("login")
         self.user = User.objects.create_user(username="loginplayer", password="correcthorse")
@@ -181,6 +211,30 @@ class LoginViewTests(TestCase):
         }, format="json")
         self.assertEqual(response.status_code, 401)
 
+    def test_repeated_password_guesses_are_throttled(self):
+        # ScopedRateThrottle does nothing on a view that declares no scope, so
+        # this endpoint previously accepted unlimited password guesses. Uses the
+        # real configured rate rather than overriding it, so the test fails if
+        # the rate is ever loosened without thought.
+        rate = settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]["login"]
+        allowed = int(rate.split("/")[0])
+
+        for _ in range(allowed):
+            self.client.post(self.url, {
+                "username": "loginplayer", "password": "wrong",
+            }, format="json")
+
+        blocked = self.client.post(self.url, {
+            "username": "loginplayer", "password": "wrong",
+        }, format="json")
+        self.assertEqual(blocked.status_code, 429)
+
+    def test_throttle_does_not_block_a_correct_password_within_the_limit(self):
+        response = self.client.post(self.url, {
+            "username": "loginplayer", "password": "correcthorse",
+        }, format="json")
+        self.assertEqual(response.status_code, 200)
+
 
 @override_settings(CACHES=TEST_CACHES)
 class GuestLoginViewTests(TestCase):
@@ -189,24 +243,36 @@ class GuestLoginViewTests(TestCase):
         self.client = APIClient()
         self.url = reverse("guest-login")
 
-    def test_valid_guest_id_creates_user_with_starter_tasks(self):
-        response = self.client.post(self.url, {"guest_id": "guest_abc123"}, format="json")
+    def test_creates_a_seeded_account_and_returns_a_token(self):
+        response = self.client.post(self.url, {}, format="json")
         self.assertEqual(response.status_code, 200)
         self.assertIn("token", response.data)
-        user = User.objects.get(username="guest_abc123")
+        user = User.objects.get(username=response.data["username"])
         self.assertEqual(Task.objects.filter(user=user).count(), 6)
         self.assertEqual(UserAttribute.objects.filter(user=user).count(), 6)
 
-    def test_invalid_guest_id_format_is_rejected(self):
-        response = self.client.post(self.url, {"guest_id": "not-a-valid-id!"}, format="json")
-        self.assertEqual(response.status_code, 400)
+    def test_guest_id_is_server_generated_and_unguessable(self):
+        # The id is the credential for the account, so the client no longer
+        # chooses it. 16 bytes of CSPRNG output, hex encoded.
+        response = self.client.post(self.url, {}, format="json")
+        username = response.data["username"]
+        self.assertTrue(username.startswith("guest_"))
+        self.assertEqual(len(username), len("guest_") + 32)
+        self.assertRegex(username, r"^guest_[0-9a-f]{32}$")
 
-    def test_repeat_login_reuses_same_account(self):
-        first = self.client.post(self.url, {"guest_id": "guest_repeat1"}, format="json")
-        second = self.client.post(self.url, {"guest_id": "guest_repeat1"}, format="json")
-        self.assertEqual(User.objects.filter(username="guest_repeat1").count(), 1)
-        self.assertEqual(first.data["token"], second.data["token"])
+    def test_client_supplied_guest_id_is_ignored(self):
+        # Accepting one would restore the hole: knowing another user's id was
+        # enough to be handed a token for their account.
+        response = self.client.post(self.url, {"guest_id": "guest_a"}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotEqual(response.data["username"], "guest_a")
+        self.assertFalse(User.objects.filter(username="guest_a").exists())
 
+    def test_each_request_gets_its_own_account(self):
+        first = self.client.post(self.url, {}, format="json")
+        second = self.client.post(self.url, {}, format="json")
+        self.assertNotEqual(first.data["username"], second.data["username"])
+        self.assertNotEqual(first.data["token"], second.data["token"])
 
 @override_settings(CACHES=TEST_CACHES)
 class UpgradeGuestViewTests(TestCase):
@@ -260,23 +326,58 @@ class UpgradeGuestViewTests(TestCase):
         stats_response = self.client.get(reverse("user-stats"))
         self.assertEqual(stats_response.status_code, 200)
 
-    def test_repeat_call_with_same_target_username_is_idempotent(self):
-        # Simulates apiRequest retrying the same request after a lost
-        # response (e.g. a Render cold-start blip): the token is unchanged
-        # (not rotated), so the retry reaches this same account, which is
-        # already upgraded. It must report success again, not the
-        # "only guest accounts can be upgraded" error the guest-only check
-        # would otherwise now (correctly, but confusingly) produce.
+    def test_upgrade_rotates_the_token_and_invalidates_the_old_one(self):
+        # The guest id that produced the old token was, until this upgrade, the
+        # only thing guarding the account. It must stop working once there is a
+        # real password behind it.
+        old_token = self.guest_token.key
+        response = self.client.post(self.url, {
+            "username": "rotationplayer", "password": "strongpass123",
+        }, format="json")
+        new_token = response.data["token"]
+        self.assertNotEqual(new_token, old_token)
+
+        stale = APIClient()
+        stale.credentials(HTTP_AUTHORIZATION=f"Token {old_token}")
+        self.assertEqual(stale.get(reverse("user-stats")).status_code, 401)
+
+        fresh = APIClient()
+        fresh.credentials(HTTP_AUTHORIZATION=f"Token {new_token}")
+        self.assertEqual(fresh.get(reverse("user-stats")).status_code, 200)
+
+    def test_upgrade_rejects_a_weak_password(self):
+        response = self.client.post(self.url, {
+            "username": "weakupgrade", "password": "abc",
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_retry_after_rotation_fails_closed_rather_than_reporting_success(self):
+        # A lost response (e.g. a Render cold-start blip) makes apiRequest resend
+        # the request. Before token rotation the retry carried a still-valid
+        # token, reached the same account and reported success again. Rotation
+        # deliberately trades that for revoking the guest token: the retry now
+        # carries an invalidated token and is rejected at the auth layer.
+        #
+        # The account really was created, so the client tells the user their
+        # account may already exist and to sign in, rather than implying the
+        # upgrade failed. Failing closed is the right side to err on here — the
+        # alternative leaves the pre-upgrade credential working indefinitely.
         first = self.client.post(self.url, {
             "username": "realplayer5", "password": "strongpass123",
         }, format="json")
         self.assertEqual(first.status_code, 200)
 
+        # self.client still holds the pre-upgrade token, as a retry would.
         second = self.client.post(self.url, {
             "username": "realplayer5", "password": "strongpass123",
         }, format="json")
-        self.assertEqual(second.status_code, 200)
-        self.assertEqual(second.data["username"], "realplayer5")
+        self.assertEqual(second.status_code, 401)
+
+        # The upgrade itself stands.
+        self.assertTrue(User.objects.filter(username="realplayer5").exists())
+        upgraded = APIClient()
+        upgraded.credentials(HTTP_AUTHORIZATION=f"Token {first.data['token']}")
+        self.assertEqual(upgraded.get(reverse("user-stats")).status_code, 200)
 
     def test_rejects_non_guest_account(self):
         real_user = User.objects.create_user(username="alreadyregistered", password="pw12345")

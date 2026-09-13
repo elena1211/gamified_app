@@ -8,17 +8,16 @@ export default function WelcomePage({ onLoginSuccess, onNavigateToRegister }) {
   const [error, setError] = useState('');
 
   const handleGuest = async () => {
-    let guestId = localStorage.getItem('levelup_guest_id');
-    if (!guestId) {
-      guestId = 'guest_' + Math.random().toString(36).slice(2, 8);
-      localStorage.setItem('levelup_guest_id', guestId);
-    }
+    // The guest id is the credential for the account it names, so the server
+    // mints it. This used to be Math.random().toString(36).slice(2, 8) — not a
+    // CSPRNG, and short enough to be guessable — cached in localStorage and
+    // replayed to reclaim the account.
     setLoading(true);
     setError('');
     try {
       const { data } = await apiRequest(API_ENDPOINTS.guest, {
         method: 'POST',
-        body: JSON.stringify({ guest_id: guestId }),
+        body: JSON.stringify({}),
       });
       onLoginSuccess(data.username, data.token);
     } catch {

@@ -50,8 +50,8 @@ export default function SystemSettingsPage({ currentUser, onLogout, onUpgradeSuc
       setUpgradeError('Username and password are required');
       return;
     }
-    if (upgradeData.password.length < 6) {
-      setUpgradeError('Password must be at least 6 characters');
+    if (upgradeData.password.length < 8) {
+      setUpgradeError('Password must be at least 8 characters');
       return;
     }
     if (upgradeData.password !== upgradeData.confirmPassword) {
@@ -69,14 +69,21 @@ export default function SystemSettingsPage({ currentUser, onLogout, onUpgradeSuc
           password: upgradeData.password,
         }),
       });
-      // This browser's cached guest id now belongs to a password-protected
-      // account — drop it so a future "Continue as guest" click mints a
-      // fresh guest identity instead of colliding with it.
-      localStorage.removeItem('levelup_guest_id');
       setJustUpgraded(true);
       onUpgradeSuccess?.(data.username, data.token);
     } catch (err) {
-      setUpgradeError(err.message || 'Upgrade failed');
+      // The server rotates the auth token as part of the upgrade, so if the
+      // response was lost and apiRequest resent the request, the retry carries
+      // the now-invalid guest token and is rejected before reaching the view —
+      // even though the account was created. Say so rather than implying the
+      // upgrade failed.
+      if (/401|invalid token/i.test(err.message || '')) {
+        setUpgradeError(
+          'Your account may already have been created. Please sign in with your new username and password.',
+        );
+      } else {
+        setUpgradeError(err.message || 'Upgrade failed');
+      }
     } finally {
       setUpgrading(false);
     }
