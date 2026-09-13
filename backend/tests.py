@@ -22,7 +22,7 @@ from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
-from .models import Goal, Task, User, UserAttribute, UserTaskLog
+from .models import Goal, SystemLog, Task, User, UserAttribute, UserTaskLog
 from .views import (
     _call_ai_provider,
     calculate_level_from_exp,
@@ -1342,6 +1342,459 @@ class DuplicateTaskTitleTests(TestCase):
             "attribute": "discipline",
         }, format="json")
         self.assertEqual(response.status_code, 201)
+
+
+@override_settings(CACHES=TEST_CACHES)
+class EndpointAuthTests(TestCase):
+    """Every endpoint that is not deliberately public must reject an
+    unauthenticated caller. Driven off a list so adding a view without
+    protecting it shows up here rather than in production."""
+
+    # (url name, method, kwargs for reverse)
+    PROTECTED = [
+        ("upgrade-guest", "post", {}),
+        ("task-list", "get", {}),
+        ("task-list", "post", {}),
+        ("task-detail", "get", {"args": [1]}),
+        ("task-detail", "put", {"args": [1]}),
+        ("task-detail", "delete", {"args": [1]}),
+        ("task-complete", "post", {}),
+        ("dynamic-task-complete", "post", {}),
+        ("dynamic-task-uncomplete", "post", {}),
+        ("completed-tasks-history", "get", {}),
+        ("weekly-stats", "get", {}),
+        ("user-goal", "get", {}),
+        ("user-stats", "get", {}),
+        ("user-progress", "get", {}),
+        ("system-chat", "post", {}),
+        ("system-messages", "get", {}),
+        ("system-daily-status", "get", {}),
+        ("system-punishment-check", "post", {}),
+    ]
+
+    PUBLIC = [
+        ("register", "post"),
+        ("login", "post"),
+        ("guest-login", "post"),
+        ("health", "get"),
+        ("root", "get"),
+    ]
+
+    def test_every_protected_endpoint_rejects_an_anonymous_caller(self):
+        anon = APIClient()
+        for name, method, kwargs in self.PROTECTED:
+            with self.subTest(endpoint=name, method=method):
+                url = reverse(name, **kwargs)
+                response = getattr(anon, method)(url, {}, format="json")
+                self.assertEqual(
+                    response.status_code, 401,
+                    f"{method.upper()} {name} answered {response.status_code} without a token",
+                )
+
+    def test_every_protected_endpoint_rejects_a_bad_token(self):
+        forged = APIClient()
+        forged.credentials(HTTP_AUTHORIZATION="Token 0000000000000000000000000000000000000000")
+        for name, method, kwargs in self.PROTECTED:
+            with self.subTest(endpoint=name, method=method):
+                url = reverse(name, **kwargs)
+                response = getattr(forged, method)(url, {}, format="json")
+                self.assertEqual(
+                    response.status_code, 401,
+                    f"{method.upper()} {name} accepted a forged token",
+                )
+
+    def test_the_lists_above_cover_every_registered_endpoint(self):
+        # Without this, the two lists silently go stale: a new view is added,
+        # nobody adds it here, and the suite keeps reporting full coverage of a
+        # set that no longer matches the URL conf.
+        from django.urls import get_resolver
+
+        registered = {
+            name for name in get_resolver().reverse_dict.keys()
+            if isinstance(name, str) and not name.startswith("admin")
+        }
+        listed = {name for name, _, _ in self.PROTECTED} | {name for name, _ in self.PUBLIC}
+        self.assertEqual(
+            registered - listed, set(),
+            "endpoint(s) missing from PROTECTED/PUBLIC above",
+        )
+
+    def test_the_public_endpoints_stay_public(self):
+        # The counterpart: a change that locked these would break sign-up and
+        # the deployment health probe.
+        anon = APIClient()
+        for name, method in self.PUBLIC:
+            with self.subTest(endpoint=name):
+                response = getattr(anon, method)(reverse(name), {}, format="json")
+                self.assertNotEqual(response.status_code, 401, f"{name} now requires auth")
+
+
+@override_settings(CACHES=TEST_CACHES)
+class CrossUserIsolationTests(TestCase):
+    """The old design took a ?user=<username> parameter and trusted it. It is
+    gone, but "gone" is a claim — these make it checkable. Every read is asserted
+    to return only the caller's own rows, and every write against someone else's
+    row is asserted to fail."""
+
+    def setUp(self):
+        cache.clear()
+        self.alice = self._make_user("alice")
+        self.bob = self._make_user("bob")
+
+        self.alice_client = APIClient()
+        self.alice_client.credentials(
+            HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=self.alice).key}"
+        )
+
+        self.bob_task = Task.objects.create(
+            user=self.bob, title="Bob's private task", description="secret",
+            attribute="intelligence", reward_point=6, difficulty=1,
+            deadline=timezone.now() + timedelta(days=1),
+        )
+        Goal.objects.create(user=self.bob, title="Bob's private goal", description="secret")
+        SystemLog.objects.create(
+            user=self.bob, message_type='morning_brief', content="Bob's private briefing",
+        )
+        UserTaskLog.objects.create(
+            user=self.bob, task=self.bob_task, status='completed',
+            completed_at=timezone.now(),
+        )
+
+    def _make_user(self, name):
+        user = User.objects.create_user(username=name, password="pw12345")
+        for attr in ["intelligence", "discipline", "energy", "social", "wellness", "stress"]:
+            UserAttribute.objects.create(user=user, name=attr, value=42)
+        return user
+
+    def test_task_list_shows_only_the_callers_tasks(self):
+        response = self.alice_client.get(reverse("task-list"))
+        self.assertEqual(response.status_code, 200)
+        titles = [t["title"] for t in response.data]
+        self.assertNotIn("Bob's private task", titles)
+
+    def test_cannot_read_another_users_task_by_id(self):
+        response = self.alice_client.get(reverse("task-detail", args=[self.bob_task.id]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_cannot_edit_or_delete_another_users_task(self):
+        url = reverse("task-detail", args=[self.bob_task.id])
+        self.assertEqual(
+            self.alice_client.put(url, {"title": "hijacked"}, format="json").status_code, 404
+        )
+        self.assertEqual(self.alice_client.delete(url).status_code, 404)
+        self.bob_task.refresh_from_db()
+        self.assertEqual(self.bob_task.title, "Bob's private task")
+
+    def test_cannot_complete_another_users_task(self):
+        # The reward always lands on request.user, so checking Bob's EXP proves
+        # nothing -- it cannot move through this path either way. Alice's EXP is
+        # the discriminating value: if the owner filter were dropped she would
+        # be paid for Bob's task.
+        exp_before = self.alice.exp
+        response = self.alice_client.post(
+            reverse("task-complete"), {"task_id": self.bob_task.id}, format="json"
+        )
+        self.assertEqual(response.status_code, 404)
+        self.alice.refresh_from_db()
+        self.assertEqual(self.alice.exp, exp_before)
+
+    def test_completion_history_shows_only_the_callers_completions(self):
+        response = self.alice_client.get(reverse("completed-tasks-history"))
+        self.assertEqual(response.status_code, 200)
+        titles = [t["title"] for t in response.data["completed_tasks"]]
+        self.assertNotIn("Bob's private task", titles)
+
+    def test_goal_shows_only_the_callers_goal(self):
+        response = self.alice_client.get(reverse("user-goal"))
+        self.assertNotEqual(response.data.get("title"), "Bob's private goal")
+
+    def test_system_messages_show_only_the_callers_log(self):
+        response = self.alice_client.get(reverse("system-messages"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("Bob's private briefing", str(response.data))
+
+    def test_stats_report_only_the_callers_attributes(self):
+        # Both users were seeded with 42 in every attribute, so a leak here
+        # would be invisible if the values differed by user only by accident.
+        self.alice.attributes.update(value=7)
+        response = self.alice_client.get(reverse("user-stats"))
+        self.assertEqual(response.data["attributes"]["intelligence"], 7)
+
+    def test_uncompleting_by_title_cannot_reach_another_users_task(self):
+        # The lookup is by title, so a shared title is the case that matters.
+        # Bob's row is created first so it holds the lower id: the view resolves
+        # with .order_by('id').first(), so creating Alice's first would make her
+        # own task win on ordering alone and the test could never fail.
+        bobs = Task.objects.create(
+            user=self.bob, title="Shared title", description="",
+            attribute="discipline", reward_point=4, difficulty=1,
+            deadline=timezone.now() + timedelta(days=1),
+        )
+        Task.objects.create(
+            user=self.alice, title="Shared title", description="",
+            attribute="discipline", reward_point=4, difficulty=1,
+            deadline=timezone.now() + timedelta(days=1),
+        )
+        bobs_log = UserTaskLog.objects.create(
+            user=self.bob, task=bobs, status='completed', completed_at=timezone.now(),
+        )
+
+        self.alice_client.post(
+            reverse("dynamic-task-uncomplete"), {"task_title": "Shared title"}, format="json"
+        )
+        # The view scopes twice -- once resolving the task, once resolving the
+        # completion log -- so removing either filter alone leaves this passing.
+        # Only removing both reaches Bob's row, which is what this asserts.
+        self.assertTrue(UserTaskLog.objects.filter(pk=bobs_log.pk).exists())
+
+
+@override_settings(CACHES=TEST_CACHES)
+class PunishmentCheckTests(TestCase):
+    """The only write endpoint with no coverage at all — it deducts attributes
+    and creates a task, and it is the half of the reward loop the dissertation
+    argues makes the other half mean anything."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(username="slacker", password="pw12345")
+        for attr in ["intelligence", "discipline", "energy", "social", "wellness", "stress"]:
+            UserAttribute.objects.create(user=self.user, name=attr, value=50)
+        self.client = APIClient()
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=self.user).key}"
+        )
+        self.url = reverse("system-punishment-check")
+        self.yesterday = timezone.now() - timedelta(days=1)
+
+    def _task(self, title):
+        return Task.objects.create(
+            user=self.user, title=title, description="", attribute="discipline",
+            reward_point=4, difficulty=1, deadline=timezone.now() + timedelta(days=1),
+        )
+
+    def _log_yesterday(self, title, status):
+        log = UserTaskLog.objects.create(
+            user=self.user, task=self._task(title), status=status,
+            completed_at=self.yesterday if status == "completed" else None,
+        )
+        # assigned_at is auto_now_add, so it has to be moved after creation.
+        UserTaskLog.objects.filter(pk=log.pk).update(assigned_at=self.yesterday)
+        return log
+
+    def test_no_tasks_yesterday_is_not_punished(self):
+        response = self.client.post(self.url, {}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["punishment_applied"])
+        self.assertEqual(response.data["reason"], "no_tasks_yesterday")
+
+    def test_a_good_day_is_not_punished(self):
+        for i in range(4):
+            self._log_yesterday(f"done {i}", "completed")
+        self._log_yesterday("missed", "pending")
+
+        response = self.client.post(self.url, {}, format="json")
+        self.assertFalse(response.data["punishment_applied"])
+        self.assertEqual(response.data["reason"], "good_performance")
+        self.assertEqual(
+            UserAttribute.objects.get(user=self.user, name="discipline").value, 50
+        )
+
+    def test_a_poor_day_deducts_attributes_and_issues_a_redemption_task(self):
+        for i in range(5):
+            self._log_yesterday(f"missed {i}", "pending")
+
+        tasks_before = Task.objects.filter(user=self.user).count()
+        response = self.client.post(self.url, {}, format="json")
+
+        self.assertTrue(response.data["punishment_applied"])
+        self.assertEqual(response.data["severity"], "heavy")
+
+        discipline = UserAttribute.objects.get(user=self.user, name="discipline")
+        stress = UserAttribute.objects.get(user=self.user, name="stress")
+        self.assertLess(discipline.value, 50, "discipline should have been deducted")
+        self.assertGreater(stress.value, 50, "stress should have risen")
+
+        self.assertEqual(Task.objects.filter(user=self.user).count(), tasks_before + 1)
+        self.assertTrue(
+            SystemLog.objects.filter(user=self.user, message_type="punishment").exists()
+        )
+
+    def test_the_heavy_penalty_is_the_exact_documented_amount(self):
+        # Asserting only the direction would let a penalty applied twice, or one
+        # with the wrong constants, pass unnoticed.
+        for i in range(5):
+            self._log_yesterday(f"missed {i}", "pending")
+
+        self.client.post(self.url, {}, format="json")
+        self.assertEqual(
+            UserAttribute.objects.get(user=self.user, name="discipline").value, 45
+        )
+        self.assertEqual(UserAttribute.objects.get(user=self.user, name="stress").value, 58)
+
+    def test_a_mostly_missed_day_takes_the_lighter_penalty(self):
+        # 1 of 5 is under the 30% threshold but not zero, so it takes the light
+        # branch -- the only severity the suite did not reach.
+        self._log_yesterday("done", "completed")
+        for i in range(4):
+            self._log_yesterday(f"missed {i}", "pending")
+
+        response = self.client.post(self.url, {}, format="json")
+        self.assertTrue(response.data["punishment_applied"])
+        self.assertEqual(response.data["severity"], "light")
+        self.assertGreater(
+            UserAttribute.objects.get(user=self.user, name="discipline").value,
+            45, "the light penalty must be smaller than the heavy one",
+        )
+
+    def test_the_threshold_itself_is_not_punished(self):
+        # Exactly 30% is the boundary the branch turns on. Written out so a
+        # later change from >= to > has to fail here rather than silently start
+        # punishing users who hit the bar.
+        for i in range(3):
+            self._log_yesterday(f"done {i}", "completed")
+        for i in range(7):
+            self._log_yesterday(f"missed {i}", "pending")
+
+        response = self.client.post(self.url, {}, format="json")
+        self.assertFalse(
+            response.data["punishment_applied"],
+            "a 30% completion rate is on the threshold, not below it",
+        )
+
+    def test_it_only_punishes_once_a_day(self):
+        for i in range(5):
+            self._log_yesterday(f"missed {i}", "pending")
+
+        self.client.post(self.url, {}, format="json")
+        after_first = UserAttribute.objects.get(user=self.user, name="discipline").value
+
+        second = self.client.post(self.url, {}, format="json")
+        self.assertFalse(second.data["punishment_applied"])
+        self.assertEqual(second.data["reason"], "already_checked_today")
+        self.assertEqual(
+            UserAttribute.objects.get(user=self.user, name="discipline").value, after_first
+        )
+
+
+@override_settings(CACHES=TEST_CACHES)
+class ReadOnlyEndpointTests(TestCase):
+    """Endpoints with no coverage at all. Nothing elaborate — they mostly need
+    to be asserted to answer at all, since an exception in any of them reaches
+    the user as a broken panel."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(username="reader", password="pw12345")
+        for attr in ["intelligence", "discipline", "energy", "social", "wellness", "stress"]:
+            UserAttribute.objects.create(user=self.user, name=attr, value=10)
+        self.client = APIClient()
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=self.user).key}"
+        )
+
+    def test_weekly_stats_answers_for_a_user_with_no_history(self):
+        response = self.client.get(reverse("weekly-stats"))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("daily_breakdown", response.data)
+        self.assertEqual(len(response.data["daily_breakdown"]), 7)
+
+    def test_weekly_stats_counts_a_completion(self):
+        task = Task.objects.create(
+            user=self.user, title="Counted", description="", attribute="discipline",
+            reward_point=4, difficulty=1, deadline=timezone.now() + timedelta(days=1),
+        )
+        UserTaskLog.objects.create(
+            user=self.user, task=task, status="completed", completed_at=timezone.now(),
+        )
+        response = self.client.get(reverse("weekly-stats"))
+        self.assertEqual(response.data["total_completed_this_week"], 1)
+
+    def test_user_progress_answers(self):
+        response = self.client.get(reverse("user-progress"))
+        self.assertEqual(response.status_code, 200)
+
+    def test_system_messages_answers_for_a_new_user(self):
+        response = self.client.get(reverse("system-messages"))
+        self.assertEqual(response.status_code, 200)
+
+    def test_system_daily_status_answers_for_a_new_user(self):
+        response = self.client.get(reverse("system-daily-status"))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("unread_messages", response.data)
+
+    def test_root_is_public_and_describes_the_api(self):
+        response = APIClient().get(reverse("root"))
+        self.assertEqual(response.status_code, 200)
+
+
+@override_settings(CACHES=TEST_CACHES)
+class RewardFormatTests(TestCase):
+    """The reward string is the user-facing half of the formula the whole
+    reward loop runs on: half the points to the task's own attribute, plus a
+    difficulty bonus to Discipline. It has been the source of two separate
+    double-counting bugs, so the wording is pinned here."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(username="rewarded", password="pw12345")
+        for attr in ["intelligence", "discipline", "energy", "social", "wellness", "stress"]:
+            UserAttribute.objects.create(user=self.user, name=attr, value=10)
+        self.client = APIClient()
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=self.user).key}"
+        )
+
+    def _task(self, reward_point, difficulty, attribute="intelligence"):
+        return Task.objects.create(
+            user=self.user, title=f"Task {reward_point}/{difficulty}", description="tip",
+            attribute=attribute, reward_point=reward_point, difficulty=difficulty,
+            deadline=timezone.now() + timedelta(days=1),
+        )
+
+    def test_an_easy_task_rewards_half_its_points_and_no_bonus(self):
+        task = self._task(reward_point=6, difficulty=1)
+        response = self.client.get(reverse("task-detail", args=[task.id]))
+        self.assertEqual(response.data["reward"], "+3 Intelligence")
+
+    def test_a_harder_task_adds_a_discipline_bonus(self):
+        # difficulty 3 is +2 Discipline, not +3 -- the bonus is difficulty - 1.
+        task = self._task(reward_point=6, difficulty=3)
+        response = self.client.get(reverse("task-detail", args=[task.id]))
+        self.assertEqual(response.data["reward"], "+3 Intelligence, +2 Discipline")
+
+    def test_odd_points_round_down_rather_than_up(self):
+        task = self._task(reward_point=5, difficulty=1)
+        response = self.client.get(reverse("task-detail", args=[task.id]))
+        self.assertEqual(response.data["reward"], "+2 Intelligence")
+
+
+@override_settings(CACHES=TEST_CACHES)
+class GoalKeywordTests(TestCase):
+    """The goal text steers which attributes a new user's tasks are drawn from.
+    It is the one place free-text user input changes game behaviour, so the
+    mapping is asserted rather than assumed."""
+
+    def test_a_coding_goal_prefers_intelligence_and_discipline(self):
+        from backend.views import preferred_attributes_for_goal
+        self.assertEqual(
+            preferred_attributes_for_goal("Learn coding"), ["intelligence", "discipline"]
+        )
+
+    def test_the_description_is_searched_as_well_as_the_title(self):
+        from backend.views import preferred_attributes_for_goal
+        self.assertIn(
+            "intelligence", preferred_attributes_for_goal("My plan", "get better at coding")
+        )
+
+    def test_an_unrecognised_goal_yields_no_preference(self):
+        # No match must mean "no preference", not an empty task pool.
+        from backend.views import preferred_attributes_for_goal
+        self.assertEqual(preferred_attributes_for_goal("zzzz"), [])
+
+    def test_each_attribute_is_listed_once_even_when_several_keywords_match(self):
+        from backend.views import preferred_attributes_for_goal
+        preferred = preferred_attributes_for_goal("learn coding and data and web")
+        self.assertEqual(len(preferred), len(set(preferred)))
 
 
 class TimezoneBoundaryTests(TestCase):
