@@ -21,6 +21,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from . import path_proposal
 from .models import (
     Goal,
     MeasurementReport,
@@ -32,7 +33,7 @@ from .models import (
     UserTaskLog,
     UserTitle,
 )
-from .throttles import SystemChatIPThrottle
+from .throttles import PathProposalIPThrottle, SystemChatIPThrottle
 
 logger = logging.getLogger(__name__)
 
@@ -652,6 +653,78 @@ class GoalPathView(APIView):
         except Exception:
             logger.exception("GoalPathView error for user id %s", request.user.id)
             return Response({"error": "Could not load your path"}, status=500)
+
+
+class PathProposalView(APIView):
+    """POST /api/path/proposal/: ask the System to draft a Goal Path.
+
+    Returns a draft only. Nothing is saved until the user confirms it, which
+    is a separate endpoint. A provider failure, or a reply that doesn't meet
+    the schema, is a 503 with no draft, so the client can offer a blank one
+    to fill in rather than show a path the System never proposed."""
+
+    throttle_classes = [ScopedRateThrottle, PathProposalIPThrottle]
+    throttle_scope = 'path_proposal'
+
+    UNAVAILABLE_MESSAGE = (
+        "The System couldn't draft a path right now. "
+        "Try again, or write the milestones yourself."
+    )
+
+    def check_throttles(self, request):
+        # DRF throttles before the view runs. That would let a rejected request
+        # (a blank goal, say) use up one of the few proposals allowed an hour
+        # without ever reaching the provider, so post() throttles itself once
+        # the body is valid instead.
+        pass
+
+    def post(self, request):
+        goal_title = request.data.get('goal_title')
+        goal_description = request.data.get('goal_description', '')
+
+        if not isinstance(goal_title, str) or not goal_title.strip():
+            return Response({"error": "goal_title is required"}, status=400)
+        if not isinstance(goal_description, str):
+            return Response({"error": "goal_description must be text"}, status=400)
+        goal_title = goal_title.strip()
+        goal_description = goal_description.strip()
+        if len(goal_title) > path_proposal.GOAL_TITLE_MAX_LENGTH:
+            return Response(
+                {"error": f"goal_title must be {path_proposal.GOAL_TITLE_MAX_LENGTH} characters or fewer"},
+                status=400,
+            )
+        if len(goal_description) > path_proposal.GOAL_DESCRIPTION_MAX_LENGTH:
+            return Response(
+                {"error": f"goal_description must be {path_proposal.GOAL_DESCRIPTION_MAX_LENGTH} characters or fewer"},
+                status=400,
+            )
+
+        super().check_throttles(request)
+
+        try:
+            raw = _call_ai_provider(
+                path_proposal.SYSTEM_PROMPT,
+                path_proposal.build_user_prompt(goal_title, goal_description),
+            )
+        except Exception as exc:
+            # The type only: provider SDK errors can carry request details.
+            logger.warning("Path proposal provider call failed: %s", type(exc).__name__)
+            return Response({"error": self.UNAVAILABLE_MESSAGE}, status=503)
+
+        try:
+            draft = path_proposal.parse_proposal(raw)
+        except path_proposal.ProposalError as exc:
+            # The rule that failed and the reply's length, never the reply,
+            # which can echo the user's goal back.
+            logger.warning("Path proposal rejected (%s); reply was %d characters", exc, len(raw))
+            return Response({"error": self.UNAVAILABLE_MESSAGE}, status=503)
+
+        return Response({
+            "draft": {
+                "goal": {"title": goal_title, "description": goal_description},
+                **draft,
+            }
+        })
 
 
 def calculate_task_exp(task):
