@@ -817,6 +817,95 @@ class TaskCompleteViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+@override_settings(CACHES=TEST_CACHES)
+class RecurringTaskCompletionTests(TestCase):
+    """A task completed on one day and again on the next is two completions.
+    The endpoint used to reuse the first day's log, so the second day was
+    never recorded: the streak stood still and the task could be completed
+    over and over for EXP."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(username="daily", password="pw12345")
+        for name in ["intelligence", "discipline", "energy", "social", "wellness", "stress"]:
+            UserAttribute.objects.create(user=self.user, name=name, value=0)
+        self.client = APIClient()
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=self.user).key}"
+        )
+        self.task = Task.objects.create(
+            user=self.user, title="Solve one algorithm problem", description="",
+            attribute="intelligence", reward_point=6, difficulty=1,
+            deadline=timezone.now() + timedelta(days=3650),
+        )
+        self.url = reverse("task-complete")
+
+    def _complete(self):
+        response = self.client.post(self.url, {"task_id": self.task.id}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        return response
+
+    def _move_to_yesterday(self):
+        yesterday = timezone.now() - timedelta(days=1)
+        UserTaskLog.objects.filter(task=self.task).update(
+            completed_at=yesterday, assigned_at=yesterday,
+        )
+        User.objects.filter(pk=self.user.pk).update(last_activity_date=yesterday.date())
+
+    def test_the_next_days_completion_is_recorded_as_its_own_log(self):
+        self._complete()
+        self._move_to_yesterday()
+
+        self._complete()
+
+        today = timezone.localdate()
+        self.assertEqual(
+            UserTaskLog.objects.filter(task=self.task, status="completed").count(), 2
+        )
+        self.assertTrue(
+            UserTaskLog.objects.filter(task=self.task, completed_at__date=today).exists()
+        )
+
+    def test_completing_on_consecutive_days_extends_the_streak(self):
+        self._complete()
+        self._move_to_yesterday()
+
+        self._complete()
+
+        self.assertEqual(self.user.current_streak, 2)
+
+    def test_the_completion_day_comes_from_when_it_was_completed(self):
+        # assigned_at and completed_at are always equal in practice, so this
+        # separates them on purpose: only completed_at decides whether the
+        # task is already done today.
+        self._complete()
+        UserTaskLog.objects.filter(task=self.task).update(
+            completed_at=timezone.now() - timedelta(days=1),
+        )
+
+        self._complete()
+
+        self.assertEqual(
+            UserTaskLog.objects.filter(task=self.task, status="completed").count(), 2
+        )
+
+    def test_a_task_done_yesterday_cannot_be_farmed_for_exp_today(self):
+        self._complete()
+        one_grant = self.user.exp
+        self._move_to_yesterday()
+
+        # Complete, un-complete, complete again: a mis-tap and its fix.
+        self._complete()
+        self._complete()
+        self._complete()
+
+        self.assertEqual(self.user.exp, one_grant * 2)
+        self.assertEqual(
+            UserTaskLog.objects.filter(task=self.task, status="completed").count(), 2
+        )
+
+
 class DynamicTaskCompleteViewTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="dynamiccompleter", password="pw12345")

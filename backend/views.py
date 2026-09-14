@@ -606,20 +606,17 @@ class TaskCompleteView(APIView):
                     reverse_attribute_changes(user, reward_str)
                     message = "Task marked as incomplete"
                 else:
-                    # Mark task as completed and add EXP
-                    task_log, created = UserTaskLog.objects.get_or_create(
+                    # Every completion gets its own log. This used to be a
+                    # get_or_create on (user, task), which matched a recurring
+                    # task's log from an earlier day: today's completion was
+                    # never recorded, so the streak stood still and the task
+                    # could be completed again and again for EXP.
+                    UserTaskLog.objects.create(
                         user=user,
                         task=task,
-                        defaults={
-                            'status': 'completed',
-                            'completed_at': timezone.now()
-                        }
+                        status='completed',
+                        completed_at=timezone.now(),
                     )
-
-                    if not created and task_log.status != 'completed':
-                        task_log.status = 'completed'
-                        task_log.completed_at = timezone.now()
-                        task_log.save()
 
                     # Add EXP when completing
                     exp_gained = calculate_task_exp(task)
