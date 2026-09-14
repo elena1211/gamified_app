@@ -1550,9 +1550,9 @@ class CrossUserIsolationTests(TestCase):
 
 @override_settings(CACHES=TEST_CACHES)
 class PunishmentCheckTests(TestCase):
-    """The only write endpoint with no coverage at all — it deducts attributes
-    and creates a task, and it is the half of the reward loop the dissertation
-    argues makes the other half mean anything."""
+    """system-punishment-check deducts attributes and issues a redemption task.
+    It is the risk half of the reward loop: without it, missing tasks costs
+    nothing. These pin the thresholds and the exact amounts."""
 
     def setUp(self):
         cache.clear()
