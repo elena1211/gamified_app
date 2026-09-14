@@ -11,16 +11,20 @@ tears down an isolated test database around them.
 import os
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from unittest import mock
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.core.cache import cache
+from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
+
+from backend.models import MeasurementReport, Milestone
 
 from .models import Goal, SystemLog, Task, User, UserAttribute, UserTaskLog
 from .views import (
@@ -1453,6 +1457,7 @@ class EndpointAuthTests(TestCase):
         ("completed-tasks-history", "get", {}),
         ("weekly-stats", "get", {}),
         ("user-goal", "get", {}),
+        ("goal-path", "get", {}),
         ("user-stats", "get", {}),
         ("user-progress", "get", {}),
         ("system-chat", "post", {}),
@@ -1884,6 +1889,261 @@ class GoalKeywordTests(TestCase):
         from backend.views import preferred_attributes_for_goal
         preferred = preferred_attributes_for_goal("learn coding and data and web")
         self.assertEqual(len(preferred), len(set(preferred)))
+
+
+@override_settings(CACHES=TEST_CACHES)
+class GoalPathModelTests(TestCase):
+    """Constraints the Goal Path relies on, checked at the database level
+    rather than trusted to view code."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="pathfinder", password="pw12345")
+        self.goal = Goal.objects.create(
+            user=self.user, title="First software engineer job", description="",
+        )
+
+    def _milestone(self, position, status=Milestone.LOCKED, goal=None):
+        return Milestone.objects.create(
+            goal=goal or self.goal, position=position, title=f"Step {position}", status=status,
+        )
+
+    def test_existing_goals_read_as_an_outcome_with_no_path(self):
+        # Current rows gain these columns through the migration, so the
+        # defaults are what every existing goal will read as.
+        self.assertEqual(self.goal.completion_type, Goal.OUTCOME)
+        self.assertIsNone(self.goal.path_confirmed_at)
+
+    def test_positions_are_unique_within_a_goal(self):
+        self._milestone(1)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            self._milestone(1)
+
+    def test_only_one_milestone_per_goal_can_be_active(self):
+        self._milestone(1, status=Milestone.ACTIVE)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            self._milestone(2, status=Milestone.ACTIVE)
+
+    def test_each_goal_keeps_its_own_active_milestone(self):
+        other_goal = Goal.objects.create(user=self.user, title="Run 5 km", description="")
+        self._milestone(1, status=Milestone.ACTIVE)
+        self._milestone(1, status=Milestone.ACTIVE, goal=other_goal)
+        self.assertEqual(Milestone.objects.filter(status=Milestone.ACTIVE).count(), 2)
+
+    def test_any_number_of_milestones_can_be_locked_or_completed(self):
+        self._milestone(1, status=Milestone.COMPLETED)
+        self._milestone(2, status=Milestone.COMPLETED)
+        self._milestone(3)
+        self._milestone(4)
+        self.assertEqual(self.goal.milestones.count(), 4)
+
+    def _confirm(self, goal, **fields):
+        for name, value in {"path_confirmed_at": timezone.now(), **fields}.items():
+            setattr(goal, name, value)
+        goal.save()
+        return goal
+
+    def test_only_one_goal_path_can_be_in_progress_per_user(self):
+        self._confirm(self.goal)
+        second = Goal(user=self.user, title="Run 5 km", description="")
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            self._confirm(second)
+
+    def test_a_finished_path_does_not_block_a_new_one(self):
+        self._confirm(self.goal, is_completed=True)
+        self._confirm(Goal(user=self.user, title="Pass probation", description=""))
+        self.assertEqual(Goal.objects.filter(user=self.user).count(), 2)
+
+    def test_goals_without_a_path_are_not_restricted(self):
+        # The shape of every goal that exists before Goal Paths ship.
+        Goal.objects.create(user=self.user, title="Getting Started", description="")
+        self.assertEqual(Goal.objects.filter(user=self.user).count(), 2)
+
+    def test_milestones_come_back_in_path_order(self):
+        for position in (3, 1, 2):
+            self._milestone(position)
+        self.assertEqual([m.position for m in self.goal.milestones.all()], [1, 2, 3])
+
+    def test_deleting_a_milestone_keeps_its_quests_and_their_history(self):
+        milestone = self._milestone(1)
+        quest = Task.objects.create(
+            user=self.user, title="Add three tests", description="", attribute="discipline",
+            reward_point=6, deadline=timezone.now() + timedelta(days=1), milestone=milestone,
+        )
+        log = UserTaskLog.objects.create(
+            user=self.user, task=quest, status="completed", completed_at=timezone.now(),
+        )
+
+        milestone.delete()
+
+        quest.refresh_from_db()
+        self.assertIsNone(quest.milestone)
+        self.assertTrue(UserTaskLog.objects.filter(pk=log.pk).exists())
+
+
+@override_settings(CACHES=TEST_CACHES)
+class GoalPathViewTests(TestCase):
+    """GET /api/path/. Nothing in this release writes a path, so the tests
+    build one directly."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(username="walker", password="pw12345")
+        self.client = APIClient()
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=self.user).key}"
+        )
+        self.url = reverse("goal-path")
+
+    def _confirmed_goal(self, user=None, **fields):
+        return Goal.objects.create(
+            user=user or self.user, title="First software engineer job", description="",
+            path_confirmed_at=timezone.now(), **fields,
+        )
+
+    def _quest(self, milestone, title, status):
+        quest = Task.objects.create(
+            user=milestone.goal.user, title=title, description="", attribute="discipline",
+            reward_point=6, deadline=timezone.now() + timedelta(days=1), milestone=milestone,
+        )
+        UserTaskLog.objects.create(
+            user=quest.user, task=quest, status=status,
+            completed_at=timezone.now() if status == "completed" else None,
+        )
+        return quest
+
+    def test_a_user_without_a_goal_has_no_path(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, {"path": None})
+
+    def test_a_goal_without_a_confirmed_path_is_not_shown_as_one(self):
+        # The placeholder a guest account starts with looks exactly like this.
+        Goal.objects.create(user=self.user, title="Getting Started", description="")
+        self.assertIsNone(self.client.get(self.url).data["path"])
+
+    def test_a_completed_goal_is_not_the_current_path(self):
+        self._confirmed_goal(is_completed=True)
+        self.assertIsNone(self.client.get(self.url).data["path"])
+
+    def test_returns_the_goal_and_its_milestones_in_order(self):
+        goal = self._confirmed_goal()
+        Milestone.objects.create(goal=goal, position=2, title="First interview")
+        Milestone.objects.create(
+            goal=goal, position=1, title="Tests and deployment", status=Milestone.ACTIVE,
+        )
+
+        path = self.client.get(self.url).data["path"]
+
+        self.assertEqual(path["goal"]["title"], "First software engineer job")
+        self.assertEqual(path["goal"]["completion_type"], Goal.OUTCOME)
+        self.assertEqual(
+            [(m["position"], m["title"], m["status"]) for m in path["milestones"]],
+            [(1, "Tests and deployment", "active"), (2, "First interview", "locked")],
+        )
+
+    def test_cumulative_progress_counts_only_completed_quests_on_that_milestone(self):
+        goal = self._confirmed_goal()
+        current = Milestone.objects.create(
+            goal=goal, position=1, title="Tests and deployment", status=Milestone.ACTIVE,
+            completion_type=Milestone.CUMULATIVE, target_count=10,
+        )
+        later = Milestone.objects.create(
+            goal=goal, position=2, title="Practice interviews",
+            completion_type=Milestone.CUMULATIVE, target_count=5,
+        )
+        self._quest(current, "Add sign-up tests", "completed")
+        self._quest(current, "Fix the CI warning", "completed")
+        self._quest(current, "Deploy a preview", "pending")
+        self._quest(later, "Mock interview", "completed")
+
+        milestones = self.client.get(self.url).data["path"]["milestones"]
+
+        self.assertEqual(milestones[0]["progress"], {"completions": 2})
+        self.assertEqual(milestones[0]["target_count"], 10)
+        self.assertEqual(milestones[1]["progress"], {"completions": 1})
+
+    def test_each_completion_of_a_recurring_quest_counts(self):
+        goal = self._confirmed_goal()
+        habit = Milestone.objects.create(
+            goal=goal, position=1, title="Run 12 times", status=Milestone.ACTIVE,
+            completion_type=Milestone.CUMULATIVE, target_count=12,
+        )
+        run = self._quest(habit, "Run for 20 minutes", "completed")
+        UserTaskLog.objects.create(
+            user=self.user, task=run, status="completed", completed_at=timezone.now(),
+        )
+
+        milestone = self.client.get(self.url).data["path"]["milestones"][0]
+
+        self.assertEqual(milestone["progress"], {"completions": 2})
+
+    def test_another_users_completions_never_count_towards_this_path(self):
+        goal = self._confirmed_goal()
+        current = Milestone.objects.create(
+            goal=goal, position=1, title="Tests and deployment", status=Milestone.ACTIVE,
+            completion_type=Milestone.CUMULATIVE, target_count=10,
+        )
+        quest = self._quest(current, "Add sign-up tests", "pending")
+        intruder = User.objects.create_user(username="intruder", password="pw12345")
+        UserTaskLog.objects.create(
+            user=intruder, task=quest, status="completed", completed_at=timezone.now(),
+        )
+
+        milestone = self.client.get(self.url).data["path"]["milestones"][0]
+
+        self.assertEqual(milestone["progress"], {"completions": 0})
+
+    def test_reports_saved_in_the_same_instant_resolve_to_the_newer_one(self):
+        goal = self._confirmed_goal()
+        savings = Milestone.objects.create(
+            goal=goal, position=1, title="Emergency fund", status=Milestone.ACTIVE,
+            completion_type=Milestone.MEASURABLE, target_value=Decimal("1000.00"),
+            target_direction=Milestone.AT_LEAST,
+        )
+        MeasurementReport.objects.create(milestone=savings, value=Decimal("100.00"))
+        MeasurementReport.objects.create(milestone=savings, value=Decimal("250.00"))
+        MeasurementReport.objects.filter(milestone=savings).update(created_at=timezone.now())
+
+        milestone = self.client.get(self.url).data["path"]["milestones"][0]
+
+        self.assertEqual(milestone["progress"], {"latest_value": "250.00"})
+
+    def test_measurable_progress_is_the_latest_report_as_an_exact_decimal(self):
+        goal = self._confirmed_goal()
+        savings = Milestone.objects.create(
+            goal=goal, position=1, title="Emergency fund", status=Milestone.ACTIVE,
+            completion_type=Milestone.MEASURABLE, target_value=Decimal("100000.00"),
+            target_direction=Milestone.AT_LEAST, unit="TWD",
+        )
+        older = MeasurementReport.objects.create(milestone=savings, value=Decimal("20000.50"))
+        MeasurementReport.objects.filter(pk=older.pk).update(
+            created_at=timezone.now() - timedelta(days=7)
+        )
+        MeasurementReport.objects.create(milestone=savings, value=Decimal("35000.25"))
+
+        milestone = self.client.get(self.url).data["path"]["milestones"][0]
+
+        self.assertEqual(milestone["progress"], {"latest_value": "35000.25"})
+        self.assertEqual(milestone["target_value"], "100000.00")
+        self.assertEqual(milestone["target_direction"], "at_least")
+
+    def test_an_outcome_milestone_has_no_progress_number(self):
+        goal = self._confirmed_goal()
+        Milestone.objects.create(
+            goal=goal, position=1, title="First interview", status=Milestone.COMPLETED,
+            outcome_note="Invited to a technical interview on 12 September",
+            completed_at=timezone.now(),
+        )
+
+        milestone = self.client.get(self.url).data["path"]["milestones"][0]
+
+        self.assertIsNone(milestone["progress"])
+        self.assertEqual(milestone["outcome_note"], "Invited to a technical interview on 12 September")
+
+    def test_another_users_path_is_never_returned(self):
+        someone_else = User.objects.create_user(username="someone", password="pw12345")
+        self._confirmed_goal(user=someone_else)
+        self.assertIsNone(self.client.get(self.url).data["path"])
 
 
 class TimezoneBoundaryTests(TestCase):

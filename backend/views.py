@@ -4,12 +4,14 @@ import random
 import re
 import secrets
 from datetime import timedelta
+from decimal import Decimal
 
 from django.contrib.auth import authenticate
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, OperationalError, connection, transaction
+from django.db.models import Count, OuterRef, Q, Subquery
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import status
@@ -19,7 +21,17 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from .models import Goal, SystemLog, Task, User, UserAttribute, UserTaskLog, UserTitle
+from .models import (
+    Goal,
+    MeasurementReport,
+    Milestone,
+    SystemLog,
+    Task,
+    User,
+    UserAttribute,
+    UserTaskLog,
+    UserTitle,
+)
 from .throttles import SystemChatIPThrottle
 
 logger = logging.getLogger(__name__)
@@ -535,6 +547,112 @@ class GoalView(APIView):
         except Exception:
             logger.exception(f"GoalView error for user '{user.username}'")
             return Response({"error": "Could not load goal"}, status=500)
+
+def _decimal_string(value):
+    """A money-style decimal as a string with exactly two places.
+
+    Strings, so a target such as 100000.00 isn't rounded by a float on its
+    way to the client. The explicit scale matters because SQLite returns an
+    annotated decimal unscaled (250 rather than 250.00) while PostgreSQL
+    doesn't, and the API should read the same on both."""
+    if value is None:
+        return None
+    return str(Decimal(value).quantize(Decimal("0.01")))
+
+
+def _completion_criteria(obj):
+    """The fields Goal and Milestone share through CompletionCriteria."""
+    return {
+        "completion_type": obj.completion_type,
+        "target_count": obj.target_count,
+        "target_value": _decimal_string(obj.target_value),
+        "target_direction": obj.target_direction or None,
+        "unit": obj.unit or None,
+        "outcome_note": obj.outcome_note or None,
+        "completed_at": obj.completed_at.isoformat() if obj.completed_at else None,
+    }
+
+
+def _milestone_progress(milestone):
+    """Progress towards a milestone's target, from the annotations added in
+    GoalPathView. Outcome milestones have no number to show.
+
+    Cumulative progress counts completions, not distinct quests, so a
+    "run 12 times" milestone moves one step each day its recurring quest is
+    done."""
+    if milestone.completion_type == Milestone.CUMULATIVE:
+        return {"completions": milestone.completions}
+    if milestone.completion_type == Milestone.MEASURABLE:
+        return {"latest_value": _decimal_string(milestone.latest_value)}
+    return None
+
+
+class GoalPathView(APIView):
+    """The user's confirmed Goal Path: the goal and its ordered milestones.
+
+    Returns {"path": null} until a path has been confirmed, including for the
+    placeholder goal a guest account starts with, rather than a sample path.
+    Cumulative progress is counted from completion logs on every read instead
+    of being stored, so un-completing a quest can't leave a stale count."""
+
+    def get(self, request):
+        try:
+            # one_current_path_per_user guarantees at most one match.
+            goal = Goal.objects.filter(
+                user=request.user, is_completed=False, path_confirmed_at__isnull=False,
+            ).first()
+            if goal is None:
+                return Response({"path": None})
+
+            latest_report = (
+                MeasurementReport.objects
+                .filter(milestone=OuterRef('pk'))
+                # pk breaks the tie between reports saved in the same instant.
+                .order_by('-created_at', '-pk')
+                .values('value')[:1]
+            )
+            # Meta.ordering is dropped once a query aggregates, so path order
+            # has to be requested explicitly here.
+            milestones = goal.milestones.annotate(
+                completions=Count(
+                    'quests__usertasklog',
+                    filter=Q(
+                        quests__usertasklog__status='completed',
+                        # Only this user's logs, even if a quest were ever
+                        # linked to someone else's path by a later bug.
+                        quests__usertasklog__user=request.user,
+                    ),
+                ),
+                latest_value=Subquery(latest_report),
+            ).order_by('position')
+
+            return Response({
+                "path": {
+                    "confirmed_at": goal.path_confirmed_at.isoformat(),
+                    "goal": {
+                        "id": goal.id,
+                        "title": goal.title,
+                        "description": goal.description,
+                        **_completion_criteria(goal),
+                    },
+                    "milestones": [
+                        {
+                            "id": milestone.id,
+                            "position": milestone.position,
+                            "title": milestone.title,
+                            "description": milestone.description,
+                            "status": milestone.status,
+                            **_completion_criteria(milestone),
+                            "progress": _milestone_progress(milestone),
+                        }
+                        for milestone in milestones
+                    ],
+                }
+            })
+        except Exception:
+            logger.exception("GoalPathView error for user id %s", request.user.id)
+            return Response({"error": "Could not load your path"}, status=500)
+
 
 def calculate_task_exp(task):
     """Calculate EXP gained from completing a task"""
