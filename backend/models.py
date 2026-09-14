@@ -93,19 +93,127 @@ class UserAttribute(models.Model):
     def __str__(self):
         return f"{self.user.username} - {self.get_name_display()}: {self.value}"
 
-class Goal(models.Model):
+class CompletionCriteria(models.Model):
+    """How a Goal or Milestone counts as reached. Shared so the two can't
+    drift apart: an Outcome is confirmed by the user, a Cumulative target by
+    completed quests, and a Measurable target by a reported value."""
+
+    OUTCOME = 'outcome'
+    CUMULATIVE = 'cumulative'
+    MEASURABLE = 'measurable'
+    COMPLETION_TYPE_CHOICES = [
+        (OUTCOME, 'Outcome'),
+        (CUMULATIVE, 'Cumulative'),
+        (MEASURABLE, 'Measurable'),
+    ]
+
+    AT_LEAST = 'at_least'
+    AT_MOST = 'at_most'
+    TARGET_DIRECTION_CHOICES = [
+        (AT_LEAST, 'At least'),
+        (AT_MOST, 'At most'),
+    ]
+
+    completion_type = models.CharField(
+        max_length=12, choices=COMPLETION_TYPE_CHOICES, default=OUTCOME
+    )
+    target_count = models.PositiveIntegerField(null=True, blank=True)
+    target_value = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    # A measurable target isn't always "more is better": a 5 km time is
+    # reached by getting under it.
+    target_direction = models.CharField(
+        max_length=8, choices=TARGET_DIRECTION_CHOICES, blank=True, default=''
+    )
+    unit = models.CharField(max_length=20, blank=True, default='')
+    outcome_note = models.CharField(max_length=300, blank=True, default='')
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        abstract = True
+
+
+class Goal(CompletionCriteria):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     title = models.CharField(max_length=150)
     description = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     is_completed = models.BooleanField(default=False)
+    # Set when the user confirms a Goal Path. The placeholder goal a guest
+    # account starts with never has one, so it reads as "no path yet".
+    path_confirmed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         verbose_name = "Goal"
         verbose_name_plural = "Goals"
+        constraints = [
+            # One Goal Path in progress at a time. Goals without a path (every
+            # goal created before Goal Paths existed) and finished goals are
+            # outside the condition, so they never conflict.
+            models.UniqueConstraint(
+                fields=['user'],
+                condition=models.Q(is_completed=False, path_confirmed_at__isnull=False),
+                name='one_current_path_per_user',
+            ),
+        ]
 
     def __str__(self):
         return self.title
+
+class Milestone(CompletionCriteria):
+    LOCKED = 'locked'
+    ACTIVE = 'active'
+    COMPLETED = 'completed'
+    STATUS_CHOICES = [
+        (LOCKED, 'Locked'),
+        (ACTIVE, 'Active'),
+        (COMPLETED, 'Completed'),
+    ]
+
+    goal = models.ForeignKey(Goal, on_delete=models.CASCADE, related_name='milestones')
+    position = models.PositiveSmallIntegerField()
+    title = models.CharField(max_length=150)
+    description = models.CharField(max_length=500, blank=True, default='')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=LOCKED)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Milestone"
+        verbose_name_plural = "Milestones"
+        ordering = ['position']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['goal', 'position'], name='unique_milestone_position'
+            ),
+            # Enforced by the database rather than by view code, so two
+            # requests finishing the same milestone can't both unlock the next.
+            models.UniqueConstraint(
+                fields=['goal'],
+                condition=models.Q(status='active'),
+                name='one_active_milestone_per_goal',
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.position}. {self.title}"
+
+
+class MeasurementReport(models.Model):
+    """One reported value for a Measurable milestone, kept as a history
+    rather than a single field so progress can be shown as a trend."""
+
+    milestone = models.ForeignKey(Milestone, on_delete=models.CASCADE, related_name='reports')
+    value = models.DecimalField(max_digits=12, decimal_places=2)
+    note = models.CharField(max_length=300, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Measurement Report"
+        verbose_name_plural = "Measurement Reports"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.milestone.title}: {self.value}"
+
 
 class Task(models.Model):
     ATTRIBUTE_CHOICES = [
@@ -137,6 +245,11 @@ class Task(models.Model):
         max_length=20, choices=MISSION_TYPE_CHOICES, default='daily'
     )
     system_flavor = models.TextField(blank=True, default='')
+    # Quests on a Goal Path point at their milestone. Deleting a milestone
+    # leaves the quest and its completion history in place.
+    milestone = models.ForeignKey(
+        Milestone, null=True, blank=True, on_delete=models.SET_NULL, related_name='quests'
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

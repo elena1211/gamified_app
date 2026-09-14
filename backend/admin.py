@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Goal, Task, User, UserAttribute, UserTaskLog
+from .models import Goal, MeasurementReport, Milestone, Task, User, UserAttribute, UserTaskLog
 
 
 @admin.register(User)
@@ -24,11 +24,33 @@ class UserTaskLogAdmin(admin.ModelAdmin):
     search_fields = ('user__username', 'task__title')
     date_hierarchy = 'assigned_at'
 
+class MilestoneInline(admin.TabularInline):
+    model = Milestone
+    extra = 0
+    fields = (
+        'position', 'title', 'status', 'completion_type',
+        'target_count', 'target_value', 'target_direction', 'unit',
+    )
+
 @admin.register(Goal)
 class GoalAdmin(admin.ModelAdmin):
-    list_display = ('title', 'user', 'is_completed', 'created_at')
+    list_display = ('title', 'user', 'is_completed', 'path_confirmed_at', 'created_at')
     list_filter = ('is_completed', 'created_at')
     search_fields = ('title', 'user__username')
+    inlines = [MilestoneInline]
+
+@admin.register(Milestone)
+class MilestoneAdmin(admin.ModelAdmin):
+    list_display = ('title', 'goal', 'position', 'status', 'completion_type')
+    list_filter = ('status', 'completion_type')
+    search_fields = ('title', 'goal__title', 'goal__user__username')
+    list_select_related = ('goal',)
+
+@admin.register(MeasurementReport)
+class MeasurementReportAdmin(admin.ModelAdmin):
+    list_display = ('milestone', 'value', 'created_at')
+    search_fields = ('milestone__title',)
+    list_select_related = ('milestone',)
 
 @admin.register(UserAttribute)
 class UserAttributeAdmin(admin.ModelAdmin):
