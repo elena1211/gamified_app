@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import AnimatedNumber from "./AnimatedNumber";
 
 const STAT_ROWS = [
   { key: "intelligence", label: "Intelligence", color: "#8B6F47" },
@@ -8,6 +9,15 @@ const STAT_ROWS = [
   { key: "wellness",     label: "Wellness",     color: "#8FA67B" },
   { key: "stress",       label: "Stress",       color: "#B85C42" },
 ];
+
+// Any non-zero stat shows at least a sliver, so 3 points out of 1000 doesn't
+// look the same as none. The gauge scales rather than resizes, so this floor is
+// a share of the track: 1.2% is about 3px — the old minimum width — on the
+// roughly 250px gauge of a phone-width screen, and a little wider elsewhere.
+const MIN_VISIBLE_FILL = 0.012;
+
+const fillScale = (value, max) =>
+  value > 0 ? Math.max(Math.min(value / max, 1), MIN_VISIBLE_FILL) : 0;
 
 const StatsPanel = ({ stats = {} }) => {
   const getMaxValue = (statKey) => (statKey === "stress" ? 100 : 1000);
@@ -45,7 +55,6 @@ const StatsPanel = ({ stats = {} }) => {
         {STAT_ROWS.map(({ key, label, color }) => {
           const value = stats?.[key] || 0;
           const maxValue = getMaxValue(key);
-          const percentage = Math.min((value / maxValue) * 100, 100);
 
           return (
             <div key={key}>
@@ -64,18 +73,14 @@ const StatsPanel = ({ stats = {} }) => {
                       {deltas[key] > 0 ? `+${deltas[key]}` : deltas[key]}
                     </span>
                   )}
-                  <span className="font-semibold text-ink">{value}</span>
+                  <span className="font-semibold text-ink"><AnimatedNumber value={value} /></span>
                   <span className="text-ink-mute"> / {maxValue}</span>
                 </span>
               </div>
               <div className="stat-gauge-track">
                 <div
                   className="stat-gauge-fill"
-                  style={{
-                    width: `${percentage}%`,
-                    backgroundColor: color,
-                    minWidth: value > 0 ? "3px" : "0px",
-                  }}
+                  style={{ "--fill": fillScale(value, maxValue), backgroundColor: color }}
                 />
               </div>
             </div>

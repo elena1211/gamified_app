@@ -10,6 +10,7 @@ import TimeLimitedTaskPopup from "../components/TimeLimitedTaskPopup";
 import Modal from "../components/Modal";
 import WeeklyTaskStats from "../components/WeeklyTaskStats";
 import LevelUpModal from "../components/LevelUpModal";
+import AnimatedNumber from "../components/AnimatedNumber";
 import SystemAlert from "../components/SystemAlert";
 import { useAppContext } from "../context/appContextValue";
 import { getAvatarStage, getExpForLevel } from "../utils/avatar";
@@ -771,17 +772,19 @@ export default function HomePage({
                   EXP
                 </span>
                 <span className="text-xs text-ink-soft tabular-nums">
-                  {expIntoLevel} / {expForLevel}
+                  <AnimatedNumber value={expIntoLevel} /> / {expForLevel}
                   <span className="text-ink-mute ml-2">
                     ({Math.round(expPct)}%)
                   </span>
                 </span>
               </div>
               <div className="exp-bar-track">
-                <div
-                  className="exp-bar-fill"
-                  style={{ width: `${expPct}%` }}
-                />
+                <div className="exp-bar-clip">
+                  <div
+                    className="exp-bar-fill"
+                    style={{ "--fill": expPct / 100 }}
+                  />
+                </div>
               </div>
             </div>
             <StatsPanel stats={attributeStats} />

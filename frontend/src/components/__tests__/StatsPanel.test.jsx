@@ -30,6 +30,16 @@ describe('StatsPanel', () => {
     expect(screen.getByText('+4')).toBeInTheDocument();
   });
 
+  it('fills each gauge by its share of the maximum, with a sliver for any non-zero stat', () => {
+    const { container } = render(<StatsPanel stats={{ ...baseStats, stress: 25 }} />);
+    const fills = [...container.querySelectorAll('.stat-gauge-fill')].map((gauge) =>
+      gauge.style.getPropertyValue('--fill'),
+    );
+    // Every small non-zero stat shows the same sliver rather than nothing,
+    // social (0) stays empty, and stress is out of 100, not 1000.
+    expect(fills).toEqual(['0.012', '0.012', '0.012', '0', '0.012', '0.25']);
+  });
+
   it('colors a stress decrease as a good change, unlike every other attribute', () => {
     const stressed = { ...baseStats, stress: 10 };
     const { rerender } = render(<StatsPanel stats={stressed} />);
