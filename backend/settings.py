@@ -252,6 +252,11 @@ REST_FRAMEWORK = {
         # could otherwise be rotated past a per-account limit.
         'system_chat': '15/hour',
         'system_chat_ip': '30/hour',
+        # A Goal Path proposal is one AI call per request, and a draft is rarely
+        # regenerated more than a few times, so this is tighter than chat. Same
+        # per-account plus per-IP pairing, for the same reason.
+        'path_proposal': '5/hour',
+        'path_proposal_ip': '10/hour',
         # Account creation (register + guest login) is IP-throttled for the
         # same reason.
         'account_create': '10/hour',

@@ -16,6 +16,7 @@ urlpatterns = [
     path('tasks/weekly-stats/', views.WeeklyStatsView.as_view(), name='weekly-stats'),
     path('goal/', views.GoalView.as_view(), name='user-goal'),
     path('path/', views.GoalPathView.as_view(), name='goal-path'),
+    path('path/proposal/', views.PathProposalView.as_view(), name='path-proposal'),
     path('user/stats/', views.UserStatsView.as_view(), name='user-stats'),
     path('user/progress/', views.ProgressStatsView.as_view(), name='user-progress'),
     # System / AI endpoints

@@ -1,17 +1,24 @@
 from rest_framework.throttling import SimpleRateThrottle
 
 
-class SystemChatIPThrottle(SimpleRateThrottle):
-    """Second throttle layer for the System chat endpoint, keyed by client IP.
+class IPRateThrottle(SimpleRateThrottle):
+    """Throttles by client IP across every account.
 
-    The per-account ScopedRateThrottle alone can be dodged by minting fresh
-    guest accounts, so this also caps total chat requests per IP address
-    across all accounts.
+    A per-account ScopedRateThrottle alone can be dodged by minting fresh
+    guest accounts, so endpoints that call the AI provider also cap requests
+    per IP address. Subclasses set the scope.
     """
-    scope = 'system_chat_ip'
 
     def get_cache_key(self, request, view):
         return self.cache_format % {
             'scope': self.scope,
             'ident': self.get_ident(request),
         }
+
+
+class SystemChatIPThrottle(IPRateThrottle):
+    scope = 'system_chat_ip'
+
+
+class PathProposalIPThrottle(IPRateThrottle):
+    scope = 'path_proposal_ip'
