@@ -48,7 +48,7 @@ class Migration(migrations.Migration):
             name='UserTitle',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('title_key', models.CharField(choices=[('iron_will', '鐵血意志者'), ('early_bird', '晨曦先鋒'), ('comeback_king', '不屈的宿主'), ('consistent_scholar', '博學多識'), ('overachiever', '超額成就者'), ('first_system_contact', '初次連線')], max_length=30)),
+                ('title_key', models.CharField(choices=[('iron_will', 'Iron Will'), ('early_bird', 'Early Bird'), ('comeback_king', 'Comeback King'), ('consistent_scholar', 'Consistent Scholar'), ('overachiever', 'Overachiever'), ('first_system_contact', 'First Contact')], max_length=30)),
                 ('earned_at', models.DateTimeField(auto_now_add=True)),
                 ('is_active', models.BooleanField(default=False)),
                 ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='titles', to=settings.AUTH_USER_MODEL)),
