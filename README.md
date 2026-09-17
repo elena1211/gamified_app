@@ -89,12 +89,12 @@ and an automated test suite.
 
 ## Overview
 
-LevelUp is a web application that turns daily task management into a character-raising game. Every real task the user completes increases one of six character attributes and earns experience points. Missing tasks reduces attributes and can trigger penalties. The progression loop includes both reward and risk, making progress feel authentic rather than a one-way point accumulation.
+LevelUp is a web application that turns daily task management into a character-raising game. Every real task the user completes increases one of six character attributes and earns experience points. The System's evening evaluation can answer a poor day with a penalty mission, so the progression loop carries risk as well as reward rather than being a one-way point accumulation.
 
 The app is built on a modular Django + React architecture and ships with:
 
 - A retro RPG visual design system (parchment palette, double-line window frames, JRPG-style stat bars)
-- An AI-powered **System companion** backed by a pluggable AI provider (NVIDIA NIM by default, Anthropic Claude optional), which generates contextual daily missions, evaluates evening performance, and applies stat penalties for inactivity
+- An AI-powered **System companion** backed by a pluggable AI provider (NVIDIA NIM by default, Anthropic Claude optional), which generates contextual daily missions and evaluates evening performance with a bonus or penalty mission
 - Goal-aware task selection that biases daily quests toward attributes aligned with the user's chosen goal
 - A first-run onboarding walkthrough and a guest mode that requires no registration
 
@@ -133,14 +133,14 @@ default (free, rate-limited), with Anthropic Claude available via `AI_PROVIDER=a
 - **Morning Brief** — generates 2–3 contextual missions for the day based on the user's goal, current stats, and recent completion rate
 - **Evening Evaluation** — reviews today's performance and issues a bonus or penalty mission
 - **Free Chat** — the user describes their current situation and the System generates relevant missions
-- **Punishment Check** — on app open, if yesterday's completion rate was below 30 %, the System applies a stat debuff and creates a Redemption Quest
+- **Punishment Check** (not yet active) — on app open, the app asks the backend to apply a stat penalty and create a Redemption Quest if yesterday's completion rate was below 30%; see [Known Limitations](#known-limitations)
 - **Personality Archetypes** — each user is randomly assigned a System personality (logical, mentor, tsundere, or drill sergeant) that shapes tone
 
 ### Onboarding and Accessibility
 
 - 4-slide first-run tutorial that covers tasks, stats, time-limited quests, and the System companion
 - Tutorial can be replayed from the Settings page
-- Guest mode — one tap from the Welcome screen generates a local `guest_<id>` session with no registration required; Settings page prompts the guest to upgrade
+- Guest mode — one tap from the Welcome screen creates a `guest_<id>` account on the server with no registration required; Settings page prompts the guest to upgrade
 
 ### Visual Design
 
@@ -253,9 +253,9 @@ npm test
 
 Both suites run automatically on pushes to `main` and on pull requests targeting `main`, via [GitHub Actions](.github/workflows/ci.yml).
 
-The backend suite runs under `coverage` with a floor configured in `pyproject.toml`, so a drop fails the build rather than going unnoticed. Current backend coverage is **82%** across 153 tests; `views.py`, which holds the API, is at 78%.
+The backend suite runs under `coverage` with a floor configured in `pyproject.toml`, so a drop fails the build rather than going unnoticed. Current backend coverage is **85%** across 205 tests, against a floor of 80%; `views.py`, which holds the API, is at 80%.
 
-The frontend suite runs the same way (`npm run test:coverage`, thresholds in `vite.config.js`). It is at **36%** across 118 tests: the utilities, the API client's retry and error handling, the sign-in and registration pages, and the shared components are covered; `HomePage` and `TaskManagerPage`, the two largest files, are not yet.
+The frontend suite runs the same way (`npm run test:coverage`, thresholds in `vite.config.js`). It is at **37%** across 131 tests: the utilities, hooks and app context, the API client's retry and error handling, the sign-in and registration pages, and the shared components are covered; `HomePage` and `TaskManagerPage`, the two largest files, are not yet.
 
 Every endpoint has an authentication test — the list is data-driven, so adding a view without protecting it fails the suite rather than reaching production. Cross-user isolation is asserted separately: reads return only the caller's rows, and writes against another user's row are rejected.
 
@@ -355,7 +355,7 @@ every object lookup is scoped to the authenticated owner.
 | POST | `/system/chat/` | Generate missions via the configured AI provider |
 | GET | `/system/messages/` | Last 10 system log entries |
 | GET | `/system/daily-status/` | Unread count, active title, morning-brief flag |
-| POST | `/system/punishment-check/` | Apply daily penalty if yesterday's rate < 30 % |
+| POST | `/system/punishment-check/` | Daily punishment check if yesterday's rate < 30% (not yet triggered, see [Known Limitations](#known-limitations)) |
 
 #### `/system/chat/` request body
 
@@ -466,11 +466,12 @@ reviewed change with its reasoning in the message body.
 - The System companion requires a configured AI provider key (`NVIDIA_API_KEY` by default, or `ANTHROPIC_API_KEY` if `AI_PROVIDER=anthropic`). Without one, the System tab will surface an error message.
 - NVIDIA's free NIM API (the default provider) is rate-limited (~40 requests/minute) and positioned by NVIDIA for prototyping rather than guaranteed production traffic.
 - Authentication uses DRF tokens, which do not expire and cannot yet be revoked server-side (there is no logout endpoint). Rotating refresh tokens are the intended next step; there is no OAuth or social login.
-- Guest session IDs are generated client-side and act as the only credential for that account, so a guessed ID grants access to it. Guest accounts are intended for trying the demo, not for real data.
+- Guest accounts are created on the server with a random ID and no password the guest knows; the sign-in token saved in the browser is the only way back in until the guest upgrades in Settings. Guest accounts are intended for trying the demo, not for real data.
+- The daily punishment check never triggers yet: it compares yesterday's assigned and completed task logs, but a log is only written when a task is completed, so the completion rate never falls below 30%. Penalty missions from the evening evaluation are unaffected.
 - The goal is set at registration and cannot be edited afterwards.
 - Day boundaries use a single timezone (`Europe/London`) rather than each user's own, so streaks and the daily reset roll over at UK midnight regardless of where the user is. Per-user timezones are the next step.
 - There is no password reset, and account deletion and data export are not yet implemented — both are prerequisites for opening the app to real users.
-- Backend coverage is 82%; frontend coverage is 36%, with `HomePage` and `TaskManagerPage` still untested — see [Testing](#testing).
+- Backend coverage is 85%; frontend coverage is 37%, with `HomePage` and `TaskManagerPage` still untested — see [Testing](#testing).
 
 ---
 
