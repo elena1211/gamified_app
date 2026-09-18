@@ -59,7 +59,7 @@ and an automated test suite.
 
 ![System page](docs/images/system_desktop.png)
 
-*Morning Brief shows AI-generated missions. The chat input lets the host describe their current situation to receive tailored quests.*
+*Morning Brief lists the day's missions, which the configured AI provider generates (this screenshot uses a demo account). The chat input lets the host describe their current situation to receive tailored quests.*
 
 ---
 
