@@ -21,7 +21,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from . import path_proposal
+from . import path_draft, path_proposal
 from .models import (
     Goal,
     MeasurementReport,
@@ -588,13 +588,138 @@ def _milestone_progress(milestone):
     return None
 
 
-class GoalPathView(APIView):
-    """The user's confirmed Goal Path: the goal and its ordered milestones.
+def _path_milestones(goal, user):
+    """A goal's milestones in path order, annotated for _milestone_progress."""
+    latest_report = (
+        MeasurementReport.objects
+        .filter(milestone=OuterRef('pk'))
+        # pk breaks the tie between reports saved in the same instant.
+        .order_by('-created_at', '-pk')
+        .values('value')[:1]
+    )
+    # Meta.ordering is dropped once a query aggregates, so path order has to
+    # be requested explicitly here.
+    return goal.milestones.annotate(
+        completions=Count(
+            'quests__usertasklog',
+            filter=Q(
+                quests__usertasklog__status='completed',
+                # Only this user's logs, even if a quest were ever linked to
+                # someone else's path by a later bug.
+                quests__usertasklog__user=user,
+            ),
+        ),
+        latest_value=Subquery(latest_report),
+    ).order_by('position')
 
-    Returns {"path": null} until a path has been confirmed, including for the
-    placeholder goal a guest account starts with, rather than a sample path.
-    Cumulative progress is counted from completion logs on every read instead
-    of being stored, so un-completing a quest can't leave a stale count."""
+
+def _serialize_milestone(milestone):
+    return {
+        "id": milestone.id,
+        "position": milestone.position,
+        "title": milestone.title,
+        "description": milestone.description,
+        "status": milestone.status,
+        **_completion_criteria(milestone),
+        "progress": _milestone_progress(milestone),
+    }
+
+
+def _serialize_path(goal, user):
+    return {
+        "confirmed_at": goal.path_confirmed_at.isoformat(),
+        "goal": {
+            "id": goal.id,
+            "title": goal.title,
+            "description": goal.description,
+            **_completion_criteria(goal),
+        },
+        "milestones": [_serialize_milestone(m) for m in _path_milestones(goal, user)],
+    }
+
+
+class PathRejected(Exception):
+    """Raised inside the confirm transaction to roll it back and answer with a
+    client error instead of saving."""
+
+    def __init__(self, message, status_code):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def _goal_to_confirm(user):
+    """The goal a confirmed draft is saved onto.
+
+    The current path's goal if there is one. Otherwise the user's oldest
+    unfinished goal, which is the one set at registration or a guest's
+    placeholder, rather than leaving a second, pathless goal behind. A new
+    goal only if the user has none at all."""
+    current = Goal.objects.filter(
+        user=user, is_completed=False, path_confirmed_at__isnull=False,
+    ).first()
+    if current is not None:
+        return current
+    existing = Goal.objects.filter(user=user, is_completed=False).order_by('created_at', 'pk').first()
+    return existing or Goal(user=user)
+
+
+def _has_recorded_work(milestones, user):
+    """Whether these milestones hold history that replacing or retyping them
+    would lose: a milestone reached, a quest completed or missed, or a value
+    reported. A pending log is only an assignment, not history."""
+    return (
+        milestones.filter(status=Milestone.COMPLETED).exists()
+        or UserTaskLog.objects.filter(user=user, task__milestone__in=milestones)
+        .exclude(status='pending').exists()
+        or MeasurementReport.objects.filter(
+            milestone__in=milestones, milestone__goal__user=user
+        ).exists()
+    )
+
+
+def _remove_unstarted_path(goal, user):
+    """Delete a confirmed path so a new draft can replace it, or refuse.
+
+    An unstarted path has no history, so deleting its milestones and quests
+    loses nothing. The quests are deleted outright rather than left behind by
+    the milestone's SET_NULL. A started path raises PathRejected (409), and the
+    client edits its milestones one at a time instead."""
+    if goal.pk is None or goal.path_confirmed_at is None:
+        return
+    if _has_recorded_work(goal.milestones.all(), user):
+        raise PathRejected(
+            "Your path already has progress, so edit its milestones one at a time instead", 409
+        )
+    Task.objects.filter(user=user, milestone__goal=goal).delete()
+    goal.milestones.all().delete()
+
+
+class GoalPathView(APIView):
+    """GET reads the user's confirmed Goal Path; PUT confirms a draft as it.
+
+    GET returns {"path": null} until a path has been confirmed, including for
+    the placeholder goal a guest account starts with, rather than a sample
+    path. Cumulative progress is counted from completion logs on every read
+    instead of being stored, so un-completing a quest can't leave a stale
+    count.
+
+    PUT takes a draft in the shape PathProposalView returns, after the user
+    has edited it. A path can be confirmed again, replacing it, until it has
+    progress; after that its milestones are edited one at a time."""
+
+    throttle_scope = 'task_write'
+
+    # Daily quests recur, so like the default tasks a new account starts with
+    # they get a deadline far enough away never to matter.
+    DAILY_QUEST_DEADLINE = timedelta(days=3650)
+    DAILY_QUEST_REWARD_POINT = 3
+
+    def get_throttles(self):
+        # Confirming writes a goal, milestones and quests. Reading stays
+        # unthrottled, like the other read endpoints.
+        if self.request.method == 'PUT':
+            return [ScopedRateThrottle()]
+        return []
 
     def get(self, request):
         try:
@@ -604,55 +729,155 @@ class GoalPathView(APIView):
             ).first()
             if goal is None:
                 return Response({"path": None})
-
-            latest_report = (
-                MeasurementReport.objects
-                .filter(milestone=OuterRef('pk'))
-                # pk breaks the tie between reports saved in the same instant.
-                .order_by('-created_at', '-pk')
-                .values('value')[:1]
-            )
-            # Meta.ordering is dropped once a query aggregates, so path order
-            # has to be requested explicitly here.
-            milestones = goal.milestones.annotate(
-                completions=Count(
-                    'quests__usertasklog',
-                    filter=Q(
-                        quests__usertasklog__status='completed',
-                        # Only this user's logs, even if a quest were ever
-                        # linked to someone else's path by a later bug.
-                        quests__usertasklog__user=request.user,
-                    ),
-                ),
-                latest_value=Subquery(latest_report),
-            ).order_by('position')
-
-            return Response({
-                "path": {
-                    "confirmed_at": goal.path_confirmed_at.isoformat(),
-                    "goal": {
-                        "id": goal.id,
-                        "title": goal.title,
-                        "description": goal.description,
-                        **_completion_criteria(goal),
-                    },
-                    "milestones": [
-                        {
-                            "id": milestone.id,
-                            "position": milestone.position,
-                            "title": milestone.title,
-                            "description": milestone.description,
-                            "status": milestone.status,
-                            **_completion_criteria(milestone),
-                            "progress": _milestone_progress(milestone),
-                        }
-                        for milestone in milestones
-                    ],
-                }
-            })
+            return Response({"path": _serialize_path(goal, request.user)})
         except Exception:
             logger.exception("GoalPathView error for user id %s", request.user.id)
             return Response({"error": "Could not load your path"}, status=500)
+
+    def put(self, request):
+        try:
+            goal_fields = path_draft.validate_goal(request.data.get("goal"))
+            path = path_draft.validate_path(request.data)
+        except path_draft.DraftError as exc:
+            return Response({"error": str(exc)}, status=400)
+
+        quest_titles = [quest["title"] for quest in path["daily_quests"]]
+        if len(set(quest_titles)) != len(quest_titles):
+            return Response({"error": "Two daily quests have the same title"}, status=400)
+
+        try:
+            with transaction.atomic():
+                # Locks the user, so two confirmations can't both replace the
+                # same path at once.
+                user = User.objects.select_for_update().get(pk=request.user.pk)
+                goal = _goal_to_confirm(user)
+                _remove_unstarted_path(goal, user)
+
+                # Several endpoints find a task by (user, title), so a quest
+                # can't share a title with a task the user already has.
+                if Task.objects.filter(user=user, title__in=quest_titles).exists():
+                    raise PathRejected(
+                        "You already have a task with the same title as one of these daily quests", 400
+                    )
+
+                goal.title = goal_fields["title"]
+                goal.description = goal_fields["description"]
+                goal.path_confirmed_at = timezone.now()
+                goal.save()
+
+                milestones = [
+                    Milestone.objects.create(
+                        goal=goal,
+                        position=item["position"],
+                        title=item["title"],
+                        description=item["description"],
+                        status=Milestone.ACTIVE if item["position"] == 1 else Milestone.LOCKED,
+                        completion_type=item["completion_type"],
+                        target_count=item.get("target_count"),
+                        target_value=item.get("target_value"),
+                        target_direction=item.get("target_direction", ""),
+                        unit=item.get("unit", ""),
+                    )
+                    for item in path["milestones"]
+                ]
+
+                deadline = timezone.now() + self.DAILY_QUEST_DEADLINE
+                for quest in path["daily_quests"]:
+                    Task.objects.create(
+                        user=user,
+                        title=quest["title"],
+                        description="",
+                        attribute=quest["attribute"],
+                        reward_point=self.DAILY_QUEST_REWARD_POINT,
+                        difficulty=1,
+                        deadline=deadline,
+                        mission_type='daily',
+                        milestone=milestones[quest["milestone"] - 1],
+                    )
+
+                return Response({"path": _serialize_path(goal, user)})
+        except PathRejected as exc:
+            return Response({"error": str(exc)}, status=exc.status_code)
+        except IntegrityError:
+            return Response(
+                {"error": "Your path changed while it was being saved. Reload it and try again."},
+                status=409,
+            )
+        except Exception:
+            logger.exception("GoalPathView confirm error for user id %s", request.user.id)
+            return Response({"error": "Could not save your path"}, status=500)
+
+
+class MilestoneDetailView(APIView):
+    """PATCH edits one milestone on the user's path: its title, description or
+    completion criteria.
+
+    Status and position aren't editable here, because milestones advance
+    through progress rather than by request. A completed milestone stays as
+    it was when it was reached."""
+
+    throttle_scope = 'task_write'
+
+    EDITABLE_FIELDS = {
+        "title", "description", "completion_type",
+        "target_count", "target_value", "target_direction", "unit",
+    }
+
+    def patch(self, request, pk):
+        if not isinstance(request.data, dict):
+            return Response({"error": "Send the fields to change as an object"}, status=400)
+        if set(request.data) - self.EDITABLE_FIELDS:
+            return Response(
+                {"error": "Only a milestone's title, description and completion criteria can be edited"},
+                status=400,
+            )
+
+        try:
+            milestone = Milestone.objects.select_related('goal').get(pk=pk, goal__user=request.user)
+        except Milestone.DoesNotExist:
+            return Response({"error": "Milestone not found"}, status=404)
+        if milestone.status == Milestone.COMPLETED:
+            return Response({"error": "A completed milestone can't be edited"}, status=409)
+
+        current = {
+            "title": milestone.title,
+            "description": milestone.description,
+            "completion_type": milestone.completion_type,
+            "target_count": milestone.target_count,
+            "target_value": _decimal_string(milestone.target_value),
+            "target_direction": milestone.target_direction,
+            "unit": milestone.unit,
+        }
+        try:
+            # Validating the merged result keeps only the fields the new
+            # completion type uses, so switching type drops the old target.
+            edited = path_draft.validate_milestone({**current, **request.data}, milestone.position)
+        except path_draft.DraftError as exc:
+            return Response({"error": str(exc)}, status=400)
+
+        # A milestone's type decides what its recorded work means, so it can't
+        # change once there is any: 40 completions would otherwise quietly
+        # become progress towards a savings target.
+        if (
+            edited["completion_type"] != milestone.completion_type
+            and _has_recorded_work(Milestone.objects.filter(pk=milestone.pk), request.user)
+        ):
+            return Response(
+                {"error": "This milestone already has recorded progress, so its type can't change"},
+                status=409,
+            )
+
+        milestone.title = edited["title"]
+        milestone.description = edited["description"]
+        milestone.completion_type = edited["completion_type"]
+        milestone.target_count = edited.get("target_count")
+        milestone.target_value = edited.get("target_value")
+        milestone.target_direction = edited.get("target_direction", "")
+        milestone.unit = edited.get("unit", "")
+        milestone.save()
+
+        annotated = _path_milestones(milestone.goal, request.user).get(pk=milestone.pk)
+        return Response({"milestone": _serialize_milestone(annotated)})
 
 
 class PathProposalView(APIView):
@@ -679,32 +904,20 @@ class PathProposalView(APIView):
         pass
 
     def post(self, request):
-        goal_title = request.data.get('goal_title')
-        goal_description = request.data.get('goal_description', '')
-
-        if not isinstance(goal_title, str) or not goal_title.strip():
-            return Response({"error": "goal_title is required"}, status=400)
-        if not isinstance(goal_description, str):
-            return Response({"error": "goal_description must be text"}, status=400)
-        goal_title = goal_title.strip()
-        goal_description = goal_description.strip()
-        if len(goal_title) > path_proposal.GOAL_TITLE_MAX_LENGTH:
-            return Response(
-                {"error": f"goal_title must be {path_proposal.GOAL_TITLE_MAX_LENGTH} characters or fewer"},
-                status=400,
-            )
-        if len(goal_description) > path_proposal.GOAL_DESCRIPTION_MAX_LENGTH:
-            return Response(
-                {"error": f"goal_description must be {path_proposal.GOAL_DESCRIPTION_MAX_LENGTH} characters or fewer"},
-                status=400,
-            )
+        try:
+            goal = path_draft.validate_goal({
+                "title": request.data.get("goal_title"),
+                "description": request.data.get("goal_description"),
+            })
+        except path_draft.DraftError as exc:
+            return Response({"error": str(exc)}, status=400)
 
         super().check_throttles(request)
 
         try:
             raw = _call_ai_provider(
                 path_proposal.SYSTEM_PROMPT,
-                path_proposal.build_user_prompt(goal_title, goal_description),
+                path_proposal.build_user_prompt(goal["title"], goal["description"]),
             )
         except Exception as exc:
             # The type only: provider SDK errors can carry request details.
@@ -713,7 +926,7 @@ class PathProposalView(APIView):
 
         try:
             draft = path_proposal.parse_proposal(raw)
-        except path_proposal.ProposalError as exc:
+        except path_draft.DraftError as exc:
             # The rule that failed and the reply's length, never the reply,
             # which can echo the user's goal back.
             logger.warning("Path proposal rejected (%s); reply was %d characters", exc, len(raw))
@@ -721,7 +934,7 @@ class PathProposalView(APIView):
 
         return Response({
             "draft": {
-                "goal": {"title": goal_title, "description": goal_description},
+                "goal": goal,
                 **draft,
             }
         })
