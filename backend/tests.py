@@ -28,7 +28,7 @@ from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
-from . import path_proposal
+from . import path_draft, path_proposal
 from .models import (
     Goal,
     MeasurementReport,
@@ -1470,6 +1470,8 @@ class EndpointAuthTests(TestCase):
         ("weekly-stats", "get", {}),
         ("user-goal", "get", {}),
         ("goal-path", "get", {}),
+        ("goal-path", "put", {}),
+        ("milestone-detail", "patch", {"args": [1]}),
         ("path-proposal", "post", {}),
         ("user-stats", "get", {}),
         ("user-progress", "get", {}),
@@ -2195,12 +2197,23 @@ def proposal_with(change):
     return json.dumps(proposal)
 
 
+def draft_body(**changes):
+    """A confirmable draft, in the shape PathProposalView returns."""
+    body = {
+        "goal": {"title": "First software engineer job", "description": "In London"},
+        "milestones": copy.deepcopy(VALID_PROPOSAL["milestones"]),
+        "daily_quests": copy.deepcopy(VALID_PROPOSAL["daily_quests"]),
+    }
+    body.update(changes)
+    return body
+
+
 class PathProposalParsingTests(TestCase):
     """The provider's reply is untrusted: it meets the whole schema or the
     draft is rejected. None of these touch the database or the provider."""
 
     def assertRejected(self, raw):
-        with self.assertRaises(path_proposal.ProposalError):
+        with self.assertRaises(path_draft.DraftError):
             path_proposal.parse_proposal(raw)
 
     def test_a_valid_reply_is_normalised(self):
@@ -2236,6 +2249,20 @@ class PathProposalParsingTests(TestCase):
     def test_absurdly_nested_json_is_rejected(self):
         self.assertRejected("[" * 100_000 + "]" * 100_000)
 
+    def test_an_oversized_quest_list_is_refused_before_its_quests_are_checked(self):
+        # Items that would each fail validation, so reaching them would raise
+        # a different message.
+        with self.assertRaisesMessage(path_draft.DraftError, "at most 10 daily quests"):
+            path_proposal.parse_proposal(proposal_with(lambda p: p.update(daily_quests=["x"] * 11)))
+
+    def test_a_target_value_written_as_text_is_accepted(self):
+        # A confirmed path reads targets back as strings, so an edited draft
+        # sends them that way.
+        draft = path_proposal.parse_proposal(
+            proposal_with(lambda p: p["milestones"][1].update(target_value="1500.50"))
+        )
+        self.assertEqual(draft["milestones"][1]["target_value"], "1500.50")
+
     def test_keys_outside_the_schema_are_dropped(self):
         draft = path_proposal.parse_proposal(json.dumps(VALID_PROPOSAL))
         self.assertNotIn("confidence", draft["milestones"][0])
@@ -2262,7 +2289,7 @@ class PathProposalParsingTests(TestCase):
                 self.assertRejected(proposal_with(lambda p, bad=bad: p["milestones"][0].update(target_count=bad)))
 
     def test_a_measurable_milestone_needs_a_positive_value_and_a_direction(self):
-        for bad in (None, 0, -5, "1500", float("inf"), float("nan"), 1e30):
+        for bad in (None, 0, -5, "abc", "1,500", "1500.123", "0", float("inf"), float("nan"), 1e30):
             with self.subTest(target_value=bad):
                 self.assertRejected(proposal_with(lambda p, bad=bad: p["milestones"][1].update(target_value=bad)))
         self.assertRejected(proposal_with(lambda p: p["milestones"][1].update(target_direction="more")))
@@ -2411,6 +2438,300 @@ class PathProposalViewTests(TestCase):
         with mock.patch("backend.views._call_ai_provider", return_value=json.dumps(VALID_PROPOSAL)):
             statuses = [self.client.post(self.url, self.body, format="json").status_code for _ in range(6)]
         self.assertEqual(statuses, [200, 200, 200, 200, 200, 429])
+
+
+@override_settings(CACHES=TEST_CACHES)
+class GoalPathConfirmTests(TestCase):
+    """PUT /api/path/ confirms an edited draft as the user's Goal Path."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(username="confirmer", password="pw12345")
+        self.client = APIClient()
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=self.user).key}"
+        )
+        self.url = reverse("goal-path")
+
+    def _confirm(self, body=None):
+        return self.client.put(self.url, body or draft_body(), format="json")
+
+    def test_confirming_a_draft_saves_the_path_and_returns_it(self):
+        response = self._confirm()
+
+        self.assertEqual(response.status_code, 200)
+        path = response.data["path"]
+        self.assertEqual(path["goal"]["title"], "First software engineer job")
+        self.assertEqual(
+            [(m["position"], m["title"], m["status"]) for m in path["milestones"]],
+            [(1, "Programming fundamentals", "active"),
+             (2, "Emergency fund", "locked"),
+             (3, "First interview", "locked")],
+        )
+        self.assertEqual(path["milestones"][1]["target_value"], "1500.50")
+        self.assertEqual(self.client.get(self.url).data["path"], path)
+
+    def test_daily_quests_become_the_users_daily_tasks_on_their_milestones(self):
+        self._confirm()
+
+        quests = Task.objects.filter(user=self.user).order_by("milestone__position")
+        self.assertEqual(
+            [(q.title, q.mission_type, q.milestone.position) for q in quests],
+            [("Solve one algorithm problem", "daily", 1), ("Log today's spending", "daily", 2)],
+        )
+
+    def test_the_goal_set_at_registration_becomes_the_paths_goal(self):
+        Goal.objects.create(user=self.user, title="Old wording", description="")
+
+        self._confirm()
+
+        goal = Goal.objects.get(user=self.user)
+        self.assertEqual(goal.title, "First software engineer job")
+        self.assertIsNotNone(goal.path_confirmed_at)
+
+    def test_the_oldest_unfinished_goal_becomes_the_paths_goal(self):
+        registration = Goal.objects.create(user=self.user, title="Set at registration", description="")
+        Goal.objects.filter(pk=registration.pk).update(created_at=timezone.now() - timedelta(days=30))
+        later = Goal.objects.create(user=self.user, title="Added later", description="")
+
+        self._confirm()
+
+        registration.refresh_from_db()
+        later.refresh_from_db()
+        self.assertIsNotNone(registration.path_confirmed_at)
+        self.assertEqual(later.title, "Added later")
+
+    def test_a_user_without_a_goal_gets_one(self):
+        self._confirm()
+        self.assertEqual(Goal.objects.filter(user=self.user).count(), 1)
+
+    def test_an_invalid_draft_is_rejected_and_nothing_is_saved(self):
+        too_short = draft_body(milestones=copy.deepcopy(VALID_PROPOSAL["milestones"][:2]))
+        blank_goal = draft_body(goal={"title": "   "})
+        for body in (too_short, blank_goal):
+            with self.subTest(goal=body["goal"]):
+                self.assertEqual(self._confirm(body).status_code, 400)
+        self.assertFalse(Goal.objects.filter(user=self.user).exists())
+        self.assertFalse(Milestone.objects.exists())
+        self.assertFalse(Task.objects.filter(user=self.user).exists())
+
+    def test_a_target_sent_back_as_text_is_accepted(self):
+        body = draft_body()
+        body["milestones"][1]["target_value"] = "1500.50"
+        self.assertEqual(self._confirm(body).status_code, 200)
+
+    def test_confirming_again_before_any_progress_replaces_the_path(self):
+        self._confirm()
+        body = draft_body()
+        body["milestones"][0]["title"] = "Data structures"
+        body["daily_quests"] = [{"title": "Read one chapter", "attribute": "intelligence", "milestone": 1}]
+
+        response = self._confirm(body)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            list(Milestone.objects.values_list("title", flat=True).order_by("position")),
+            ["Data structures", "Emergency fund", "First interview"],
+        )
+        self.assertEqual(
+            list(Task.objects.filter(user=self.user).values_list("title", flat=True)),
+            ["Read one chapter"],
+        )
+
+    def test_confirming_again_after_a_quest_was_completed_is_refused(self):
+        self._confirm()
+        quest = Task.objects.get(user=self.user, title="Solve one algorithm problem")
+        UserTaskLog.objects.create(user=self.user, task=quest, status="completed", completed_at=timezone.now())
+
+        response = self._confirm(draft_body(daily_quests=[]))
+
+        self.assertEqual(response.status_code, 409)
+        self.assertTrue(Task.objects.filter(pk=quest.pk).exists())
+        self.assertEqual(Milestone.objects.count(), 3)
+
+    def test_confirming_again_after_a_milestone_was_reached_is_refused(self):
+        self._confirm()
+        Milestone.objects.filter(position=1).update(status=Milestone.COMPLETED)
+        body = draft_body(goal={"title": "A different goal"})
+        body["milestones"][0]["title"] = "Something else"
+
+        self.assertEqual(self._confirm(body).status_code, 409)
+        self.assertEqual(Goal.objects.get(user=self.user).title, "First software engineer job")
+        self.assertEqual(Milestone.objects.get(position=1).title, "Programming fundamentals")
+
+    def test_a_missed_quest_counts_as_progress(self):
+        self._confirm()
+        quest = Task.objects.get(user=self.user, title="Solve one algorithm problem")
+        UserTaskLog.objects.create(user=self.user, task=quest, status="missed")
+
+        self.assertEqual(self._confirm().status_code, 409)
+
+    def test_a_pending_quest_does_not_count_as_progress(self):
+        # Pending only means assigned; re-planning must still be possible.
+        self._confirm()
+        quest = Task.objects.get(user=self.user, title="Solve one algorithm problem")
+        UserTaskLog.objects.create(user=self.user, task=quest, status="pending")
+
+        self.assertEqual(self._confirm().status_code, 200)
+
+    def test_a_reported_measurement_counts_as_progress(self):
+        self._confirm()
+        savings = Milestone.objects.get(position=2)
+        MeasurementReport.objects.create(milestone=savings, value=Decimal("250.00"))
+
+        self.assertEqual(self._confirm().status_code, 409)
+        self.assertEqual(MeasurementReport.objects.filter(milestone=savings).count(), 1)
+
+    def test_a_failure_part_way_through_a_replace_keeps_the_old_path(self):
+        self._confirm()
+        body = draft_body(goal={"title": "A different goal"})
+        body["milestones"][0]["title"] = "Something else"
+
+        with mock.patch.object(Task.objects, "create", side_effect=RuntimeError("disk full")):
+            self.assertEqual(self._confirm(body).status_code, 500)
+
+        self.assertEqual(Goal.objects.get(user=self.user).title, "First software engineer job")
+        self.assertEqual(
+            list(Milestone.objects.values_list("title", flat=True).order_by("position")),
+            ["Programming fundamentals", "Emergency fund", "First interview"],
+        )
+        self.assertEqual(Task.objects.filter(user=self.user, milestone__isnull=False).count(), 2)
+
+    def test_a_quest_titled_like_an_existing_task_is_rejected(self):
+        Goal.objects.create(user=self.user, title="Old wording", description="")
+        Task.objects.create(
+            user=self.user, title="Solve one algorithm problem", description="",
+            attribute="intelligence", deadline=timezone.now() + timedelta(days=1),
+        )
+
+        response = self._confirm()
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Milestone.objects.exists())
+        goal = Goal.objects.get(user=self.user)
+        self.assertEqual((goal.title, goal.path_confirmed_at), ("Old wording", None))
+
+    def test_two_quests_with_the_same_title_are_rejected(self):
+        body = draft_body()
+        body["daily_quests"][1]["title"] = body["daily_quests"][0]["title"]
+        self.assertEqual(self._confirm(body).status_code, 400)
+
+    def test_a_failure_part_way_through_saves_nothing(self):
+        with mock.patch.object(Task.objects, "create", side_effect=RuntimeError("disk full")):
+            response = self._confirm()
+
+        self.assertEqual(response.status_code, 500)
+        self.assertNotIn("disk", response.data["error"])
+        self.assertFalse(Milestone.objects.exists())
+        self.assertFalse(Goal.objects.filter(user=self.user, path_confirmed_at__isnull=False).exists())
+
+    def test_confirming_leaves_other_users_paths_alone(self):
+        other = User.objects.create_user(username="bystander", password="pw12345")
+        other_goal = Goal.objects.create(
+            user=other, title="Run 5 km", description="", path_confirmed_at=timezone.now(),
+        )
+        Milestone.objects.create(goal=other_goal, position=1, title="Run 1 km", status=Milestone.ACTIVE)
+
+        self._confirm()
+
+        self.assertEqual(list(other_goal.milestones.values_list("title", flat=True)), ["Run 1 km"])
+
+
+@override_settings(CACHES=TEST_CACHES)
+class MilestoneEditTests(TestCase):
+    """PATCH /api/milestones/<id>/ edits one milestone of the user's path."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(username="editor", password="pw12345")
+        self.client = APIClient()
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=self.user).key}"
+        )
+        self.client.put(reverse("goal-path"), draft_body(), format="json")
+
+    def _milestone(self, position):
+        return Milestone.objects.get(goal__user=self.user, position=position)
+
+    def _edit(self, milestone, changes):
+        return self.client.patch(reverse("milestone-detail", args=[milestone.pk]), changes, format="json")
+
+    def test_editing_a_milestones_title_and_target(self):
+        interview = self._milestone(3)
+
+        response = self._edit(interview, {
+            "title": "Three interviews", "completion_type": "cumulative", "target_count": 3,
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["milestone"]["progress"], {"completions": 0})
+        interview.refresh_from_db()
+        self.assertEqual((interview.title, interview.target_count), ("Three interviews", 3))
+
+    def test_switching_type_drops_the_old_target(self):
+        fundamentals = self._milestone(1)
+
+        self._edit(fundamentals, {"completion_type": "outcome"})
+
+        fundamentals.refresh_from_db()
+        self.assertEqual(fundamentals.completion_type, "outcome")
+        self.assertIsNone(fundamentals.target_count)
+
+    def test_an_invalid_edit_is_rejected_and_nothing_changes(self):
+        fundamentals = self._milestone(1)
+
+        response = self._edit(fundamentals, {"target_count": 0})
+
+        self.assertEqual(response.status_code, 400)
+        fundamentals.refresh_from_db()
+        self.assertEqual(fundamentals.target_count, 40)
+
+    def test_status_and_position_cannot_be_edited(self):
+        locked = self._milestone(2)
+        for changes in ({"status": "active"}, {"position": 1}):
+            with self.subTest(changes=changes):
+                self.assertEqual(self._edit(locked, changes).status_code, 400)
+        locked.refresh_from_db()
+        self.assertEqual((locked.status, locked.position), ("locked", 2))
+
+    def test_the_type_cannot_change_once_work_is_recorded(self):
+        fundamentals = self._milestone(1)
+        quest = Task.objects.get(user=self.user, milestone=fundamentals)
+        UserTaskLog.objects.create(user=self.user, task=quest, status="completed", completed_at=timezone.now())
+
+        response = self._edit(fundamentals, {"completion_type": "outcome"})
+
+        self.assertEqual(response.status_code, 409)
+        fundamentals.refresh_from_db()
+        self.assertEqual((fundamentals.completion_type, fundamentals.target_count), ("cumulative", 40))
+
+    def test_the_target_can_still_change_once_work_is_recorded(self):
+        fundamentals = self._milestone(1)
+        quest = Task.objects.get(user=self.user, milestone=fundamentals)
+        UserTaskLog.objects.create(user=self.user, task=quest, status="completed", completed_at=timezone.now())
+
+        self.assertEqual(self._edit(fundamentals, {"target_count": 50}).status_code, 200)
+
+    def test_a_completed_milestone_cannot_be_edited(self):
+        fundamentals = self._milestone(1)
+        Milestone.objects.filter(pk=fundamentals.pk).update(status=Milestone.COMPLETED)
+
+        self.assertEqual(self._edit(fundamentals, {"title": "Renamed"}).status_code, 409)
+
+    def test_another_users_milestone_is_not_found(self):
+        other = User.objects.create_user(username="owner", password="pw12345")
+        goal = Goal.objects.create(user=other, title="Theirs", description="", path_confirmed_at=timezone.now())
+        theirs = Milestone.objects.create(goal=goal, position=1, title="Their step", status=Milestone.ACTIVE)
+
+        response = self._edit(theirs, {"title": "Hijacked"})
+
+        self.assertEqual(response.status_code, 404)
+        theirs.refresh_from_db()
+        self.assertEqual(theirs.title, "Their step")
+
+    def test_a_missing_milestone_is_not_found(self):
+        response = self.client.patch(reverse("milestone-detail", args=[999999]), {"title": "x"}, format="json")
+        self.assertEqual(response.status_code, 404)
 
 
 class TimezoneBoundaryTests(TestCase):
