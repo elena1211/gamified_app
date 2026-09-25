@@ -1472,6 +1472,7 @@ class EndpointAuthTests(TestCase):
         ("goal-path", "get", {}),
         ("goal-path", "put", {}),
         ("milestone-detail", "patch", {"args": [1]}),
+        ("milestone-report", "post", {"args": [1]}),
         ("path-proposal", "post", {}),
         ("user-stats", "get", {}),
         ("user-progress", "get", {}),
@@ -2731,6 +2732,364 @@ class MilestoneEditTests(TestCase):
 
     def test_a_missing_milestone_is_not_found(self):
         response = self.client.patch(reverse("milestone-detail", args=[999999]), {"title": "x"}, format="json")
+        self.assertEqual(response.status_code, 404)
+
+
+class GoalPathProgressTests(TestCase):
+    """Completing and undoing quests moves the path: a cumulative milestone is
+    reached when its completions meet the target and goes back when they
+    don't, and the next milestone locks and unlocks with it."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(username="walker", password="pw12345")
+        self.client = APIClient()
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=self.user).key}"
+        )
+        response = self.client.put(reverse("goal-path"), draft_body(
+            milestones=[
+                {"title": "Warm up", "completion_type": "cumulative", "target_count": 2},
+                {"title": "Keep going", "completion_type": "cumulative", "target_count": 1},
+                {"title": "First interview", "completion_type": "outcome"},
+            ],
+            daily_quests=[
+                {"title": "Quest A", "attribute": "intelligence", "milestone": 1},
+                {"title": "Quest B", "attribute": "discipline", "milestone": 1},
+                {"title": "Quest C", "attribute": "wellness", "milestone": 2},
+            ],
+        ), format="json")
+        self.assertEqual(response.status_code, 200)
+
+    def _quest(self, title):
+        return Task.objects.get(user=self.user, title=title)
+
+    def _complete(self, title, completed=True):
+        return self.client.post(
+            reverse("task-complete"),
+            {"task_id": self._quest(title).pk, "completed": completed},
+            format="json",
+        )
+
+    def _statuses(self):
+        return list(
+            Milestone.objects.filter(goal__user=self.user).order_by("position").values_list("status", flat=True)
+        )
+
+    def test_reaching_the_target_completes_the_milestone_and_unlocks_the_next(self):
+        first = self._complete("Quest A")
+        self.assertEqual(first.data["milestone"]["progress"], {"completions": 1})
+        self.assertEqual(self._statuses(), ["active", "locked", "locked"])
+
+        second = self._complete("Quest B")
+
+        self.assertEqual(second.data["milestone"]["status"], "completed")
+        self.assertIsNotNone(second.data["milestone"]["completed_at"])
+        self.assertEqual(self._statuses(), ["completed", "active", "locked"])
+
+    def test_undoing_a_quest_below_the_target_takes_the_path_back(self):
+        self._complete("Quest A")
+        self._complete("Quest B")
+
+        response = self._complete("Quest A", completed=False)
+
+        self.assertEqual(response.data["milestone"]["status"], "active")
+        self.assertIsNone(response.data["milestone"]["completed_at"])
+        self.assertEqual(self._statuses(), ["active", "locked", "locked"])
+
+    def test_a_later_milestones_completions_survive_going_back(self):
+        self._complete("Quest A")
+        self._complete("Quest B")
+        self._complete("Quest C")
+        self.assertEqual(self._statuses(), ["completed", "completed", "active"])
+
+        self._complete("Quest A", completed=False)
+        self.assertEqual(self._statuses(), ["active", "locked", "locked"])
+
+        # Redoing the one quest reaches the first milestone again, and the
+        # second is still met from before, so the path lands where it was.
+        self._complete("Quest A")
+        self.assertEqual(self._statuses(), ["completed", "completed", "active"])
+
+    def test_a_reported_milestone_after_the_one_going_back_is_locked_again(self):
+        self._complete("Quest A")
+        self._complete("Quest B")
+        self._complete("Quest C")
+        interview = Milestone.objects.get(goal__user=self.user, position=3)
+        self.client.post(reverse("milestone-report", args=[interview.pk]), {"note": "Got the job"}, format="json")
+        self.assertEqual(self._statuses(), ["completed", "completed", "completed"])
+
+        self._complete("Quest A", completed=False)
+
+        self.assertEqual(self._statuses(), ["active", "locked", "locked"])
+        interview.refresh_from_db()
+        self.assertEqual((interview.outcome_note, interview.completed_at), ("Got the job", None))
+
+        # The note still stands, so the path comes all the way back.
+        self._complete("Quest A")
+        self.assertEqual(self._statuses(), ["completed", "completed", "completed"])
+
+    def test_a_locked_milestones_reported_outcome_keeps_its_type(self):
+        self._complete("Quest A")
+        self._complete("Quest B")
+        self._complete("Quest C")
+        interview = Milestone.objects.get(goal__user=self.user, position=3)
+        self.client.post(reverse("milestone-report", args=[interview.pk]), {"note": "Got the job"}, format="json")
+        self._complete("Quest A", completed=False)
+
+        response = self.client.patch(
+            reverse("milestone-detail", args=[interview.pk]),
+            {"completion_type": "cumulative", "target_count": 3},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+
+    def test_work_on_a_locked_milestone_counts_once_the_path_gets_there(self):
+        self._complete("Quest C")
+        self.assertEqual(self._statuses(), ["active", "locked", "locked"])
+
+        self._complete("Quest A")
+        self._complete("Quest B")
+
+        self.assertEqual(self._statuses(), ["completed", "completed", "active"])
+
+    def test_completing_twice_grants_the_reward_once(self):
+        self._complete("Quest A")
+        exp_after_first = User.objects.get(pk=self.user.pk).exp
+
+        response = self._complete("Quest A")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["task_completed"])
+        self.assertEqual(User.objects.get(pk=self.user.pk).exp, exp_after_first)
+        self.assertEqual(UserTaskLog.objects.filter(task=self._quest("Quest A")).count(), 1)
+
+    def test_undoing_twice_takes_the_reward_back_once(self):
+        exp_before = User.objects.get(pk=self.user.pk).exp
+        self._complete("Quest A")
+        self._complete("Quest A", completed=False)
+
+        response = self._complete("Quest A", completed=False)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["task_completed"])
+        self.assertEqual(User.objects.get(pk=self.user.pk).exp, exp_before)
+
+    def test_completed_must_be_true_or_false(self):
+        for value in ("true", 1, 0, "yes"):
+            with self.subTest(value=value):
+                response = self.client.post(
+                    reverse("task-complete"),
+                    {"task_id": self._quest("Quest A").pk, "completed": value},
+                    format="json",
+                )
+                self.assertEqual(response.status_code, 400)
+        self.assertFalse(UserTaskLog.objects.filter(user=self.user).exists())
+
+    def test_the_home_screen_endpoints_move_the_path_too(self):
+        dynamic = {"task_type": "daily", "reward_points": 1, "attribute": "discipline"}
+        self.client.post(reverse("dynamic-task-complete"), {**dynamic, "task_title": "Quest A"}, format="json")
+        response = self.client.post(
+            reverse("dynamic-task-complete"), {**dynamic, "task_title": "Quest B"}, format="json"
+        )
+        self.assertEqual(response.data["milestone"]["status"], "completed")
+        self.assertEqual(self._statuses(), ["completed", "active", "locked"])
+
+        response = self.client.post(reverse("dynamic-task-uncomplete"), {"task_title": "Quest B"}, format="json")
+
+        self.assertEqual(response.data["milestone"]["status"], "active")
+        self.assertEqual(self._statuses(), ["active", "locked", "locked"])
+
+    def test_deleting_a_quest_takes_its_completions_off_the_path(self):
+        self._complete("Quest A")
+        self._complete("Quest B")
+
+        self.client.delete(reverse("task-detail", args=[self._quest("Quest B").pk]))
+
+        self.assertEqual(self._statuses(), ["active", "locked", "locked"])
+
+    def test_lowering_a_target_to_the_work_already_done_reaches_the_milestone(self):
+        self._complete("Quest A")
+        first = Milestone.objects.get(goal__user=self.user, position=1)
+
+        response = self.client.patch(
+            reverse("milestone-detail", args=[first.pk]), {"target_count": 1}, format="json"
+        )
+
+        self.assertEqual(response.data["milestone"]["status"], "completed")
+        self.assertEqual(self._statuses(), ["completed", "active", "locked"])
+
+    def test_a_task_off_the_path_reports_no_milestone(self):
+        chore = Task.objects.create(
+            user=self.user, title="Water the plants", reward_point=2, attribute="wellness",
+            difficulty=1, deadline=timezone.now() + timedelta(days=1),
+        )
+
+        response = self.client.post(reverse("task-complete"), {"task_id": chore.pk}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data["milestone"])
+        self.assertEqual(self._statuses(), ["active", "locked", "locked"])
+
+
+class MilestoneReportTests(TestCase):
+    """POST /api/milestones/<id>/report/ reaches an outcome milestone with a
+    note, or records a reading for a measurable one."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(username="reporter", password="pw12345")
+        self.client = APIClient()
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=self.user).key}"
+        )
+        response = self.client.put(reverse("goal-path"), draft_body(milestones=[
+            {"title": "Portfolio live", "completion_type": "outcome"},
+            {
+                "title": "Emergency fund", "completion_type": "measurable",
+                "target_value": "1500.50", "target_direction": "at_least", "unit": "GBP",
+            },
+            {"title": "First interview", "completion_type": "outcome"},
+        ]), format="json")
+        self.assertEqual(response.status_code, 200)
+
+    def _milestone(self, position):
+        return Milestone.objects.get(goal__user=self.user, position=position)
+
+    def _make_active(self, position):
+        """Walk the path to this milestone by reporting the ones before it."""
+        if position > 1:
+            self._report(self._milestone(1), {"note": "Deployed"})
+        if position > 2:
+            self._report(self._milestone(2), {"value": "1500.50"})
+        milestone = self._milestone(position)
+        self.assertEqual(milestone.status, Milestone.ACTIVE)
+        return milestone
+
+    def _report(self, milestone, body):
+        return self.client.post(reverse("milestone-report", args=[milestone.pk]), body, format="json")
+
+    def _statuses(self):
+        return list(
+            Milestone.objects.filter(goal__user=self.user).order_by("position").values_list("status", flat=True)
+        )
+
+    def test_reporting_an_outcome_reaches_the_milestone(self):
+        interview = self._make_active(3)
+
+        response = self._report(interview, {"note": "  Invited to interview at a fintech  "})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["reached"])
+        reached = response.data["path"]["milestones"][2]
+        self.assertEqual(reached["status"], "completed")
+        self.assertEqual(reached["outcome_note"], "Invited to interview at a fintech")
+        self.assertIsNotNone(reached["completed_at"])
+
+    def test_a_reading_that_meets_the_target_unlocks_the_next_milestone(self):
+        fund = self._make_active(2)
+
+        response = self._report(fund, {"value": "1500.50", "note": "Payday"})
+
+        self.assertTrue(response.data["reached"])
+        self.assertEqual(self._statuses(), ["completed", "completed", "active"])
+        self.assertEqual(response.data["path"]["milestones"][1]["progress"], {"latest_value": "1500.50"})
+
+    def test_a_reading_short_of_the_target_is_kept_as_progress(self):
+        fund = self._make_active(2)
+
+        response = self._report(fund, {"value": 1500.49})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["reached"])
+        self.assertEqual(self._statuses(), ["completed", "active", "locked"])
+        self.assertEqual(MeasurementReport.objects.get(milestone=fund).value, Decimal("1500.49"))
+
+    def test_an_at_most_target_is_reached_at_or_below_it(self):
+        fund = self._make_active(2)
+        Milestone.objects.filter(pk=fund.pk).update(
+            target_direction=Milestone.AT_MOST, target_value=Decimal("30"),
+        )
+
+        self.assertFalse(self._report(fund, {"value": "30.01"}).data["reached"])
+        self.assertEqual(self._milestone(2).status, "active")
+
+        self.assertTrue(self._report(fund, {"value": "30"}).data["reached"])
+        self.assertEqual(self._milestone(2).status, "completed")
+
+    def test_lowering_a_target_below_the_latest_reading_reaches_the_milestone(self):
+        fund = self._make_active(2)
+        self._report(fund, {"value": "1000"})
+
+        response = self.client.patch(
+            reverse("milestone-detail", args=[fund.pk]), {"target_value": "900"}, format="json"
+        )
+
+        self.assertEqual(response.data["milestone"]["status"], "completed")
+        self.assertEqual(self._statuses(), ["completed", "completed", "active"])
+
+    def test_zero_is_a_valid_reading(self):
+        fund = self._make_active(2)
+        Milestone.objects.filter(pk=fund.pk).update(target_direction=Milestone.AT_MOST, target_value=Decimal("100"))
+
+        response = self._report(fund, {"value": 0})
+
+        self.assertTrue(response.data["reached"])
+
+    def test_an_outcome_needs_a_note_of_at_most_300_characters(self):
+        interview = self._make_active(3)
+        for body in ({}, {"note": ""}, {"note": "   "}, {"note": "x" * 301}, {"note": 5}):
+            with self.subTest(body=body):
+                self.assertEqual(self._report(interview, body).status_code, 400)
+        interview.refresh_from_db()
+        self.assertEqual((interview.status, interview.outcome_note), ("active", ""))
+
+    def test_a_reading_must_be_a_number_in_range(self):
+        fund = self._make_active(2)
+        for value in (None, "", "abc", "-1", -1, "1e3", "10.001", True, 1e30):
+            with self.subTest(value=value):
+                self.assertEqual(self._report(fund, {"value": value}).status_code, 400)
+        self.assertEqual(self._report(fund, {"value": 10, "note": "x" * 301}).status_code, 400)
+        self.assertFalse(MeasurementReport.objects.filter(milestone=fund).exists())
+
+        # The test client can't encode these, but json.loads on a raw body accepts them.
+        for value in (float("inf"), float("nan")):
+            with self.subTest(value=value), self.assertRaises(path_draft.DraftError):
+                path_draft.validate_report("measurable", {"value": value})
+
+    def test_a_cumulative_milestone_takes_no_report(self):
+        # The default draft starts with a cumulative milestone.
+        self.client.put(reverse("goal-path"), draft_body(), format="json")
+        fundamentals = self._milestone(1)
+
+        response = self._report(fundamentals, {"note": "Done", "value": 40})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self._milestone(1).status, "active")
+
+    def test_only_the_active_milestone_can_be_reported(self):
+        locked = self._milestone(3)
+        self.assertEqual(self._report(locked, {"note": "Skipping ahead"}).status_code, 409)
+
+        interview = self._make_active(3)
+        self._report(interview, {"note": "Invited"})
+        self.assertEqual(self._report(interview, {"note": "Again"}).status_code, 409)
+        self.assertEqual(self._milestone(3).outcome_note, "Invited")
+
+    def test_another_users_milestone_is_not_found(self):
+        other = User.objects.create_user(username="someone", password="pw12345")
+        goal = Goal.objects.create(user=other, title="Theirs", description="", path_confirmed_at=timezone.now())
+        theirs = Milestone.objects.create(goal=goal, position=1, title="Their step", status=Milestone.ACTIVE)
+
+        response = self._report(theirs, {"note": "Hijacked"})
+
+        self.assertEqual(response.status_code, 404)
+        theirs.refresh_from_db()
+        self.assertEqual((theirs.status, theirs.outcome_note), ("active", ""))
+
+    def test_a_missing_milestone_is_not_found(self):
+        response = self.client.post(reverse("milestone-report", args=[999999]), {"note": "x"}, format="json")
         self.assertEqual(response.status_code, 404)
 
 

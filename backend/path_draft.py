@@ -3,7 +3,8 @@
 A draft is what the System proposes and the user edits before confirming: a
 goal, 3 to 5 ordered milestones and their daily quests. The same rules check
 the AI provider's reply and what the user sends back, so a draft the System
-proposes can always be confirmed.
+proposes can always be confirmed. Progress reports on a confirmed path are
+checked here too, with the same number and text rules.
 """
 import math
 import re
@@ -23,6 +24,7 @@ MAX_TARGET_COUNT = 1000
 # The largest value DecimalField(max_digits=12, decimal_places=2) can hold.
 MAX_TARGET_VALUE = Decimal("9999999999.99")
 MAX_DAILY_QUESTS_PER_MILESTONE = 2
+REPORT_NOTE_MAX_LENGTH = 300
 
 # A daily quest that raised Stress would be a punishment, not a habit.
 DAILY_QUEST_ATTRIBUTES = [name for name, _ in Task.ATTRIBUTE_CHOICES if name != "stress"]
@@ -32,7 +34,7 @@ DECIMAL_TEXT = re.compile(r"\d{1,10}(\.\d{1,2})?")
 
 
 class DraftError(ValueError):
-    """A draft breaks a rule. The message names the rule and never repeats the
+    """A draft or report breaks a rule. The message names the rule and never repeats the
     submitted text, so it is safe to show to the user and to log."""
 
 
@@ -117,6 +119,23 @@ def validate_milestone(item, position):
     return milestone
 
 
+def validate_report(completion_type, report):
+    """A progress report for a milestone of this type, normalised, or DraftError.
+
+    An outcome is reached by saying what happened, so its note is required.
+    A measurable report is a value, with an optional note."""
+    if not isinstance(report, dict):
+        raise DraftError("report is not an object")
+    if completion_type == CompletionCriteria.OUTCOME:
+        return {"note": _text(report.get("note"), "note", REPORT_NOTE_MAX_LENGTH)}
+    if completion_type == CompletionCriteria.MEASURABLE:
+        return {
+            "value": _reported_value(report.get("value"), "value"),
+            "note": _text(report.get("note"), "note", REPORT_NOTE_MAX_LENGTH, required=False),
+        }
+    raise DraftError("a cumulative milestone moves with its quests, so there is nothing to report")
+
+
 def _text(value, field, max_length, required=True):
     if value is None and not required:
         return ""
@@ -138,6 +157,22 @@ def _whole_number(value, field, lowest, highest):
 
 
 def _target_value(value, field):
+    amount = _amount(value, field)
+    if not Decimal("0") < amount <= MAX_TARGET_VALUE:
+        raise DraftError(f"{field} must be above 0 and at most {MAX_TARGET_VALUE}")
+    return str(amount)
+
+
+def _reported_value(value, field):
+    # Zero is a real reading, such as a debt paid off, though never a target.
+    amount = _amount(value, field)
+    if not Decimal("0") <= amount <= MAX_TARGET_VALUE:
+        raise DraftError(f"{field} must be from 0 to {MAX_TARGET_VALUE}")
+    return str(amount)
+
+
+def _amount(value, field):
+    """A number sent as a JSON number or as text, as a Decimal with two places."""
     if isinstance(value, str):
         # A confirmed path reads its targets back as strings ("1500.50"), so
         # an edited draft sends them the same way.
@@ -156,9 +191,7 @@ def _target_value(value, field):
             amount = Decimal(str(value)).quantize(Decimal("0.01"))
         except InvalidOperation as exc:
             raise DraftError(f"{field} is not a usable number") from exc
-    if not Decimal("0") < amount <= MAX_TARGET_VALUE:
-        raise DraftError(f"{field} must be above 0 and at most {MAX_TARGET_VALUE}")
-    return str(amount.quantize(Decimal("0.01")))
+    return amount.quantize(Decimal("0.01"))
 
 
 def _daily_quest(item, milestone_count):

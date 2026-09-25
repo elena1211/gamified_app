@@ -431,10 +431,9 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
   const performCompleteTask = async (task) => {
     // The confirm modal closes as soon as it's clicked (unlike the old
     // blocking window.confirm()), so a fast second click could otherwise
-    // fire a second POST while the first is still in flight — and the
-    // backend endpoint toggles completion on/off, so a second call doesn't
-    // just double the reward, it silently reverses it server-side while the
-    // UI shows two "completed" entries.
+    // fire a second POST while the first is still in flight. The request
+    // also says completed: true rather than relying on the endpoint's
+    // toggle, so a repeated one can't reverse the completion server-side.
     if (completingIds.current.has(task.id)) return;
     completingIds.current.add(task.id);
     try {
@@ -444,7 +443,7 @@ export default function TaskManagerPage({ currentUser, onNavigateToHome, onNavig
         method: 'POST',
         mode: 'cors',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ task_id: task.id }),
+        body: JSON.stringify({ task_id: task.id, completed: true }),
       });
 
       if (!response.ok) {
