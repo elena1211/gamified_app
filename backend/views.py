@@ -517,8 +517,14 @@ class TaskDetailView(APIView):
             return Response({"error": "Task not found"}, status=404)
 
         # Cascades to this task's UserTaskLog entries, so completion history
-        # and weekly stats stop counting a deleted task.
-        task.delete()
+        # and weekly stats stop counting a deleted task. A quest's milestone
+        # stops counting them too, and can go back to active.
+        with transaction.atomic():
+            User.objects.select_for_update().get(pk=request.user.pk)
+            milestone = task.milestone
+            task.delete()
+            if milestone is not None:
+                _update_path_progress(milestone.goal, request.user)
         return Response({"success": True})
 
 class GoalView(APIView):
@@ -638,6 +644,70 @@ def _serialize_path(goal, user):
     }
 
 
+def _meets_target(milestone):
+    """Whether the work recorded against a milestone, annotated by
+    _path_milestones, meets its completion criteria."""
+    if milestone.completion_type == Milestone.CUMULATIVE:
+        return milestone.completions >= milestone.target_count
+    if milestone.completion_type == Milestone.MEASURABLE:
+        if milestone.latest_value is None:
+            return False
+        latest = Decimal(str(milestone.latest_value))
+        if milestone.target_direction == Milestone.AT_MOST:
+            return latest <= milestone.target_value
+        return latest >= milestone.target_value
+    return bool(milestone.outcome_note)
+
+
+def _update_path_progress(goal, user):
+    """Bring each milestone's status in line with the work recorded against it.
+
+    Milestones are reached in order: each one before the active milestone
+    meets its target, and the active one is the first that doesn't. So
+    undoing a quest can take a milestone back to active and lock the ones
+    after it. Their completions, readings and notes are kept, and count
+    again once the path gets back to them.
+
+    The caller holds the user's row lock, which serialises every change to
+    this user's path."""
+    milestones = list(_path_milestones(goal, user))
+    wanted = {}
+    active_seen = False
+    for milestone in milestones:
+        if not active_seen and _meets_target(milestone):
+            wanted[milestone.pk] = Milestone.COMPLETED
+        elif not active_seen:
+            wanted[milestone.pk] = Milestone.ACTIVE
+            active_seen = True
+        else:
+            wanted[milestone.pk] = Milestone.LOCKED
+
+    changed = [m for m in milestones if m.status != wanted[m.pk]]
+    # The database allows one active milestone per goal at any moment, so the
+    # old active milestone steps down before the new one steps up.
+    changed.sort(key=lambda m: wanted[m.pk] == Milestone.ACTIVE)
+    now = timezone.now()
+    for milestone in changed:
+        milestone.status = wanted[milestone.pk]
+        milestone.completed_at = now if milestone.status == Milestone.COMPLETED else None
+        milestone.save(update_fields=['status', 'completed_at'])
+
+
+def _quest_progress(task, user):
+    """After a quest's completion changes: update its path and return its
+    milestone as the client should now show it, or None for a task that
+    isn't on a path."""
+    if task.milestone_id is None:
+        return None
+    milestone = Milestone.objects.select_related('goal').filter(
+        pk=task.milestone_id, goal__user=user,
+    ).first()
+    if milestone is None:
+        return None
+    _update_path_progress(milestone.goal, user)
+    return _serialize_milestone(_path_milestones(milestone.goal, user).get(pk=milestone.pk))
+
+
 class PathRejected(Exception):
     """Raised inside the confirm transaction to roll it back and answer with a
     client error instead of saving."""
@@ -665,10 +735,11 @@ def _goal_to_confirm(user):
 
 def _has_recorded_work(milestones, user):
     """Whether these milestones hold history that replacing or retyping them
-    would lose: a milestone reached, a quest completed or missed, or a value
-    reported. A pending log is only an assignment, not history."""
+    would lose: a milestone reached or its outcome reported, a quest completed
+    or missed, or a value reported. A pending log is only an assignment, not
+    history."""
     return (
-        milestones.filter(status=Milestone.COMPLETED).exists()
+        milestones.filter(Q(status=Milestone.COMPLETED) | ~Q(outcome_note='')).exists()
         or UserTaskLog.objects.filter(user=user, task__milestone__in=milestones)
         .exclude(status='pending').exists()
         or MeasurementReport.objects.filter(
@@ -832,10 +903,17 @@ class MilestoneDetailView(APIView):
                 status=400,
             )
 
-        try:
-            milestone = Milestone.objects.select_related('goal').get(pk=pk, goal__user=request.user)
-        except Milestone.DoesNotExist:
-            return Response({"error": "Milestone not found"}, status=404)
+        with transaction.atomic():
+            # Locked like a quest completion, because a new target can reach
+            # the milestone and move the path on.
+            User.objects.select_for_update().get(pk=request.user.pk)
+            try:
+                milestone = Milestone.objects.select_related('goal').get(pk=pk, goal__user=request.user)
+            except Milestone.DoesNotExist:
+                return Response({"error": "Milestone not found"}, status=404)
+            return self._edit(request, milestone)
+
+    def _edit(self, request, milestone):
         if milestone.status == Milestone.COMPLETED:
             return Response({"error": "A completed milestone can't be edited"}, status=409)
 
@@ -875,9 +953,52 @@ class MilestoneDetailView(APIView):
         milestone.target_direction = edited.get("target_direction", "")
         milestone.unit = edited.get("unit", "")
         milestone.save()
+        _update_path_progress(milestone.goal, request.user)
 
         annotated = _path_milestones(milestone.goal, request.user).get(pk=milestone.pk)
         return Response({"milestone": _serialize_milestone(annotated)})
+
+
+class MilestoneReportView(APIView):
+    """POST reports progress on the active milestone: what happened, for an
+    outcome milestone, or a new reading, for a measurable one. Reaching the
+    milestone unlocks the next.
+
+    Cumulative milestones move with their quests, so they take no reports.
+    Only the active milestone takes one, because the path is walked in order."""
+
+    throttle_scope = 'task_write'
+
+    def post(self, request, pk):
+        with transaction.atomic():
+            user = User.objects.select_for_update().get(pk=request.user.pk)
+            try:
+                milestone = Milestone.objects.select_related('goal').get(pk=pk, goal__user=user)
+            except Milestone.DoesNotExist:
+                return Response({"error": "Milestone not found"}, status=404)
+            if milestone.status != Milestone.ACTIVE:
+                return Response({"error": "Only the active milestone can be reported"}, status=409)
+            try:
+                report = path_draft.validate_report(milestone.completion_type, request.data)
+            except path_draft.DraftError as exc:
+                return Response({"error": str(exc)}, status=400)
+
+            # The report is recorded as evidence, and the path decides from it
+            # whether the milestone is reached, as it does for quests.
+            if milestone.completion_type == Milestone.OUTCOME:
+                milestone.outcome_note = report["note"]
+                milestone.save(update_fields=['outcome_note'])
+            else:
+                MeasurementReport.objects.create(
+                    milestone=milestone, value=report["value"], note=report["note"],
+                )
+            _update_path_progress(milestone.goal, user)
+
+            milestone.refresh_from_db(fields=['status'])
+            return Response({
+                "reached": milestone.status == Milestone.COMPLETED,
+                "path": _serialize_path(milestone.goal, user),
+            })
 
 
 class PathProposalView(APIView):
@@ -964,10 +1085,20 @@ def get_exp_for_level(level):
     return math.floor(100 * math.pow(1.3, level - 1))
 
 class TaskCompleteView(APIView):
-    """API view for marking tasks as complete or uncomplete"""
+    """API view for marking tasks as complete or uncomplete.
+
+    With "completed": true or false the request sets that state, so sending it
+    twice changes nothing the second time. Without it the request toggles,
+    which is what older clients send."""
     throttle_scope = 'task_write'
 
     def post(self, request):
+        if not isinstance(request.data, dict):
+            return Response({"error": "Send task_id as an object"}, status=400)
+        completed = request.data.get('completed')
+        if completed is not None and not isinstance(completed, bool):
+            return Response({"error": "completed must be true or false"}, status=400)
+
         try:
             # Everything below reads the user's EXP, decides a new value from
             # it, and writes it back. Two requests interleaving there — a
@@ -989,8 +1120,8 @@ class TaskCompleteView(APIView):
                     status='completed',
                     completed_at__date=today
                 ).first()
+                complete = not existing_log if completed is None else completed
 
-                # Store old level and exp for level-up detection
                 # Store old level for level-up detection
                 old_level = user.level
 
@@ -1000,8 +1131,11 @@ class TaskCompleteView(APIView):
                 if task.difficulty > 1:
                     reward_str += f", +{task.difficulty-1} Discipline"
 
-                if existing_log:
-                    # Task already completed today - TOGGLE to uncomplete
+                if complete and existing_log:
+                    message = "Task already completed today"
+                elif not complete and not existing_log:
+                    message = "Task is not completed today"
+                elif existing_log:
                     # Subtract EXP when uncompleting
                     exp_lost = calculate_task_exp(task)
                     user.exp = max(0, user.exp - exp_lost)
@@ -1055,7 +1189,8 @@ class TaskCompleteView(APIView):
                     "streak": user.current_streak,
                     "completed_tasks": completed_today_count,
                     "total_tasks": total_tasks,
-                    "task_completed": not existing_log,  # Toggle status
+                    "task_completed": complete,
+                    "milestone": _quest_progress(task, user),
                     "user_stats": {
                         "level": user.level,
                         "exp": user.exp,
@@ -1741,6 +1876,7 @@ class DynamicTaskCompleteView(APIView):
                             'message': 'Daily task completed successfully',
                             'task_completed': True,
                             'streak': user.current_streak,
+                            'milestone': _quest_progress(task, user),
                             'user_stats': {
                                 'level': user.level,
                                 'exp': user.exp,
@@ -1757,7 +1893,8 @@ class DynamicTaskCompleteView(APIView):
                             'success': True,
                             'message': 'Daily task already completed today',
                             'task_completed': True,
-                            'streak': user.current_streak
+                            'streak': user.current_streak,
+                            'milestone': _quest_progress(task, user),
                         })
 
         except User.DoesNotExist:
@@ -1875,6 +2012,7 @@ class DynamicTaskUncompleteView(APIView):
                         'message': 'Daily task uncompleted successfully',
                         'task_completed': False,
                         'streak': user.current_streak,
+                        'milestone': _quest_progress(task, user),
                         'user_stats': {
                             'level': user.level,
                             'exp': user.exp,
@@ -1891,7 +2029,8 @@ class DynamicTaskUncompleteView(APIView):
                         'success': False,
                         'message': 'No completion record found for today',
                         'task_completed': False,
-                        'streak': user.current_streak
+                        'streak': user.current_streak,
+                        'milestone': _quest_progress(task, user),
                     })
 
         except Exception:
