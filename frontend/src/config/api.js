@@ -27,6 +27,10 @@ export const API_ENDPOINTS = {
   // Goals
   goal: `${API_BASE}/goal/`,
 
+  // Goal Path
+  goalPath: `${API_BASE}/path/`,
+  pathProposal: `${API_BASE}/path/proposal/`,
+
   // System / AI
   systemChat: `${API_BASE}/system/chat/`,
   systemMessages: `${API_BASE}/system/messages/`,

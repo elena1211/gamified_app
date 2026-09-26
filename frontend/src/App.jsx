@@ -6,6 +6,7 @@ import RegisterPage from './pages/RegisterPage';
 import WelcomePage from './pages/WelcomePage';
 import SystemSettingsPage from './pages/SystemSettingsPage';
 import SystemPage from './pages/SystemPage';
+import PathPage from './pages/PathPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import OnboardingTutorial from './components/OnboardingTutorial';
 import { hasSeenOnboarding } from './utils/onboarding';
@@ -145,6 +146,20 @@ function AppRoutes() {
                 onUpgradeSuccess={handleLoginSuccess}
                 onNavigateToHome={handleNavigateToHome}
                 onNavigateToTaskManager={handleNavigateToTaskManager}
+              />
+            </ErrorBoundary> :
+            <Navigate to="/welcome" replace />
+        }
+      />
+      <Route
+        path="/path"
+        element={
+          currentUser ?
+            <ErrorBoundary>
+              <PathPage
+                onNavigateToHome={handleNavigateToHome}
+                onNavigateToTaskManager={handleNavigateToTaskManager}
+                onNavigateToSettings={handleNavigateToSettings}
               />
             </ErrorBoundary> :
             <Navigate to="/welcome" replace />
