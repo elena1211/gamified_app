@@ -52,6 +52,20 @@ describe('BottomNav', () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
+  it('goes to the Path page by default', () => {
+    render(<BottomNav />);
+    fireEvent.click(screen.getByRole('button', { name: /path/i }));
+    expect(navigate).toHaveBeenCalledWith('/path');
+  });
+
+  it('lets a page handle the Path tab itself', () => {
+    const onPathClick = vi.fn();
+    render(<BottomNav onPathClick={onPathClick} />);
+    fireEvent.click(screen.getByRole('button', { name: /path/i }));
+    expect(onPathClick).toHaveBeenCalledTimes(1);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
   it('wires every other tab to its handler', () => {
     const handlers = { onHomeClick: vi.fn(), onTaskManagerClick: vi.fn(), onSettingsClick: vi.fn() };
     render(<BottomNav {...handlers} />);

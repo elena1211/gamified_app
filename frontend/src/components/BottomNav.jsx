@@ -1,4 +1,4 @@
-import { Home, Settings, ClipboardList, Cpu } from "lucide-react";
+import { Home, Settings, ClipboardList, Cpu, Map } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAppContext } from "../context/appContextValue.js";
 
@@ -7,6 +7,7 @@ export default function BottomNav({
   onHomeClick,
   onTaskManagerClick,
   onSystemClick,
+  onPathClick,
   currentPage = "home",
 }) {
   const navigate = useNavigate();
@@ -22,6 +23,11 @@ export default function BottomNav({
     else navigate("/system");
   };
 
+  const handlePathClick = () => {
+    if (onPathClick) onPathClick();
+    else navigate("/path");
+  };
+
   return (
     <nav
       className="fixed bottom-0 left-0 right-0 z-30"
@@ -32,7 +38,7 @@ export default function BottomNav({
       }}
     >
       <div className="max-w-md mx-auto px-4 py-3 safe-area-pb">
-        <div className="flex justify-center items-center gap-8">
+        <div className="flex justify-center items-center gap-6">
           <button onClick={onHomeClick} className={itemClass(currentPage === "home")}>
             <Home size={22} />
             <span className="text-[11px] tracking-wider uppercase font-semibold">Home</span>
@@ -51,6 +57,11 @@ export default function BottomNav({
               )}
             </span>
             <span className="text-[11px] tracking-wider uppercase font-semibold">System</span>
+          </button>
+
+          <button onClick={handlePathClick} className={itemClass(currentPage === "path")}>
+            <Map size={22} />
+            <span className="text-[11px] tracking-wider uppercase font-semibold">Path</span>
           </button>
 
           <button onClick={onTaskManagerClick} className={itemClass(currentPage === "tasks")}>
