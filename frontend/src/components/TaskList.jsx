@@ -84,6 +84,11 @@ export default function TaskList({ tasks: initialTasks, onTaskComplete }) {
                 </span>
               )}
               <div className="flex-1 min-w-0">
+                {task.milestone && (
+                  <p className="text-[11px] uppercase tracking-wider text-ink-soft mb-0.5">
+                    Milestone {task.milestone.position} · {task.milestone.title}
+                  </p>
+                )}
                 <div
                   className={`text-base font-semibold leading-snug ${
                     task.completed ? "line-through text-ink-mute" : "text-ink"

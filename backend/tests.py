@@ -1473,6 +1473,7 @@ class EndpointAuthTests(TestCase):
         ("goal-path", "put", {}),
         ("milestone-detail", "patch", {"args": [1]}),
         ("milestone-report", "post", {"args": [1]}),
+        ("goal-report", "post", {}),
         ("path-proposal", "post", {}),
         ("user-stats", "get", {}),
         ("user-progress", "get", {}),
@@ -2037,9 +2038,35 @@ class GoalPathViewTests(TestCase):
         Goal.objects.create(user=self.user, title="Getting Started", description="")
         self.assertIsNone(self.client.get(self.url).data["path"])
 
-    def test_a_completed_goal_is_not_the_current_path(self):
+    def test_a_reached_goals_path_is_shown_marked_as_reached(self):
+        # It stops being the current path — a new one can be confirmed over it —
+        # but it stays on screen rather than the account reading as pathless.
         self._confirmed_goal(is_completed=True)
-        self.assertIsNone(self.client.get(self.url).data["path"])
+
+        path = self.client.get(self.url).data["path"]
+
+        self.assertTrue(path["reached"])
+
+    def test_the_most_recently_reached_path_is_the_one_shown(self):
+        # PostgreSQL sorts nulls first on a descending order, so a goal
+        # completed before this endpoint recorded a time would otherwise mask
+        # the one actually reached most recently. SQLite sorts them last, so
+        # this only fails without the fix on the PostgreSQL CI job.
+        Goal.objects.create(
+            user=self.user, title="An older goal", description="",
+            path_confirmed_at=timezone.now(), is_completed=True,
+        )
+        recent = self._confirmed_goal(is_completed=True)
+        Goal.objects.filter(pk=recent.pk).update(completed_at=timezone.now())
+
+        path = self.client.get(self.url).data["path"]
+
+        self.assertEqual(path["goal"]["title"], "First software engineer job")
+        self.assertTrue(path["reached"])
+
+    def test_a_path_that_has_not_been_reported_is_not_marked_reached(self):
+        self._confirmed_goal()
+        self.assertFalse(self.client.get(self.url).data["path"]["reached"])
 
     def test_returns_the_goal_and_its_milestones_in_order(self):
         goal = self._confirmed_goal()
@@ -2787,6 +2814,28 @@ class GoalPathProgressTests(TestCase):
         self.assertIsNotNone(second.data["milestone"]["completed_at"])
         self.assertEqual(self._statuses(), ["completed", "active", "locked"])
 
+    def test_only_the_completion_that_reaches_a_milestone_says_so(self):
+        # Quest A alone meets the target, so finishing Quest B afterwards adds
+        # nothing and must not report the milestone as newly reached.
+        first = Milestone.objects.get(goal__user=self.user, position=1)
+        Milestone.objects.filter(pk=first.pk).update(target_count=1)
+
+        reaching = self._complete("Quest A")
+        self.assertTrue(reaching.data["milestone"]["just_reached"])
+
+        later = self._complete("Quest B")
+
+        self.assertEqual(later.data["milestone"]["status"], "completed")
+        self.assertFalse(later.data["milestone"]["just_reached"])
+
+    def test_undoing_a_quest_does_not_say_a_milestone_was_reached(self):
+        self._complete("Quest A")
+        self._complete("Quest B")
+
+        response = self._complete("Quest A", completed=False)
+
+        self.assertFalse(response.data["milestone"]["just_reached"])
+
     def test_undoing_a_quest_below_the_target_takes_the_path_back(self):
         self._complete("Quest A")
         self._complete("Quest B")
@@ -3091,6 +3140,178 @@ class MilestoneReportTests(TestCase):
     def test_a_missing_milestone_is_not_found(self):
         response = self.client.post(reverse("milestone-report", args=[999999]), {"note": "x"}, format="json")
         self.assertEqual(response.status_code, 404)
+
+
+class GoalReportTests(TestCase):
+    """POST /api/path/report/ records that the goal itself has been reached."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(username="finisher", password="pw12345")
+        self.client = APIClient()
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=self.user).key}"
+        )
+        self.client.put(reverse("goal-path"), draft_body(milestones=[
+            {"title": "Portfolio live", "completion_type": "outcome"},
+            {"title": "Applications sent", "completion_type": "outcome"},
+            {"title": "First interview", "completion_type": "outcome"},
+        ]), format="json")
+        self.url = reverse("goal-report")
+
+    def _milestone(self, position):
+        return Milestone.objects.get(goal__user=self.user, position=position)
+
+    def _reach_every_milestone(self):
+        for position in (1, 2, 3):
+            self.client.post(
+                reverse("milestone-report", args=[self._milestone(position).pk]),
+                {"note": f"Step {position} done"},
+                format="json",
+            )
+
+    def test_reporting_the_goal_once_every_milestone_is_reached(self):
+        self._reach_every_milestone()
+
+        response = self.client.post(self.url, {"note": "  Signed the contract  "}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["path"]["reached"])
+        self.assertEqual(response.data["path"]["goal"]["outcome_note"], "Signed the contract")
+        goal = Goal.objects.get(user=self.user)
+        self.assertTrue(goal.is_completed)
+        self.assertIsNotNone(goal.completed_at)
+
+    def test_the_goal_cannot_be_reported_while_a_milestone_is_unreached(self):
+        self.client.post(
+            reverse("milestone-report", args=[self._milestone(1).pk]), {"note": "Done"}, format="json"
+        )
+
+        response = self.client.post(self.url, {"note": "Skipping ahead"}, format="json")
+
+        self.assertEqual(response.status_code, 409)
+        goal = Goal.objects.get(user=self.user)
+        self.assertFalse(goal.is_completed)
+        self.assertEqual(goal.outcome_note, "")
+
+    def test_the_goal_report_needs_a_note(self):
+        self._reach_every_milestone()
+
+        for body in ({}, {"note": "  "}, {"note": "x" * 301}):
+            with self.subTest(body=body):
+                self.assertEqual(self.client.post(self.url, body, format="json").status_code, 400)
+        self.assertFalse(Goal.objects.get(user=self.user).is_completed)
+
+    def test_a_goal_can_only_be_reported_once(self):
+        self._reach_every_milestone()
+        self.client.post(self.url, {"note": "Signed the contract"}, format="json")
+
+        response = self.client.post(self.url, {"note": "Again"}, format="json")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(Goal.objects.get(user=self.user).outcome_note, "Signed the contract")
+
+    def test_a_user_without_a_path_has_nothing_to_report(self):
+        other = User.objects.create_user(username="pathless", password="pw12345")
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=other).key}")
+
+        self.assertEqual(client.post(self.url, {"note": "Done"}, format="json").status_code, 404)
+
+    def test_a_reached_path_stays_on_screen_until_a_new_one_is_confirmed(self):
+        self._reach_every_milestone()
+        self.client.post(self.url, {"note": "Signed the contract"}, format="json")
+
+        response = self.client.get(reverse("goal-path"))
+
+        self.assertTrue(response.data["path"]["reached"])
+        self.assertEqual(response.data["path"]["goal"]["outcome_note"], "Signed the contract")
+
+        # Confirming a new path leaves the reached one behind for good.
+        self.client.put(reverse("goal-path"), draft_body(daily_quests=[
+            {"title": "Read one chapter", "attribute": "intelligence", "milestone": 1},
+        ]), format="json")
+        current = self.client.get(reverse("goal-path")).data["path"]
+        self.assertFalse(current["reached"])
+        self.assertEqual(current["goal"]["title"], "First software engineer job")
+
+    def test_a_new_path_cannot_reuse_a_finished_paths_quest_titles(self):
+        # The finished path's quests stay, because they hold the completions
+        # that earned their EXP, and several endpoints find a task by title.
+        self._reach_every_milestone()
+        self.client.post(self.url, {"note": "Signed the contract"}, format="json")
+
+        response = self.client.put(reverse("goal-path"), draft_body(), format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(self.client.get(reverse("goal-path")).data["path"]["reached"])
+
+    def test_an_unreported_path_is_not_marked_reached(self):
+        self.assertFalse(self.client.get(reverse("goal-path")).data["path"]["reached"])
+
+
+class QuestsOnTodaysListTests(TestCase):
+    """The active milestone's quests are the path's plan for today, so
+    /api/tasks/ always lists them and says which milestone they serve."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(username="quester", password="pw12345")
+        self.client = APIClient()
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=self.user).key}"
+        )
+        self.client.put(reverse("goal-path"), draft_body(daily_quests=[
+            {"title": "Solve one algorithm problem", "attribute": "intelligence", "milestone": 1},
+            {"title": "Read one chapter", "attribute": "intelligence", "milestone": 1},
+            {"title": "Log today's spending", "attribute": "discipline", "milestone": 2},
+        ]), format="json")
+        # Enough other tasks that a random sample would be unlikely to include
+        # the quest by chance.
+        for i in range(25):
+            Task.objects.create(
+                user=self.user, title=f"Unrelated task {i}", reward_point=2,
+                attribute="wellness", difficulty=1, deadline=timezone.now() + timedelta(days=1),
+            )
+
+    def _titles(self):
+        return [task["title"] for task in self.client.get(reverse("task-list")).data]
+
+    def test_the_active_milestones_quest_is_always_listed(self):
+        for _ in range(5):
+            self.assertIn("Solve one algorithm problem", self._titles())
+
+    def test_a_locked_milestones_quest_waits_its_turn(self):
+        self.assertNotIn("Log today's spending", self._titles())
+
+    def test_a_quest_says_which_milestone_it_serves(self):
+        tasks = self.client.get(reverse("task-list")).data
+        quest = next(task for task in tasks if task["title"] == "Solve one algorithm problem")
+
+        self.assertEqual(quest["milestone"]["position"], 1)
+        self.assertEqual(quest["milestone"]["title"], "Programming fundamentals")
+
+    def test_a_task_off_the_path_has_no_milestone(self):
+        tasks = self.client.get(reverse("task-list")).data
+        chore = next(task for task in tasks if task["title"].startswith("Unrelated task"))
+
+        self.assertIsNone(chore["milestone"])
+
+    def test_the_quest_joins_the_list_when_its_milestone_becomes_active(self):
+        fundamentals = Milestone.objects.get(goal__user=self.user, position=1)
+        Milestone.objects.filter(pk=fundamentals.pk).update(target_count=1)
+        quest = Task.objects.get(user=self.user, title="Solve one algorithm problem")
+        self.client.post(reverse("task-complete"), {"task_id": quest.pk, "completed": True}, format="json")
+
+        # Several draws, because a quest left in the random pool by mistake
+        # would only show up in some of them. "Read one chapter" is the
+        # telling one: it was never completed, so it would still be in the
+        # pool of tasks waiting to be drawn.
+        for _ in range(5):
+            titles = self._titles()
+            self.assertIn("Log today's spending", titles)
+            self.assertNotIn("Solve one algorithm problem", titles)
+            self.assertNotIn("Read one chapter", titles)
 
 
 class TimezoneBoundaryTests(TestCase):

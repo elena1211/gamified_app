@@ -17,7 +17,8 @@ const withUnit = (amount, unit) => (unit ? `${amount} ${unit}` : amount);
 
 export function describeTarget(milestone) {
   if (milestone.completion_type === 'cumulative') {
-    return `${milestone.target_count} quest completions`;
+    const count = milestone.target_count;
+    return `${count} quest ${count === 1 ? 'completion' : 'completions'}`;
   }
   if (milestone.completion_type === 'measurable') {
     const direction = milestone.target_direction === 'at_most' ? 'At most' : 'At least';

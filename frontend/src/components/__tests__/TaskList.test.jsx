@@ -12,6 +12,21 @@ const buildTask = (overrides = {}) => ({
 });
 
 describe('TaskList', () => {
+  it('says which milestone a quest serves, and says nothing for a task off the path', () => {
+    render(
+      <TaskList
+        tasks={[
+          buildTask({ id: 1, title: 'Solve one algorithm problem', milestone: { id: 4, position: 2, title: 'Emergency fund' } }),
+          buildTask({ id: 2, title: 'Water the plants' }),
+        ]}
+        onTaskComplete={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Milestone 2 · Emergency fund')).toBeInTheDocument();
+    expect(screen.getAllByText(/^Milestone /)).toHaveLength(1);
+  });
+
   it('completes a task on a single tap, with no confirmation dialog', async () => {
     const onTaskComplete = vi.fn().mockResolvedValue(undefined);
     render(<TaskList tasks={[buildTask()]} onTaskComplete={onTaskComplete} />);

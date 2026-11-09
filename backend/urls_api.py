@@ -16,6 +16,7 @@ urlpatterns = [
     path('tasks/weekly-stats/', views.WeeklyStatsView.as_view(), name='weekly-stats'),
     path('goal/', views.GoalView.as_view(), name='user-goal'),
     path('path/', views.GoalPathView.as_view(), name='goal-path'),
+    path('path/report/', views.GoalReportView.as_view(), name='goal-report'),
     path('path/proposal/', views.PathProposalView.as_view(), name='path-proposal'),
     path('milestones/<int:pk>/', views.MilestoneDetailView.as_view(), name='milestone-detail'),
     path('milestones/<int:pk>/report/', views.MilestoneReportView.as_view(), name='milestone-report'),

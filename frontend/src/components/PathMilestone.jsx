@@ -1,4 +1,5 @@
 import { Check, Lock } from 'lucide-react';
+import MilestoneReportForm from './MilestoneReportForm.jsx';
 import { describeProgress, describeTarget, progressFraction } from '../utils/pathFormat.js';
 
 const STATUS_LABEL = {
@@ -15,7 +16,7 @@ const STATUS_COLOUR = {
 
 // One step of the route. The marker carries the status for sighted readers;
 // the status word is spelled out beside it so it doesn't rest on colour alone.
-export default function PathMilestone({ milestone, isLast }) {
+export default function PathMilestone({ milestone, isLast, onReported }) {
   const { status } = milestone;
   const colour = STATUS_COLOUR[status];
   const progress = describeProgress(milestone);
@@ -75,6 +76,10 @@ export default function PathMilestone({ milestone, isLast }) {
 
         {milestone.completion_type === 'outcome' && progress && (
           <p className="text-sm text-ink-soft mt-2 italic">“{progress}”</p>
+        )}
+
+        {status === 'active' && milestone.completion_type !== 'cumulative' && onReported && (
+          <MilestoneReportForm milestone={milestone} onReported={onReported} />
         )}
       </div>
     </li>
