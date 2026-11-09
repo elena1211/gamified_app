@@ -193,9 +193,21 @@ def preferred_attributes_for_goal(goal_title: str, goal_desc: str = '') -> list:
 class TaskListView(APIView):
     """API view that returns task data from database"""
 
+    # Reading the list now hands out the day's quests, so it writes and takes
+    # the user's row lock like the other write paths.
+    throttle_scope = 'task_write'
+
     def get(self, request):
         user = request.user
         today = timezone.localdate()
+
+        # Opening the app is when the path hands out the day's quests, because
+        # the free tier has no scheduler to do it at midnight.
+        with transaction.atomic():
+            # The row itself isn't needed; the lock it holds until the
+            # transaction ends is, so two visits can't assign the same day.
+            User.objects.select_for_update().get(pk=user.pk)
+            _assign_todays_quests(user)
 
         completed_task_ids = UserTaskLog.objects.filter(
             user=user,
@@ -710,6 +722,105 @@ def _update_path_progress(goal, user):
         milestone.status = wanted[milestone.pk]
         milestone.completed_at = now if milestone.status == Milestone.COMPLETED else None
         milestone.save(update_fields=['status', 'completed_at'])
+    if changed:
+        _retire_todays_unasked_quests(user)
+
+
+def _assignable_quests(user):
+    """The quests the path is asking for right now: those of the milestone
+    being worked on, on a goal still being walked."""
+    return Task.objects.filter(
+        user=user,
+        milestone__status=Milestone.ACTIVE,
+        milestone__goal__user=user,
+        milestone__goal__is_completed=False,
+    )
+
+
+def _retire_todays_unasked_quests(user):
+    """Drop today's assignment for a quest the path no longer asks for.
+
+    Reaching a milestone takes its other quests off the board, and they were
+    never the user's to miss. Only today's assignments are dropped: an earlier
+    day already ended with the quest undone."""
+    UserTaskLog.objects.filter(
+        user=user, status='pending', assigned_at__date=timezone.localdate(),
+    ).exclude(task__in=_assignable_quests(user)).delete()
+
+
+def _assign_todays_quests(user):
+    """Record what the path asked of the user today, and settle what it asked
+    of them before.
+
+    Only the active milestone's quests are assigned: they are what the user
+    agreed to when confirming the path. The random draw on the home screen is
+    re-rolled on request, so it is never held against anyone.
+
+    Nothing writes a pending log but this, so a pending log left from an
+    earlier day went undone, and becomes a missed one. Days the user never
+    opened the app have no logs at all, and stay that way — the System
+    records what it actually asked for, and never invents a day's history.
+
+    The caller holds the user's row lock, so two requests opening the app at
+    once can't both assign the same day."""
+    today = timezone.localdate()
+    quests = _assignable_quests(user)
+
+    # Earlier days are settled first. A day that ended with the quest undone
+    # is a miss, whatever the path does afterwards — otherwise reaching a
+    # milestone this morning would wipe yesterday's record of ignoring it.
+    UserTaskLog.objects.filter(
+        user=user, status='pending', assigned_at__date__lt=today,
+    ).update(status='missed')
+
+    _retire_todays_unasked_quests(user)
+
+    already_logged = set(
+        UserTaskLog.objects.filter(
+            user=user, task__in=quests, assigned_at__date=today,
+        ).values_list('task_id', flat=True)
+    )
+    UserTaskLog.objects.bulk_create([
+        UserTaskLog(user=user, task=quest, status='pending')
+        for quest in quests if quest.id not in already_logged
+    ])
+
+
+def _todays_log(user, task):
+    """This user's log for the task today, whether it is still the pending
+    assignment or already completed."""
+    return UserTaskLog.objects.filter(
+        user=user, task=task, assigned_at__date=timezone.localdate(),
+    ).order_by('pk').first()
+
+
+def _record_completion(user, task, log):
+    """Mark the task done today: the day's assignment if there is one, so the
+    path keeps one log per quest per day rather than a second one."""
+    if log is None:
+        UserTaskLog.objects.create(
+            user=user, task=task, status='completed', completed_at=timezone.now(),
+        )
+        return
+    log.status = 'completed'
+    log.completed_at = timezone.now()
+    log.save(update_fields=['status', 'completed_at'])
+
+
+def _undo_completion(user, task, log):
+    """Take back today's completion. A quest the path is still asking for goes
+    back to pending, because today's assignment stands; anything else loses
+    its log, which is all that recorded it.
+
+    The test is what the path asks for now, not whether the task has a
+    milestone: a quest of a milestone already reached would otherwise be left
+    pending and settle into a miss the path never asked for."""
+    if _assignable_quests(user).filter(pk=task.pk).exists():
+        log.status = 'pending'
+        log.completed_at = None
+        log.save(update_fields=['status', 'completed_at'])
+    else:
+        log.delete()
 
 
 def _quest_progress(task, user):
@@ -760,14 +871,20 @@ def _goal_to_confirm(user):
 
 
 def _has_recorded_work(milestones, user):
-    """Whether these milestones hold history that replacing or retyping them
-    would lose: a milestone reached or its outcome reported, a quest completed
-    or missed, or a value reported. A pending log is only an assignment, not
-    history."""
+    """Whether these milestones hold work that replacing or retyping them
+    would lose: a milestone reached or its outcome reported, a quest
+    completed, or a value reported.
+
+    Work done, not days gone by. An assigned quest that went undone is a
+    pending or missed log, and neither stands in the way of planning again —
+    someone whose path isn't working is exactly who should be able to redraw
+    it. The missed logs go with the quests, which is the price of a fresh
+    start; what was actually done is what the path is held to."""
     return (
         milestones.filter(Q(status=Milestone.COMPLETED) | ~Q(outcome_note='')).exists()
-        or UserTaskLog.objects.filter(user=user, task__milestone__in=milestones)
-        .exclude(status='pending').exists()
+        or UserTaskLog.objects.filter(
+            user=user, task__milestone__in=milestones, status='completed',
+        ).exists()
         or MeasurementReport.objects.filter(
             milestone__in=milestones, milestone__goal__user=user
         ).exists()
@@ -1189,15 +1306,12 @@ class TaskCompleteView(APIView):
                 task_id = request.data.get('task_id')
                 task = Task.objects.get(id=task_id, user=user)
 
-                # Check if task is already completed today
+                # Today's log is the day's assignment once the path has made
+                # one, so completing fills it in rather than adding a second.
                 today = timezone.localdate()
-                existing_log = UserTaskLog.objects.filter(
-                    user=user,
-                    task=task,
-                    status='completed',
-                    completed_at__date=today
-                ).first()
-                complete = not existing_log if completed is None else completed
+                todays_log = _todays_log(user, task)
+                done_today = todays_log is not None and todays_log.status == 'completed'
+                complete = not done_today if completed is None else completed
 
                 # Store old level for level-up detection
                 old_level = user.level
@@ -1208,30 +1322,23 @@ class TaskCompleteView(APIView):
                 if task.difficulty > 1:
                     reward_str += f", +{task.difficulty-1} Discipline"
 
-                if complete and existing_log:
+                if complete and done_today:
                     message = "Task already completed today"
-                elif not complete and not existing_log:
+                elif not complete and not done_today:
                     message = "Task is not completed today"
-                elif existing_log:
+                elif done_today:
                     # Subtract EXP when uncompleting
                     exp_lost = calculate_task_exp(task)
                     user.exp = max(0, user.exp - exp_lost)
-                    existing_log.delete()
+                    _undo_completion(user, task, todays_log)
                     # Reverse attribute changes so they persist to DB
                     reverse_attribute_changes(user, reward_str)
                     message = "Task marked as incomplete"
                 else:
-                    # Every completion gets its own log. This used to be a
-                    # get_or_create on (user, task), which matched a recurring
-                    # task's log from an earlier day: today's completion was
-                    # never recorded, so the streak stood still and the task
-                    # could be completed again and again for EXP.
-                    UserTaskLog.objects.create(
-                        user=user,
-                        task=task,
-                        status='completed',
-                        completed_at=timezone.now(),
-                    )
+                    # One log per task per day, found by the day it was
+                    # assigned — so a recurring task's log from an earlier day
+                    # is never reused, and each day's completion is its own.
+                    _record_completion(user, task, todays_log)
 
                     # Add EXP when completing
                     exp_gained = calculate_task_exp(task)
@@ -1901,21 +2008,11 @@ class DynamicTaskCompleteView(APIView):
                             is_random=True
                         )
 
-                    today = timezone.localdate()
-                    existing_log = UserTaskLog.objects.filter(
-                        user=user,
-                        task=task,
-                        status='completed',
-                        completed_at__date=today
-                    ).first()
+                    todays_log = _todays_log(user, task)
+                    done_today = todays_log is not None and todays_log.status == 'completed'
 
-                    if not existing_log:
-                        UserTaskLog.objects.create(
-                            user=user,
-                            task=task,
-                            status='completed',
-                            completed_at=timezone.now()
-                        )
+                    if not done_today:
+                        _record_completion(user, task, todays_log)
 
                         # Add EXP when completing daily task
                         exp_gained = calculate_task_exp(task)
@@ -2076,7 +2173,7 @@ class DynamicTaskUncompleteView(APIView):
                     new_level = calculate_level_from_exp(user.exp)
                     user.level = new_level
 
-                    completion_log.delete()
+                    _undo_completion(user, task, completion_log)
 
                     # Update user streak
                     user.update_streak()
@@ -2790,8 +2887,17 @@ class PunishmentCheckView(APIView):
     POST /api/system/punishment-check/
     Called once daily on app open. Applies attribute penalty if yesterday was poor.
     """
+    throttle_scope = 'task_write'
+
     def post(self, request):
-        user = request.user
+        # The client retries this on a cold start, and the penalty is applied
+        # from a read of what has already been applied — so two calls that
+        # interleave would both pass the once-a-day check and both deduct.
+        with transaction.atomic():
+            user = User.objects.select_for_update().get(pk=request.user.pk)
+            return self._check(user)
+
+    def _check(self, user):
         today = timezone.localdate()
         yesterday = today - timedelta(days=1)
 
@@ -2805,10 +2911,19 @@ class PunishmentCheckView(APIView):
             return Response({'punishment_applied': False, 'reason': 'already_checked_today'})
 
         # Check yesterday's completion
-        yesterday_logs = UserTaskLog.objects.filter(user=user, assigned_at__date=yesterday)
+        # Only quests of a path count. A task with no milestone also leaves a
+        # log when completed, and counting those would turn any day with one
+        # ad-hoc completion into a perfect day. A quest completed while it
+        # wasn't assigned can't be told apart from an assigned one, and counts
+        # as done — in the user's favour, which is the right way round.
+        yesterday_logs = UserTaskLog.objects.filter(
+            user=user, assigned_at__date=yesterday, task__milestone__isnull=False,
+        )
         total = yesterday_logs.count()
         completed = yesterday_logs.filter(status='completed').count()
 
+        # Nothing assigned means nothing to answer for: a day the user never
+        # opened has no logs at all.
         if total == 0:
             return Response({'punishment_applied': False, 'reason': 'no_tasks_yesterday'})
 
