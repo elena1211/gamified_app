@@ -23,6 +23,7 @@ from rest_framework.views import APIView
 
 from . import path_draft, path_proposal
 from .models import (
+    DailyCheckIn,
     Goal,
     MeasurementReport,
     Milestone,
@@ -1355,7 +1356,7 @@ class TaskCompleteView(APIView):
                 leveled_up = new_level > old_level
 
                 # Update streak after task completion/uncompletion
-                user.update_streak()
+                user.refresh_streak()
 
                 user.save()
 
@@ -1394,10 +1395,53 @@ class TaskCompleteView(APIView):
             return Response({"error": "Could not complete task"}, status=500)
 
 
+class CheckInView(APIView):
+    """POST records that the user turned up today; GET says whether they have.
+
+    Turning up is its own thing, kept apart from the quests: the quests are
+    what the path asked for, and this is only the user coming back. A day
+    with a completed task counts as turning up too, so nobody loses a streak
+    for doing the work without tapping anything."""
+
+    throttle_scope = 'task_write'
+
+    def get(self, request):
+        # Recounted on the way out: a streak that lapsed while the user was
+        # away should say so the moment they look, not once they next finish
+        # something.
+        request.user.refresh_streak()
+        return Response(self._state(request.user, checked_in_now=False))
+
+    def post(self, request):
+        with transaction.atomic():
+            user = User.objects.select_for_update().get(pk=request.user.pk)
+            first_today = user.check_in()
+            return Response(self._state(user, checked_in_now=first_today))
+
+    def _state(self, user, checked_in_now):
+        today = timezone.localdate()
+        return {
+            "checked_in_today": DailyCheckIn.objects.filter(user=user, date=today).exists(),
+            "checked_in_now": checked_in_now,
+            "streak": user.current_streak,
+            "max_streak": user.max_streak,
+            # Whether yesterday is already spent, so the client can warn that
+            # the streak goes if today is missed too.
+            "streak_at_risk": (
+                user.current_streak > 0
+                and today - timedelta(days=1) not in user.days_shown_up(today - timedelta(days=1))
+            ),
+        }
+
+
 class UserStatsView(APIView):
     """API view for user statistics including streak"""
 
     def get(self, request):
+        # The streak is counted from the days the user turned up, so it is
+        # recounted here rather than read from a total that only moves when
+        # something is completed.
+        request.user.refresh_streak()
         user = request.user
         try:
             # Build attribute values from database
@@ -1709,7 +1753,7 @@ class LoginView(APIView):
             user = authenticate(username=username, password=password)
 
             if user:
-                user.update_streak()
+                user.refresh_streak()
                 token, _ = Token.objects.get_or_create(user=user)
                 return Response({
                     "success": True,
@@ -1963,7 +2007,7 @@ class DynamicTaskCompleteView(APIView):
                     leveled_up = new_level > old_level
 
                     # Update user streak
-                    user.update_streak()
+                    user.refresh_streak()
 
                     # Save user changes
                     user.save()
@@ -2040,7 +2084,7 @@ class DynamicTaskCompleteView(APIView):
                         leveled_up = new_level > old_level
 
                         # Update user streak
-                        user.update_streak()
+                        user.refresh_streak()
 
                         # Save user changes
                         user.save()
@@ -2176,7 +2220,7 @@ class DynamicTaskUncompleteView(APIView):
                     _undo_completion(user, task, completion_log)
 
                     # Update user streak
-                    user.update_streak()
+                    user.refresh_streak()
 
                     # Save user changes
                     user.save()

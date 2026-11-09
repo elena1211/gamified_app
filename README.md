@@ -123,7 +123,10 @@ The app is built on a modular Django + React architecture and ships with:
 - Experience points and level system with exponential scaling
 - Visual avatar that evolves across five milestone stages
 - Earned titles (Iron Will, Consistent Scholar, Overachiever, etc.)
-- Streak tracking with max-streak record
+- Daily check-in: one tap records the day, and finishing a quest counts as
+  turning up without it
+- Streak counted from the days the user turned up, with the longest run kept.
+  A single missed day is forgiven; two in a row end the streak
 
 ### System Companion (AI)
 
@@ -182,6 +185,9 @@ default (free, rate-limited), with Anthropic Claude available via `AI_PROVIDER=a
 - **Frontend hosting**: Vercel
 - **Database**: Neon (PostgreSQL)
 - **API retry logic**: automatic backoff on 502/503/504 to handle Render cold starts
+- **Keep-alive**: an external uptime check calls `/health/` every 5 minutes, which
+  keeps the free instance from idling out (750 free instance hours a month covers
+  one service running continuously)
 
 ---
 
@@ -253,9 +259,9 @@ npm test
 
 Both suites run automatically on pushes to `main` and on pull requests targeting `main`, via [GitHub Actions](.github/workflows/ci.yml).
 
-The backend suite runs under `coverage` with a floor configured in `pyproject.toml`, so a drop fails the build rather than going unnoticed. Current backend coverage is **85%** across 205 tests, against a floor of 80%; `views.py`, which holds the API, is at 80%.
+The backend suite runs under `coverage` with a floor configured in `pyproject.toml`, so a drop fails the build rather than going unnoticed. Current backend coverage is **88%** across 311 tests, against a floor of 80%.
 
-The frontend suite runs the same way (`npm run test:coverage`, thresholds in `vite.config.js`). It is at **37%** across 131 tests: the utilities, hooks and app context, the API client's retry and error handling, the sign-in and registration pages, and the shared components are covered; `HomePage` and `TaskManagerPage`, the two largest files, are not yet.
+The frontend suite runs the same way (`npm run test:coverage`, thresholds in `vite.config.js`). It is at **57%** across 189 tests: the utilities, hooks and app context, the API client's retry and error handling, the sign-in and registration pages, the Goal Path screen and draft editor, and the shared components are covered; `TaskManagerPage`, the largest remaining file, is not yet.
 
 Every endpoint has an authentication test — the list is data-driven, so adding a view without protecting it fails the suite rather than reaching production. Cross-user isolation is asserted separately: reads return only the caller's rows, and writes against another user's row are rejected.
 
@@ -336,6 +342,8 @@ every object lookup is scoped to the authenticated owner.
 
 | Method | Endpoint | Description |
 |---|---|---|
+| GET | `/check-in/` | Whether today is already counted, the streak, and whether it is at risk |
+| POST | `/check-in/` | Record that the user turned up today; doing it twice is the same as once |
 | GET | `/user/stats/` | Level, EXP, streak, attributes, join date |
 | GET | `/user/progress/` | Completion rate and task counts |
 
@@ -462,7 +470,7 @@ reviewed change with its reasoning in the message body.
 
 ## Known Limitations
 
-- The Render free tier sleeps after 15 minutes of inactivity; the first request after sleep can take 30–60 seconds. The app retries automatically with exponential backoff.
+- The Render free tier spins down after 15 minutes without traffic, and spinning back up takes about a minute. An external uptime check every 5 minutes keeps the instance awake, so this is only felt if that check stops; the frontend retries with exponential backoff either way.
 - The System companion requires a configured AI provider key (`NVIDIA_API_KEY` by default, or `ANTHROPIC_API_KEY` if `AI_PROVIDER=anthropic`). Without one, the System tab will surface an error message.
 - NVIDIA's free NIM API (the default provider) is rate-limited (~40 requests/minute) and positioned by NVIDIA for prototyping rather than guaranteed production traffic.
 - Authentication uses DRF tokens, which do not expire and cannot yet be revoked server-side (there is no logout endpoint). Rotating refresh tokens are the intended next step; there is no OAuth or social login.
@@ -471,7 +479,7 @@ reviewed change with its reasoning in the message body.
 - The goal is set at registration and cannot be edited afterwards.
 - Day boundaries use a single timezone (`Europe/London`) rather than each user's own, so streaks and the daily reset roll over at UK midnight regardless of where the user is. Per-user timezones are the next step.
 - There is no password reset, and account deletion and data export are not yet implemented — both are prerequisites for opening the app to real users.
-- Backend coverage is 85%; frontend coverage is 37%, with `HomePage` and `TaskManagerPage` still untested — see [Testing](#testing).
+- Backend coverage is 88%; frontend coverage is 57%, with `TaskManagerPage` still untested — see [Testing](#testing).
 
 ---
 

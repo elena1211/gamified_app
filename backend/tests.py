@@ -30,6 +30,7 @@ from rest_framework.test import APIClient
 
 from . import path_draft, path_proposal
 from .models import (
+    DailyCheckIn,
     Goal,
     MeasurementReport,
     Milestone,
@@ -1460,6 +1461,8 @@ class EndpointAuthTests(TestCase):
         ("milestone-report", "post", {"args": [1]}),
         ("goal-report", "post", {}),
         ("path-proposal", "post", {}),
+        ("check-in", "get", {}),
+        ("check-in", "post", {}),
         ("user-stats", "get", {}),
         ("user-progress", "get", {}),
         ("system-chat", "post", {}),
@@ -3605,6 +3608,177 @@ class PunishmentFromAssignmentTests(TestCase):
         self.assertEqual(response.data["reason"], "already_checked_today")
 
 
+class DailyCheckInTests(TestCase):
+    """Turning up is recorded for its own sake, and the streak is counted
+    from the days the user turned up rather than kept as a running total."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(username="returner", password="pw12345")
+        self.client = APIClient()
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=self.user).key}"
+        )
+        self.url = reverse("check-in")
+
+    def _showed_up(self, *days_ago):
+        for days in days_ago:
+            DailyCheckIn.objects.create(
+                user=self.user, date=timezone.localdate() - timedelta(days=days)
+            )
+
+    def _streak(self):
+        self.user.refresh_streak()
+        return self.user.current_streak
+
+    def test_checking_in_records_the_day_and_starts_a_streak(self):
+        response = self.client.post(self.url, {}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["checked_in_today"])
+        self.assertTrue(response.data["checked_in_now"])
+        self.assertEqual(response.data["streak"], 1)
+
+    def test_checking_in_twice_in_a_day_changes_nothing(self):
+        self.client.post(self.url, {}, format="json")
+
+        response = self.client.post(self.url, {}, format="json")
+
+        self.assertFalse(response.data["checked_in_now"])
+        self.assertEqual(response.data["streak"], 1)
+        self.assertEqual(DailyCheckIn.objects.filter(user=self.user).count(), 1)
+
+    def test_reading_the_state_without_checking_in(self):
+        response = self.client.get(self.url)
+
+        self.assertFalse(response.data["checked_in_today"])
+        self.assertEqual(response.data["streak"], 0)
+
+    def test_consecutive_days_build_the_streak(self):
+        self._showed_up(3, 2, 1, 0)
+
+        self.assertEqual(self._streak(), 4)
+
+    def test_one_missed_day_is_forgiven(self):
+        # Showed up two days ago and today, missed yesterday.
+        self._showed_up(2, 0)
+
+        self.assertEqual(self._streak(), 2)
+
+    def test_a_streak_holds_while_today_is_still_open(self):
+        # Turned up two days ago, missed yesterday, nothing yet today. Today
+        # isn't a miss — the day isn't over — and yesterday is the one that
+        # gets forgiven, so the streak is still standing.
+        self._showed_up(2)
+
+        self.assertEqual(self._streak(), 1)
+
+    def test_two_missed_days_in_a_row_break_the_streak(self):
+        self._showed_up(3, 0)
+
+        self.assertEqual(self._streak(), 1)
+
+    def test_today_not_done_yet_does_not_count_against_the_streak(self):
+        # The day isn't over: a streak built yesterday still stands.
+        self._showed_up(2, 1)
+
+        self.assertEqual(self._streak(), 2)
+
+    def test_the_longest_streak_is_kept_once_the_current_one_falls(self):
+        self._showed_up(10, 9, 8)
+        self.user.refresh_streak()
+        self.assertEqual(self.user.max_streak, 3)
+
+        self._showed_up(0)
+
+        self.assertEqual(self._streak(), 1)
+        self.assertEqual(self.user.max_streak, 3)
+
+    def test_the_state_says_when_the_streak_is_about_to_go(self):
+        self._showed_up(2)
+
+        response = self.client.get(self.url)
+
+        self.assertTrue(response.data["streak_at_risk"])
+
+    def test_a_streak_kept_up_is_not_at_risk(self):
+        self._showed_up(1)
+
+        response = self.client.get(self.url)
+
+        self.assertFalse(response.data["streak_at_risk"])
+
+    def test_another_users_check_ins_are_not_counted(self):
+        other = User.objects.create_user(username="someone", password="pw12345")
+        for days in (2, 1, 0):
+            DailyCheckIn.objects.create(user=other, date=timezone.localdate() - timedelta(days=days))
+
+        self.assertEqual(self._streak(), 0)
+
+
+class StreakFromWorkTests(TestCase):
+    """Completing a task counts as turning up, so the streak follows the work
+    as well as the tap — and goes back when the work is undone."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(username="worker", password="pw12345")
+        for name in ["intelligence", "discipline", "energy", "social", "wellness", "stress"]:
+            UserAttribute.objects.create(user=self.user, name=name, value=0)
+        self.client = APIClient()
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=self.user).key}"
+        )
+        self.task = Task.objects.create(
+            user=self.user, title="Focus block", description="", attribute="discipline",
+            reward_point=6, difficulty=1, deadline=timezone.now() + timedelta(days=3650),
+        )
+        self.url = reverse("task-complete")
+
+    def _complete(self, completed):
+        return self.client.post(
+            self.url, {"task_id": self.task.pk, "completed": completed}, format="json"
+        )
+
+    def _streak(self):
+        self.user.refresh_from_db()
+        return self.user.current_streak
+
+    def test_completing_a_task_counts_as_turning_up(self):
+        self._complete(True)
+
+        self.assertEqual(self._streak(), 1)
+        self.assertFalse(DailyCheckIn.objects.filter(user=self.user).exists())
+
+    def test_undoing_the_days_only_completion_takes_the_streak_back(self):
+        # The running total used to be left where it was, so a mis-tap and its
+        # fix bought a streak day that was never earned.
+        self._complete(True)
+        self.assertEqual(self._streak(), 1)
+
+        self._complete(False)
+
+        self.assertEqual(self._streak(), 0)
+        self.assertIsNone(User.objects.get(pk=self.user.pk).last_activity_date)
+
+    def test_undoing_leaves_a_day_that_was_also_checked_in(self):
+        DailyCheckIn.objects.create(user=self.user, date=timezone.localdate())
+        self._complete(True)
+
+        self._complete(False)
+
+        self.assertEqual(self._streak(), 1)
+
+    def test_yesterdays_streak_survives_undoing_today(self):
+        DailyCheckIn.objects.create(user=self.user, date=timezone.localdate() - timedelta(days=1))
+        self._complete(True)
+        self.assertEqual(self._streak(), 2)
+
+        self._complete(False)
+
+        self.assertEqual(self._streak(), 1)
+
+
 class TimezoneBoundaryTests(TestCase):
     """\"Today\" has to mean the user's calendar day. With TIME_ZONE on UTC and
     date.today() reading the server clock, the day rolled over at midnight UTC —
@@ -3718,7 +3892,7 @@ class ConcurrencyTests(TestCase):
         )
         exp_before = self.user.exp
 
-        with mock.patch.object(User, "update_streak", side_effect=RuntimeError("boom")):
+        with mock.patch.object(User, "refresh_streak", side_effect=RuntimeError("boom")):
             response = self.client.post(reverse("task-complete"), {"task_id": task.id}, format="json")
         self.assertEqual(response.status_code, 500)
 

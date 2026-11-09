@@ -28,38 +28,95 @@ class User(AbstractUser):
     def __str__(self):
         return self.username
 
-    def update_streak(self):
-        """Update user's streak based on daily activity (completing at least one task)"""
+    # A single missed day doesn't break the streak; it just doesn't extend it.
+    # Two in a row does. Missing a day already costs the user a penalty, and a
+    # streak that falls to zero on the first slip is one people stop trying to
+    # keep — the point of it is to bring them back tomorrow.
+    STREAK_FORGIVEN_DAYS = 1
+
+    def days_shown_up(self, since):
+        """The days from `since` to today the user turned up: checked in, or
+        completed something, which counts as turning up without the tap."""
+        checked_in = DailyCheckIn.objects.filter(
+            user=self, date__gte=since,
+        ).values_list('date', flat=True)
+        completed = UserTaskLog.objects.filter(
+            user=self, status='completed', completed_at__date__gte=since,
+        ).dates('completed_at', 'day')
+        return set(checked_in) | set(completed)
+
+    def refresh_streak(self):
+        """Work the streak out from the days the user turned up, and store it.
+
+        Counted rather than incremented: a completion that is undone stops
+        counting on its own, where a running total would have to be told to
+        go back down, and wouldn't be.
+        """
         today = timezone.localdate()
+        # Far enough back to find the start of any streak worth showing, and
+        # bounded so this stays one query however long the account has run.
+        window = 400
+        shown_up = self.days_shown_up(today - timedelta(days=window))
 
-        # Check if any task was completed today
-        completed_today = UserTaskLog.objects.filter(
-            user=self,
-            status='completed',
-            completed_at__date=today
-        ).count()
+        streak = 0
+        longest = 0
+        run = 0
+        missed_in_a_row = 0
+        counting = True
+        day = today
+        while day > today - timedelta(days=window):
+            if day in shown_up:
+                run += 1
+                longest = max(longest, run)
+                missed_in_a_row = 0
+                if counting:
+                    streak += 1
+            else:
+                missed_in_a_row += 1
+                # Today not being done yet is never a miss: the day isn't over.
+                if day == today:
+                    missed_in_a_row = 0
+                elif missed_in_a_row > self.STREAK_FORGIVEN_DAYS:
+                    # The current streak ends here, but keep walking: the
+                    # longest run is read from the whole window, so a streak
+                    # that lapsed is still remembered.
+                    counting = False
+                    run = 0
+            day -= timedelta(days=1)
 
-        has_activity_today = completed_today > 0
+        self.current_streak = streak
+        # Older than the window, only the stored figure remembers it.
+        self.max_streak = max(self.max_streak, longest)
+        self.last_activity_date = max(shown_up) if shown_up else None
+        self.save(update_fields=['current_streak', 'max_streak', 'last_activity_date'])
+        return self.current_streak
 
-        # Update streak logic based on daily activity
-        if has_activity_today:
-            # User has activity today
-            if self.last_activity_date == today - timedelta(days=1):
-                # Consecutive day - increment streak
-                self.current_streak += 1
-            elif self.last_activity_date != today:
-                # Either first day or gap in activity - reset streak to 1
-                self.current_streak = 1
+    def check_in(self):
+        """Record that the user turned up today. Doing it twice is the same as
+        doing it once."""
+        _, created = DailyCheckIn.objects.get_or_create(user=self, date=timezone.localdate())
+        self.refresh_streak()
+        return created
 
-            # Update max streak if current streak is higher
-            if self.current_streak > self.max_streak:
-                self.max_streak = self.current_streak
+class DailyCheckIn(models.Model):
+    """One row per day the user turned up. Separate from the quests, which
+    are what they set out to do: this only records that they came back."""
 
-            self.last_activity_date = today
-            self.save()
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='check_ins')
+    date = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
 
-        # Note: We don't decrement streak here because missing a day will naturally break the streak
-        # when the user next completes a task (if it's not consecutive)
+    class Meta:
+        verbose_name = "Daily Check-in"
+        verbose_name_plural = "Daily Check-ins"
+        ordering = ['-date']
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'date'], name='one_check_in_per_day'),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} - {self.date}"
+
 
 # Model to store various attributes for a user
 class UserAttribute(models.Model):
