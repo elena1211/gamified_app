@@ -21,6 +21,7 @@ export const API_ENDPOINTS = {
   weeklyStats: `${API_BASE}/tasks/weekly-stats/`,
 
   // User
+  checkIn: `${API_BASE}/check-in/`,
   userStats: `${API_BASE}/user/stats/`,
   userProgress: `${API_BASE}/user/progress/`,
 

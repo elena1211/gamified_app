@@ -9,6 +9,7 @@ import MainGoal from "../components/MainGoal";
 import TimeLimitedTaskPopup from "../components/TimeLimitedTaskPopup";
 import Modal from "../components/Modal";
 import WeeklyTaskStats from "../components/WeeklyTaskStats";
+import DailyCheckIn from "../components/DailyCheckIn";
 import LevelUpModal from "../components/LevelUpModal";
 import AnimatedNumber from "../components/AnimatedNumber";
 import SystemAlert from "../components/SystemAlert";
@@ -833,6 +834,13 @@ export default function HomePage({
 
         {/* Main Goal */}
         <MainGoal currentUser={currentUser} />
+
+        <DailyCheckIn
+          onCheckedIn={(state) => {
+            updateUserStats({ currentStreak: state.streak });
+            setUser((prev) => ({ ...prev, streak: state.streak }));
+          }}
+        />
 
         {!hasPath && (
           <div className="rpg-window px-5 py-4 text-center">
