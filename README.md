@@ -133,7 +133,7 @@ default (free, rate-limited), with Anthropic Claude available via `AI_PROVIDER=a
 - **Morning Brief** — generates 2–3 contextual missions for the day based on the user's goal, current stats, and recent completion rate
 - **Evening Evaluation** — reviews today's performance and issues a bonus or penalty mission
 - **Free Chat** — the user describes their current situation and the System generates relevant missions
-- **Punishment Check** (not yet active) — on app open, the app asks the backend to apply a stat penalty and create a Redemption Quest if yesterday's completion rate was below 30%; see [Known Limitations](#known-limitations)
+- **Punishment Check** — on app open, the app asks the backend to apply a stat penalty and create a Redemption Quest if fewer than 30% of yesterday's assigned quests were completed
 - **Personality Archetypes** — each user is randomly assigned a System personality (logical, mentor, tsundere, or drill sergeant) that shapes tone
 
 ### Onboarding and Accessibility
@@ -355,7 +355,7 @@ every object lookup is scoped to the authenticated owner.
 | POST | `/system/chat/` | Generate missions via the configured AI provider |
 | GET | `/system/messages/` | Last 10 system log entries |
 | GET | `/system/daily-status/` | Unread count, active title, morning-brief flag |
-| POST | `/system/punishment-check/` | Daily punishment check if yesterday's rate < 30% (not yet triggered, see [Known Limitations](#known-limitations)) |
+| POST | `/system/punishment-check/` | Daily punishment check if yesterday's rate < 30% |
 
 #### `/system/chat/` request body
 
@@ -467,7 +467,7 @@ reviewed change with its reasoning in the message body.
 - NVIDIA's free NIM API (the default provider) is rate-limited (~40 requests/minute) and positioned by NVIDIA for prototyping rather than guaranteed production traffic.
 - Authentication uses DRF tokens, which do not expire and cannot yet be revoked server-side (there is no logout endpoint). Rotating refresh tokens are the intended next step; there is no OAuth or social login.
 - Guest accounts are created on the server with a random ID and no password the guest knows; the sign-in token saved in the browser is the only way back in until the guest upgrades in Settings. Guest accounts are intended for trying the demo, not for real data.
-- The daily punishment check never triggers yet: it compares yesterday's assigned and completed task logs, but a log is only written when a task is completed, so the completion rate never falls below 30%. Penalty missions from the evening evaluation are unaffected.
+- Only a Goal Path's daily quests are assigned, and only on a day the app is opened. A day nobody opened has no record, so it is never counted against the user, and a quest deleted after the fact takes its record with it.
 - The goal is set at registration and cannot be edited afterwards.
 - Day boundaries use a single timezone (`Europe/London`) rather than each user's own, so streaks and the daily reset roll over at UK midnight regardless of where the user is. Per-user timezones are the next step.
 - There is no password reset, and account deletion and data export are not yet implemented — both are prerequisites for opening the app to real users.

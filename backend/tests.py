@@ -891,21 +891,6 @@ class RecurringTaskCompletionTests(TestCase):
 
         self.assertEqual(self.user.current_streak, 2)
 
-    def test_the_completion_day_comes_from_when_it_was_completed(self):
-        # assigned_at and completed_at are always equal in practice, so this
-        # separates them on purpose: only completed_at decides whether the
-        # task is already done today.
-        self._complete()
-        UserTaskLog.objects.filter(task=self.task).update(
-            completed_at=timezone.now() - timedelta(days=1),
-        )
-
-        self._complete()
-
-        self.assertEqual(
-            UserTaskLog.objects.filter(task=self.task, status="completed").count(), 2
-        )
-
     def test_a_task_done_yesterday_cannot_be_farmed_for_exp_today(self):
         self._complete()
         one_grant = self.user.exp
@@ -1676,11 +1661,22 @@ class PunishmentCheckTests(TestCase):
         )
         self.url = reverse("system-punishment-check")
         self.yesterday = timezone.now() - timedelta(days=1)
+        # Quests of a path, because only what the path assigned is answered
+        # for. A hand-made log on a task with no milestone is a state the app
+        # never reaches.
+        goal = Goal.objects.create(
+            user=self.user, title="First software engineer job", description="",
+            path_confirmed_at=timezone.now(),
+        )
+        self.milestone = Milestone.objects.create(
+            goal=goal, position=1, title="Programming fundamentals", status=Milestone.ACTIVE,
+        )
 
     def _task(self, title):
         return Task.objects.create(
             user=self.user, title=title, description="", attribute="discipline",
             reward_point=4, difficulty=1, deadline=timezone.now() + timedelta(days=1),
+            milestone=self.milestone,
         )
 
     def _log_yesterday(self, title, status):
@@ -1701,7 +1697,7 @@ class PunishmentCheckTests(TestCase):
     def test_a_good_day_is_not_punished(self):
         for i in range(4):
             self._log_yesterday(f"done {i}", "completed")
-        self._log_yesterday("missed", "pending")
+        self._log_yesterday("left undone", "pending")
 
         response = self.client.post(self.url, {}, format="json")
         self.assertFalse(response.data["punishment_applied"])
@@ -2587,12 +2583,14 @@ class GoalPathConfirmTests(TestCase):
         self.assertEqual(Goal.objects.get(user=self.user).title, "First software engineer job")
         self.assertEqual(Milestone.objects.get(position=1).title, "Programming fundamentals")
 
-    def test_a_missed_quest_counts_as_progress(self):
+    def test_a_missed_quest_does_not_stand_in_the_way_of_a_new_plan(self):
+        # A day gone by is not work done. Someone whose path isn't working is
+        # exactly who should be able to draw a new one.
         self._confirm()
         quest = Task.objects.get(user=self.user, title="Solve one algorithm problem")
         UserTaskLog.objects.create(user=self.user, task=quest, status="missed")
 
-        self.assertEqual(self._confirm().status_code, 409)
+        self.assertEqual(self._confirm().status_code, 200)
 
     def test_a_pending_quest_does_not_count_as_progress(self):
         # Pending only means assigned; re-planning must still be possible.
@@ -3312,6 +3310,299 @@ class QuestsOnTodaysListTests(TestCase):
             self.assertIn("Log today's spending", titles)
             self.assertNotIn("Solve one algorithm problem", titles)
             self.assertNotIn("Read one chapter", titles)
+
+
+class DailyQuestAssignmentTests(TestCase):
+    """Opening the app records what the path asked of the user today, so what
+    they didn't do can be seen the next day."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(username="assignee", password="pw12345")
+        self.client = APIClient()
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=self.user).key}"
+        )
+        confirmed = self.client.put(reverse("goal-path"), draft_body(daily_quests=[
+            {"title": "Solve one algorithm problem", "attribute": "intelligence", "milestone": 1},
+            {"title": "Log today's spending", "attribute": "discipline", "milestone": 2},
+        ]), format="json")
+        self.assertEqual(confirmed.status_code, 200)
+        self.quest = Task.objects.get(user=self.user, title="Solve one algorithm problem")
+
+    def _open_app(self):
+        return self.client.get(reverse("task-list"))
+
+    def _logs(self, **filters):
+        return UserTaskLog.objects.filter(user=self.user, **filters)
+
+    def _move_to_yesterday(self):
+        yesterday = timezone.now() - timedelta(days=1)
+        self._logs().update(assigned_at=yesterday)
+
+    def _make_active(self, position):
+        """Walk the path to this milestone. The old active one steps down
+        first: the database allows one active milestone per goal."""
+        milestones = Milestone.objects.filter(goal__user=self.user)
+        milestones.exclude(position=position).update(status=Milestone.COMPLETED)
+        milestones.filter(position=position).update(status=Milestone.ACTIVE)
+
+    def test_opening_the_app_assigns_the_active_milestones_quests(self):
+        self._open_app()
+
+        assigned = self._logs(status="pending")
+        self.assertEqual([log.task.title for log in assigned], ["Solve one algorithm problem"])
+
+    def test_a_locked_milestones_quest_is_not_assigned(self):
+        self._open_app()
+        self.assertFalse(self._logs(task__title="Log today's spending").exists())
+
+    def test_opening_the_app_again_does_not_assign_the_same_day_twice(self):
+        self._open_app()
+        self._open_app()
+        self._open_app()
+
+        self.assertEqual(self._logs(task=self.quest).count(), 1)
+
+    def test_a_quest_left_undone_yesterday_becomes_missed(self):
+        self._open_app()
+        self._move_to_yesterday()
+
+        self._open_app()
+
+        self.assertEqual(self._logs(status="missed").count(), 1)
+        # And today gets its own assignment.
+        self.assertEqual(self._logs(status="pending").count(), 1)
+
+    def test_a_quest_completed_yesterday_stays_completed(self):
+        self._open_app()
+        self.client.post(reverse("task-complete"), {"task_id": self.quest.pk, "completed": True}, format="json")
+        self._move_to_yesterday()
+
+        self._open_app()
+
+        self.assertEqual(self._logs(status="completed").count(), 1)
+        self.assertEqual(self._logs(status="missed").count(), 0)
+
+    def test_a_day_the_user_never_opened_leaves_no_history(self):
+        # The System records what it actually asked for. Inventing an
+        # assignment for a day nobody saw would punish an unseen quest.
+        self._open_app()
+        self._logs().update(assigned_at=timezone.now() - timedelta(days=3))
+
+        self._open_app()
+
+        today = timezone.localdate()
+        for days_ago in (1, 2):
+            skipped = today - timedelta(days=days_ago)
+            self.assertFalse(
+                self._logs(assigned_at__date=skipped).exists(),
+                f"a day the user never opened was given history: {skipped}",
+            )
+        self.assertTrue(self._logs(assigned_at__date=today, status="pending").exists())
+
+    def test_completing_fills_the_days_assignment_rather_than_adding_a_log(self):
+        self._open_app()
+
+        self.client.post(reverse("task-complete"), {"task_id": self.quest.pk, "completed": True}, format="json")
+
+        logs = self._logs(task=self.quest)
+        self.assertEqual(logs.count(), 1)
+        self.assertEqual(logs.first().status, "completed")
+
+    def test_undoing_puts_an_assigned_quest_back_to_pending(self):
+        self._open_app()
+        self.client.post(reverse("task-complete"), {"task_id": self.quest.pk, "completed": True}, format="json")
+
+        self.client.post(reverse("task-complete"), {"task_id": self.quest.pk, "completed": False}, format="json")
+
+        logs = self._logs(task=self.quest)
+        self.assertEqual(logs.count(), 1)
+        self.assertEqual(logs.first().status, "pending")
+        self.assertIsNone(logs.first().completed_at)
+
+    def test_undoing_a_task_off_the_path_removes_its_log(self):
+        chore = Task.objects.create(
+            user=self.user, title="Water the plants", description="", attribute="wellness",
+            reward_point=2, difficulty=1, deadline=timezone.now() + timedelta(days=1),
+        )
+        self.client.post(reverse("task-complete"), {"task_id": chore.pk, "completed": True}, format="json")
+
+        self.client.post(reverse("task-complete"), {"task_id": chore.pk, "completed": False}, format="json")
+
+        self.assertFalse(self._logs(task=chore).exists())
+
+    def test_the_home_screen_endpoints_fill_the_same_assignment(self):
+        self._open_app()
+        dynamic = {"task_title": "Solve one algorithm problem", "task_type": "daily",
+                   "reward_points": 1, "attribute": "intelligence"}
+
+        self.client.post(reverse("dynamic-task-complete"), dynamic, format="json")
+        self.assertEqual(self._logs(task=self.quest).count(), 1)
+        self.assertEqual(self._logs(task=self.quest).first().status, "completed")
+
+        self.client.post(reverse("dynamic-task-uncomplete"),
+                         {"task_title": "Solve one algorithm problem"}, format="json")
+        self.assertEqual(self._logs(task=self.quest).count(), 1)
+        self.assertEqual(self._logs(task=self.quest).first().status, "pending")
+
+    def test_quests_of_a_reached_goal_are_no_longer_assigned(self):
+        # Undoing a quest after the goal was reported puts a milestone back to
+        # active under a goal that is already reached. Its quests are finished
+        # with either way, so the path stops asking for them.
+        Goal.objects.filter(user=self.user).update(is_completed=True)
+        self.assertEqual(
+            Milestone.objects.get(goal__user=self.user, position=1).status, Milestone.ACTIVE
+        )
+
+        self._open_app()
+
+        self.assertFalse(self._logs().exists())
+
+    def test_a_quest_the_path_took_back_is_not_a_miss(self):
+        # Reaching a milestone takes its other quests off the board the moment
+        # it happens. They were assigned that morning, and must not settle
+        # into misses the user is then punished for.
+        first = Milestone.objects.get(goal__user=self.user, position=1)
+        Milestone.objects.filter(pk=first.pk).update(target_count=1)
+        sibling = Task.objects.create(
+            user=self.user, title="Read one chapter", description="", attribute="intelligence",
+            reward_point=3, difficulty=1, deadline=timezone.now() + timedelta(days=3650),
+            milestone=first, mission_type="daily",
+        )
+        self._open_app()
+        self.assertEqual(self._logs(status="pending").count(), 2)
+
+        # Completing this one reaches the milestone, so the other is no longer
+        # asked for today.
+        self.client.post(reverse("task-complete"), {"task_id": self.quest.pk, "completed": True}, format="json")
+
+        self.assertFalse(self._logs(task=sibling).exists())
+        self._move_to_yesterday()
+        self._open_app()
+        self.assertEqual(self._logs(status="missed").count(), 0)
+
+    def test_a_day_that_ended_undone_stays_missed_even_if_the_path_moves_on(self):
+        # The counterpart: forgiving an earlier day because the path moved
+        # today would let anyone dodge the penalty by reporting a milestone
+        # before opening the app.
+        self._open_app()
+        self._move_to_yesterday()
+        self._make_active(2)
+
+        self._open_app()
+
+        self.assertEqual(self._logs(task=self.quest, status="missed").count(), 1)
+
+    def test_todays_assignment_survives_a_second_visit(self):
+        # The settle looks at earlier days only. Reading it as "today too"
+        # would turn every second home load into a miss.
+        self._open_app()
+
+        self._open_app()
+
+        self.assertEqual(self._logs(status="pending").count(), 1)
+        self.assertEqual(self._logs(status="missed").count(), 0)
+
+    def test_undoing_a_quest_the_path_no_longer_asks_for_drops_its_log(self):
+        # Completed through the home screen while its milestone was active,
+        # then the path moved on. Undoing it must not leave a pending log to
+        # settle into a miss.
+        self._open_app()
+        self.client.post(reverse("task-complete"), {"task_id": self.quest.pk, "completed": True}, format="json")
+        Milestone.objects.filter(goal__user=self.user, position=1).update(status=Milestone.COMPLETED)
+
+        self.client.post(reverse("task-complete"), {"task_id": self.quest.pk, "completed": False}, format="json")
+
+        self.assertFalse(self._logs(task=self.quest).exists())
+
+    def test_another_users_quests_are_not_assigned(self):
+        other = User.objects.create_user(username="stranger", password="pw12345")
+        self._open_app()
+
+        self.assertFalse(UserTaskLog.objects.filter(user=other).exists())
+
+
+class PunishmentFromAssignmentTests(TestCase):
+    """With the day's quests recorded, yesterday's completion rate is real,
+    so the daily penalty can finally fire."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(username="slacker", password="pw12345")
+        for name in ["intelligence", "discipline", "energy", "social", "wellness", "stress"]:
+            UserAttribute.objects.create(user=self.user, name=name, value=50)
+        self.client = APIClient()
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=self.user).key}"
+        )
+        confirmed = self.client.put(reverse("goal-path"), draft_body(daily_quests=[
+            {"title": "Solve one algorithm problem", "attribute": "intelligence", "milestone": 1},
+        ]), format="json")
+        self.assertEqual(confirmed.status_code, 200)
+        self.quest = Task.objects.get(user=self.user, title="Solve one algorithm problem")
+
+    def _assigned_yesterday(self, status):
+        yesterday = timezone.now() - timedelta(days=1)
+        log = UserTaskLog.objects.create(user=self.user, task=self.quest, status=status)
+        UserTaskLog.objects.filter(pk=log.pk).update(
+            assigned_at=yesterday,
+            completed_at=yesterday if status == "completed" else None,
+        )
+
+    def _check(self):
+        return self.client.post(reverse("system-punishment-check"), {}, format="json")
+
+    def test_a_missed_quest_yesterday_is_punished(self):
+        self._assigned_yesterday("missed")
+
+        response = self._check()
+
+        self.assertTrue(response.data["punishment_applied"])
+        self.assertEqual(response.data["severity"], "heavy")
+        discipline = UserAttribute.objects.get(user=self.user, name="discipline")
+        self.assertEqual(discipline.value, 45)
+
+    def test_a_quest_done_yesterday_is_not_punished(self):
+        self._assigned_yesterday("completed")
+
+        response = self._check()
+
+        self.assertFalse(response.data["punishment_applied"])
+        self.assertEqual(response.data["reason"], "good_performance")
+
+    def test_a_day_with_nothing_assigned_is_not_punished(self):
+        response = self._check()
+
+        self.assertFalse(response.data["punishment_applied"])
+        self.assertEqual(response.data["reason"], "no_tasks_yesterday")
+
+    def test_a_task_off_the_path_does_not_excuse_a_missed_quest(self):
+        # An ad-hoc completion leaves a log too; counting it would turn any
+        # day with one into a perfect day.
+        self._assigned_yesterday("missed")
+        chore = Task.objects.create(
+            user=self.user, title="Water the plants", description="", attribute="wellness",
+            reward_point=2, difficulty=1, deadline=timezone.now() + timedelta(days=1),
+        )
+        log = UserTaskLog.objects.create(
+            user=self.user, task=chore, status="completed", completed_at=timezone.now(),
+        )
+        UserTaskLog.objects.filter(pk=log.pk).update(assigned_at=timezone.now() - timedelta(days=1))
+
+        self.assertTrue(self._check().data["punishment_applied"])
+
+    def test_the_penalty_falls_once_a_day(self):
+        # Sequentially. Two calls that interleave are held apart by the user
+        # row lock instead, which a test can't show reliably here: Django wraps
+        # each test in a transaction, so threads wouldn't see each other's rows.
+        self._assigned_yesterday("missed")
+        self._check()
+
+        response = self._check()
+
+        self.assertFalse(response.data["punishment_applied"])
+        self.assertEqual(response.data["reason"], "already_checked_today")
 
 
 class TimezoneBoundaryTests(TestCase):
