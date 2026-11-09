@@ -30,6 +30,7 @@ const outcome = (changes = {}) => ({
 describe('describeTarget', () => {
   it('counts completions for a cumulative milestone', () => {
     expect(describeTarget(cumulative())).toBe('40 quest completions');
+    expect(describeTarget(cumulative({ target_count: 1 }))).toBe('1 quest completion');
   });
 
   it('reads a measurable target in its own direction and unit', () => {

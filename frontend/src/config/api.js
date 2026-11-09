@@ -30,6 +30,8 @@ export const API_ENDPOINTS = {
   // Goal Path
   goalPath: `${API_BASE}/path/`,
   pathProposal: `${API_BASE}/path/proposal/`,
+  goalReport: `${API_BASE}/path/report/`,
+  milestoneReport: (id) => `${API_BASE}/milestones/${id}/report/`,
 
   // System / AI
   systemChat: `${API_BASE}/system/chat/`,

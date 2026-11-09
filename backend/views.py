@@ -11,7 +11,7 @@ from django.contrib.auth.hashers import make_password
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, OperationalError, connection, transaction
-from django.db.models import Count, OuterRef, Q, Subquery
+from django.db.models import Count, F, OuterRef, Q, Subquery
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import status
@@ -206,7 +206,7 @@ class TaskListView(APIView):
         # Exclude time-limited ultra-micro engineering tasks from daily task selection
         all_tasks = list(Task.objects.filter(
             user=user
-        ).exclude(
+        ).select_related('milestone').exclude(
             title__contains='Click VS Code Tab'
         ).exclude(
             title__contains='Press Ctrl+S'
@@ -236,6 +236,15 @@ class TaskListView(APIView):
             and not re.match(r'^\s*\d+\s*$', t.title)
             and not re.search(r' - \d{2}:\d{2}:\d{2}$', t.title)
         ]
+
+        # A path's quests aren't part of the random draw: the quests of the
+        # milestone being worked on are always listed below, and the quests of
+        # milestones further along wait until the path reaches them.
+        active_quests = [
+            task for task in all_tasks
+            if task.milestone_id is not None and task.milestone.status == Milestone.ACTIVE
+        ]
+        all_tasks = [task for task in all_tasks if task.milestone_id is None]
 
         uncompleted_tasks = [task for task in all_tasks if task.id not in completed_task_ids]
         completed_tasks = [task for task in all_tasks if task.id in completed_task_ids]
@@ -283,6 +292,8 @@ class TaskListView(APIView):
             # All tasks are completed, show some completed ones
             selected_tasks = weighted_sample(all_tasks, num_tasks)
 
+        selected_tasks = active_quests + selected_tasks
+
         tasks = []
         for task in selected_tasks:
             # Calculate reward string
@@ -302,7 +313,14 @@ class TaskListView(APIView):
                 "reward_point": task.reward_point,
                 "completed": is_completed,
                 "difficulty": task.difficulty,
-                "attribute": task.attribute
+                "attribute": task.attribute,
+                # Which step of the path this quest belongs to, so the list can
+                # say what the work is for. None for a task off the path.
+                "milestone": {
+                    "id": task.milestone.id,
+                    "position": task.milestone.position,
+                    "title": task.milestone.title,
+                } if task.milestone_id is not None else None,
             })
 
         return Response(tasks)
@@ -634,6 +652,7 @@ def _serialize_milestone(milestone):
 def _serialize_path(goal, user):
     return {
         "confirmed_at": goal.path_confirmed_at.isoformat(),
+        "reached": goal.is_completed,
         "goal": {
             "id": goal.id,
             "title": goal.title,
@@ -696,7 +715,11 @@ def _update_path_progress(goal, user):
 def _quest_progress(task, user):
     """After a quest's completion changes: update its path and return its
     milestone as the client should now show it, or None for a task that
-    isn't on a path."""
+    isn't on a path.
+
+    `just_reached` says this completion is what reached the milestone, so the
+    client celebrates it once rather than on every later quest under a
+    milestone that was already behind the user."""
     if task.milestone_id is None:
         return None
     milestone = Milestone.objects.select_related('goal').filter(
@@ -704,8 +727,11 @@ def _quest_progress(task, user):
     ).first()
     if milestone is None:
         return None
+    was_reached = milestone.status == Milestone.COMPLETED
     _update_path_progress(milestone.goal, user)
-    return _serialize_milestone(_path_milestones(milestone.goal, user).get(pk=milestone.pk))
+    progress = _serialize_milestone(_path_milestones(milestone.goal, user).get(pk=milestone.pk))
+    progress["just_reached"] = progress["status"] == Milestone.COMPLETED and not was_reached
+    return progress
 
 
 class PathRejected(Exception):
@@ -798,6 +824,18 @@ class GoalPathView(APIView):
             goal = Goal.objects.filter(
                 user=request.user, is_completed=False, path_confirmed_at__isnull=False,
             ).first()
+            if goal is None:
+                # A goal that has been reached keeps its path on screen until a
+                # new one is confirmed, rather than the account reading as if it
+                # never had one.
+                goal = Goal.objects.filter(
+                    user=request.user, is_completed=True, path_confirmed_at__isnull=False,
+                ).order_by(
+                    # PostgreSQL sorts nulls first on a descending order, so a
+                    # goal completed before this endpoint recorded a time would
+                    # otherwise mask every goal that has one.
+                    F('completed_at').desc(nulls_last=True), '-pk',
+                ).first()
             if goal is None:
                 return Response({"path": None})
             return Response({"path": _serialize_path(goal, request.user)})
@@ -999,6 +1037,45 @@ class MilestoneReportView(APIView):
                 "reached": milestone.status == Milestone.COMPLETED,
                 "path": _serialize_path(milestone.goal, user),
             })
+
+
+class GoalReportView(APIView):
+    """POST reports that the goal itself has been reached, once every
+    milestone on its path has been.
+
+    The System can see the milestones are done, but only the user can say the
+    goal is: the last step of a path is usually the goal in other words, and
+    reaching it is theirs to declare."""
+
+    throttle_scope = 'task_write'
+
+    def post(self, request):
+        with transaction.atomic():
+            user = User.objects.select_for_update().get(pk=request.user.pk)
+            goal = Goal.objects.filter(
+                user=user, is_completed=False, path_confirmed_at__isnull=False,
+            ).first()
+            if goal is None:
+                return Response({"error": "You don't have a path to report"}, status=404)
+
+            milestones = list(_path_milestones(goal, user))
+            if any(milestone.status != Milestone.COMPLETED for milestone in milestones):
+                return Response(
+                    {"error": "Every milestone has to be reached before the goal is"},
+                    status=409,
+                )
+
+            try:
+                report = path_draft.validate_report(Goal.OUTCOME, request.data)
+            except path_draft.DraftError as exc:
+                return Response({"error": str(exc)}, status=400)
+
+            goal.outcome_note = report["note"]
+            goal.completed_at = timezone.now()
+            goal.is_completed = True
+            goal.save(update_fields=['outcome_note', 'completed_at', 'is_completed'])
+
+            return Response({"path": _serialize_path(goal, user)})
 
 
 class PathProposalView(APIView):

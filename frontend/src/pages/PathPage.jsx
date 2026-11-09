@@ -1,9 +1,59 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Map } from 'lucide-react';
+import { Map, Trophy } from 'lucide-react';
 import { API_ENDPOINTS, apiRequest } from '../config/api.js';
 import BottomNav from '../components/BottomNav.jsx';
 import PathDraftEditor from '../components/PathDraftEditor.jsx';
 import PathMilestone from '../components/PathMilestone.jsx';
+
+// The last thing on a path is the goal itself. The System can see every
+// milestone is reached, but saying the goal is reached belongs to the user.
+function GoalReportForm({ onReported }) {
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const send = async () => {
+    if (saving) return;
+    setError('');
+    setSaving(true);
+    try {
+      const { data } = await apiRequest(API_ENDPOINTS.goalReport, {
+        method: 'POST',
+        body: JSON.stringify({ note: note.trim() }),
+      });
+      onReported(data.path);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rpg-window px-5 py-4">
+      <h2 className="rpg-header -mx-5 -mt-4 mb-3">Every milestone reached</h2>
+      <label htmlFor="goal-report-note" className="block text-xs uppercase tracking-wider text-ink-soft mb-1">
+        Have you reached the goal itself? Say what happened
+      </label>
+      <input
+        id="goal-report-note"
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        maxLength={300}
+        autoComplete="off"
+        className="rpg-input w-full mb-2"
+      />
+      {error && (
+        <p className="text-sm mb-2" style={{ color: 'var(--accent-rust)' }} role="alert">
+          {error}
+        </p>
+      )}
+      <button onClick={send} disabled={saving} className="rpg-btn-gold w-full">
+        {saving ? 'Reporting…' : 'I have reached it'}
+      </button>
+    </div>
+  );
+}
 
 export default function PathPage({ onNavigateToHome, onNavigateToTaskManager, onNavigateToSettings }) {
   const [path, setPath] = useState(null);
@@ -34,6 +84,9 @@ export default function PathPage({ onNavigateToHome, onNavigateToTaskManager, on
     setPath(confirmed);
     setEditing(false);
   };
+
+  const everyMilestoneReached =
+    path && !path.reached && path.milestones.every((milestone) => milestone.status === 'completed');
 
   return (
     <div className="paper-bg min-h-screen pb-24 page-enter">
@@ -84,10 +137,16 @@ export default function PathPage({ onNavigateToHome, onNavigateToTaskManager, on
         {!loading && !error && !editing && path && (
           <>
             <div className="rpg-window px-5 py-4">
-              <div className="rpg-header -mx-5 -mt-4 mb-3">Goal</div>
+              <div className="rpg-header -mx-5 -mt-4 mb-3">{path.reached ? 'Goal reached' : 'Goal'}</div>
+              {path.reached && (
+                <Trophy className="w-6 h-6 mb-2" style={{ color: 'var(--accent-gold-deep)' }} aria-hidden />
+              )}
               <h2 className="font-display text-lg text-ink">{path.goal.title}</h2>
               {path.goal.description && (
                 <p className="text-sm text-ink-soft mt-1">{path.goal.description}</p>
+              )}
+              {path.reached && path.goal.outcome_note && (
+                <p className="text-sm text-ink-soft mt-2 italic">“{path.goal.outcome_note}”</p>
               )}
             </div>
 
@@ -99,15 +158,20 @@ export default function PathPage({ onNavigateToHome, onNavigateToTaskManager, on
                   key={milestone.id}
                   milestone={milestone}
                   isLast={index === path.milestones.length - 1}
+                  onReported={path.reached ? undefined : (reported) => setPath(reported.path)}
                 />
               ))}
             </ol>
 
+            {everyMilestoneReached && <GoalReportForm onReported={setPath} />}
+
             <button onClick={() => setEditing(true)} className="rpg-btn-secondary w-full">
-              Draft a new path
+              {path.reached ? 'Set your next goal' : 'Draft a new path'}
             </button>
             <p className="text-xs text-ink-mute text-center">
-              A new path replaces this one, until it has progress behind it.
+              {path.reached
+                ? 'This path stays here until you set the next one.'
+                : 'A new path replaces this one, until it has progress behind it.'}
             </p>
           </>
         )}

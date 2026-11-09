@@ -5,12 +5,21 @@ import PathPage from '../PathPage';
 const apiRequest = vi.hoisted(() => vi.fn());
 vi.mock('../../config/api.js', () => ({
   apiRequest,
-  API_ENDPOINTS: { goalPath: '/path/', pathProposal: '/path/proposal/' },
+  API_ENDPOINTS: {
+    goalPath: '/path/',
+    pathProposal: '/path/proposal/',
+    goalReport: '/path/report/',
+    milestoneReport: (id) => `/milestones/${id}/report/`,
+  },
 }));
 vi.mock('../../components/BottomNav.jsx', () => ({ default: () => <nav /> }));
 
+const reached = (milestones) =>
+  milestones.map((milestone) => ({ ...milestone, status: 'completed' }));
+
 const PATH = {
   confirmed_at: '2026-09-20T10:00:00Z',
+  reached: false,
   goal: { id: 1, title: 'First software engineer job', description: 'In London' },
   milestones: [
     {
@@ -30,6 +39,95 @@ const PATH = {
     },
   ],
 };
+
+describe('PathPage reporting', () => {
+  beforeEach(() => apiRequest.mockReset());
+
+  it('offers a report on the active milestone only', async () => {
+    apiRequest.mockResolvedValue({ data: { path: PATH } });
+    render(<PathPage />);
+    await screen.findByText('First software engineer job');
+
+    // Milestone 2 is the active one, and it is measurable.
+    expect(screen.getByLabelText('Where are you now (GBP)?')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Reached it? Say what happened')).not.toBeInTheDocument();
+  });
+
+  it('shows the path the report came back with', async () => {
+    apiRequest.mockResolvedValueOnce({ data: { path: PATH } });
+    render(<PathPage />);
+    await screen.findByText('First software engineer job');
+
+    fireEvent.change(screen.getByLabelText('Where are you now (GBP)?'), { target: { value: '2000' } });
+    const moved = {
+      ...PATH,
+      milestones: [
+        PATH.milestones[0],
+        { ...PATH.milestones[1], status: 'completed', progress: { latest_value: '2000.00' } },
+        { ...PATH.milestones[2], status: 'active' },
+      ],
+    };
+    apiRequest.mockResolvedValueOnce({ data: { reached: true, path: moved } });
+    fireEvent.click(screen.getByRole('button', { name: 'Report this reading' }));
+
+    expect(await screen.findByText('2000.00 GBP reported')).toBeInTheDocument();
+    expect(screen.getAllByText('Reached')).toHaveLength(2);
+  });
+
+  it('asks the user to report the goal once every milestone is reached', async () => {
+    apiRequest.mockResolvedValueOnce({
+      data: { path: { ...PATH, milestones: reached(PATH.milestones) } },
+    });
+    render(<PathPage />);
+
+    const note = await screen.findByLabelText('Have you reached the goal itself? Say what happened');
+    fireEvent.change(note, { target: { value: 'Signed the contract' } });
+    apiRequest.mockResolvedValueOnce({
+      data: {
+        path: {
+          ...PATH,
+          reached: true,
+          goal: { ...PATH.goal, outcome_note: 'Signed the contract' },
+          milestones: reached(PATH.milestones),
+        },
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'I have reached it' }));
+
+    expect(await screen.findByText('Goal reached')).toBeInTheDocument();
+    expect(screen.getByText('“Signed the contract”')).toBeInTheDocument();
+  });
+
+  it('does not ask about the goal while a milestone is unreached', async () => {
+    apiRequest.mockResolvedValue({ data: { path: PATH } });
+    render(<PathPage />);
+    await screen.findByText('First software engineer job');
+
+    expect(
+      screen.queryByLabelText('Have you reached the goal itself? Say what happened'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps a reached path on screen and offers the next goal instead of a report', async () => {
+    apiRequest.mockResolvedValue({
+      data: {
+        path: {
+          ...PATH,
+          reached: true,
+          goal: { ...PATH.goal, outcome_note: 'Signed the contract' },
+          milestones: reached(PATH.milestones),
+        },
+      },
+    });
+    render(<PathPage />);
+
+    expect(await screen.findByRole('button', { name: 'Set your next goal' })).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText('Have you reached the goal itself? Say what happened'),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Where are you now (GBP)?')).not.toBeInTheDocument();
+  });
+});
 
 describe('PathPage', () => {
   beforeEach(() => apiRequest.mockReset());

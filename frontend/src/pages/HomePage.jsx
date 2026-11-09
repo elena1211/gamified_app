@@ -124,6 +124,10 @@ export default function HomePage({
 
   // Level up modal states
   const [showLevelUpModal, setShowLevelUpModal] = useState(false);
+  // The path, only to know whether to invite the user to create one, and the
+  // milestone a quest just completed, to say so.
+  const [hasPath, setHasPath] = useState(true);
+  const [reachedMilestone, setReachedMilestone] = useState(null);
   const [levelUpData, setLevelUpData] = useState({
     oldLevel: 0,
     newLevel: 0,
@@ -288,6 +292,20 @@ export default function HomePage({
     setLastDismissedTask(null); // Clear saved task data
   };
 
+  useEffect(() => {
+    const loadPath = async () => {
+      try {
+        const { data } = await apiRequest(API_ENDPOINTS.goalPath);
+        setHasPath(Boolean(data.path));
+      } catch {
+        // Unknown, so no invitation: better to say nothing than to invite a
+        // user who already has a path to create one.
+        setHasPath(true);
+      }
+    };
+    loadPath();
+  }, []);
+
   const handleSettingsClick = () => {
     if (onNavigateToSettings) {
       onNavigateToSettings();
@@ -378,6 +396,13 @@ export default function HomePage({
 
       setActionError(null);
 
+      // A quest can be the one that finishes its milestone; the server says
+      // whether this completion is what reached it, so the celebration shows
+      // once rather than on every later quest under the same milestone.
+      if (willComplete && data?.milestone?.just_reached) {
+        setReachedMilestone(data.milestone);
+      }
+
       // Update level / streak / EXP from API response
       if (data?.user_stats) {
         if (data.user_stats.level_up) {
@@ -426,6 +451,15 @@ export default function HomePage({
   const selectDailyTasks = (allTasks) => {
     if (allTasks.length <= 3) {
       return allTasks;
+    }
+
+    // The quests of the milestone being worked on are the path's plan for
+    // today — the server sends them whatever else it draws, so they are kept
+    // here rather than put back into the draw with everything else.
+    const quests = allTasks.filter((task) => task.milestone);
+    const rest = allTasks.filter((task) => !task.milestone);
+    if (quests.length > 0) {
+      return [...quests, ...selectDailyTasks(rest)].slice(0, Math.max(3, quests.length));
     }
 
     // Group tasks by difficulty for balanced selection
@@ -799,6 +833,18 @@ export default function HomePage({
         {/* Main Goal */}
         <MainGoal currentUser={currentUser} />
 
+        {!hasPath && (
+          <div className="rpg-window px-5 py-4 text-center">
+            <div className="rpg-header -mx-5 -mt-4 mb-3">No path set</div>
+            <p className="text-sm text-ink-soft mb-3">
+              Set a goal and the System will break it into milestones and daily quests.
+            </p>
+            <button onClick={() => navigate("/path")} className="rpg-btn-primary">
+              Create your path
+            </button>
+          </div>
+        )}
+
         {/* Today's Tasks */}
         <div className="rpg-window">
           <div className="rpg-header">Today's Quests</div>
@@ -908,6 +954,20 @@ export default function HomePage({
         )}
 
         {/* Level Up Modal */}
+        <Modal
+          isOpen={Boolean(reachedMilestone)}
+          onClose={() => setReachedMilestone(null)}
+          variant="notification"
+          type="success"
+          title="Milestone reached"
+          message={
+            reachedMilestone
+              ? `${reachedMilestone.title} is done. The next step of your path is open.`
+              : ""
+          }
+          confirmText="Onwards"
+        />
+
         <LevelUpModal
           isOpen={showLevelUpModal}
           onClose={() => setShowLevelUpModal(false)}
