@@ -111,7 +111,7 @@ describe('HomePage and the Goal Path', () => {
 
   it('announces a milestone the finished quest reached', async () => {
     mockLoads({ goal: { title: 'g' }, milestones: [] });
-    global.fetch.mockResolvedValue({
+    globalThis.fetch.mockResolvedValue({
       ok: true,
       json: async () => ({
         success: true,
@@ -132,7 +132,7 @@ describe('HomePage and the Goal Path', () => {
     // A second quest under a milestone already reached adds nothing, so the
     // server says just_reached is false and nothing is celebrated again.
     mockLoads({ goal: { title: 'g' }, milestones: [] });
-    global.fetch.mockResolvedValue({
+    globalThis.fetch.mockResolvedValue({
       ok: true,
       json: async () => ({
         success: true,
@@ -145,13 +145,13 @@ describe('HomePage and the Goal Path', () => {
 
     fireEvent.click(await screen.findByText('Solve one algorithm problem'));
 
-    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
     expect(screen.queryByText(/is done/)).not.toBeInTheDocument();
   });
 
   it('says nothing when the quest leaves its milestone unfinished', async () => {
     mockLoads({ goal: { title: 'g' }, milestones: [] });
-    global.fetch.mockResolvedValue({
+    globalThis.fetch.mockResolvedValue({
       ok: true,
       json: async () => ({
         success: true,
@@ -164,7 +164,7 @@ describe('HomePage and the Goal Path', () => {
 
     fireEvent.click(await screen.findByText('Solve one algorithm problem'));
 
-    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
     expect(screen.queryByText(/is done/)).not.toBeInTheDocument();
   });
 });

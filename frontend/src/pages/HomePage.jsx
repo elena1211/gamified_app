@@ -91,6 +91,59 @@ const GUEST_REPEAT_RANGE_MS = [30_000, 120_000]; // 30s-2min between quests
 const REGISTERED_INITIAL_DELAY_RANGE_MS = [30 * 60_000, 90 * 60_000]; // 30-90min after load
 const REGISTERED_REPEAT_RANGE_MS = [3 * 3_600_000, 8 * 3_600_000]; // 3-8h between quests
 
+// Helper function to randomly select 3 balanced daily tasks
+const selectDailyTasks = (allTasks) => {
+  if (allTasks.length <= 3) {
+    return allTasks;
+  }
+
+  // The quests of the milestone being worked on are the path's plan for
+  // today — the server sends them whatever else it draws, so they are kept
+  // here rather than put back into the draw with everything else.
+  const quests = allTasks.filter((task) => task.milestone);
+  const rest = allTasks.filter((task) => !task.milestone);
+  if (quests.length > 0) {
+    return [...quests, ...selectDailyTasks(rest)].slice(0, Math.max(3, quests.length));
+  }
+
+  // Group tasks by difficulty for balanced selection
+  const tasksByDifficulty = {
+    1: allTasks.filter((task) => task.difficulty === 1),
+    2: allTasks.filter((task) => task.difficulty === 2),
+    3: allTasks.filter((task) => task.difficulty === 3 || !task.difficulty),
+  };
+
+  const selectedTasks = [];
+
+  // Try to get one task from each difficulty level
+  for (let difficulty = 1; difficulty <= 3; difficulty++) {
+    const tasksInDifficulty = tasksByDifficulty[difficulty];
+    if (tasksInDifficulty.length > 0) {
+      const randomIndex = Math.floor(
+        Math.random() * tasksInDifficulty.length,
+      );
+      selectedTasks.push(tasksInDifficulty[randomIndex]);
+    }
+  }
+
+  // If we still need more tasks, randomly pick from remaining tasks
+  while (selectedTasks.length < 3 && selectedTasks.length < allTasks.length) {
+    const remainingTasks = allTasks.filter(
+      (task) => !selectedTasks.some((selected) => selected.id === task.id),
+    );
+
+    if (remainingTasks.length > 0) {
+      const randomIndex = Math.floor(Math.random() * remainingTasks.length);
+      selectedTasks.push(remainingTasks[randomIndex]);
+    } else {
+      break;
+    }
+  }
+
+  debugLog("🎲 Selected daily tasks:", selectedTasks);
+  return selectedTasks;
+};
+
 export default function HomePage({
   currentUser,
   onNavigateToSettings,
@@ -447,58 +500,6 @@ export default function HomePage({
     }
   };
 
-  // Helper function to randomly select 3 balanced daily tasks
-  const selectDailyTasks = (allTasks) => {
-    if (allTasks.length <= 3) {
-      return allTasks;
-    }
-
-    // The quests of the milestone being worked on are the path's plan for
-    // today — the server sends them whatever else it draws, so they are kept
-    // here rather than put back into the draw with everything else.
-    const quests = allTasks.filter((task) => task.milestone);
-    const rest = allTasks.filter((task) => !task.milestone);
-    if (quests.length > 0) {
-      return [...quests, ...selectDailyTasks(rest)].slice(0, Math.max(3, quests.length));
-    }
-
-    // Group tasks by difficulty for balanced selection
-    const tasksByDifficulty = {
-      1: allTasks.filter((task) => task.difficulty === 1),
-      2: allTasks.filter((task) => task.difficulty === 2),
-      3: allTasks.filter((task) => task.difficulty === 3 || !task.difficulty),
-    };
-
-    const selectedTasks = [];
-
-    // Try to get one task from each difficulty level
-    for (let difficulty = 1; difficulty <= 3; difficulty++) {
-      const tasksInDifficulty = tasksByDifficulty[difficulty];
-      if (tasksInDifficulty.length > 0) {
-        const randomIndex = Math.floor(
-          Math.random() * tasksInDifficulty.length,
-        );
-        selectedTasks.push(tasksInDifficulty[randomIndex]);
-      }
-    }
-
-    // If we still need more tasks, randomly pick from remaining tasks
-    while (selectedTasks.length < 3 && selectedTasks.length < allTasks.length) {
-      const remainingTasks = allTasks.filter(
-        (task) => !selectedTasks.some((selected) => selected.id === task.id),
-      );
-
-      if (remainingTasks.length > 0) {
-        const randomIndex = Math.floor(Math.random() * remainingTasks.length);
-        selectedTasks.push(remainingTasks[randomIndex]);
-      } else {
-        break;
-      }
-    }
-
-    debugLog("🎲 Selected daily tasks:", selectedTasks);
-    return selectedTasks;
-  };
 
   const fetchTasks = useCallback(
     async (preventScroll = false) => {
