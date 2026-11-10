@@ -13,6 +13,9 @@ export const DIRECTIONS = [
   { value: 'at_most', label: 'At most' },
 ];
 
+// A task the Goal Path asked for, as opposed to one drawn at random.
+export const isPathQuest = (task) => Boolean(task.milestone);
+
 const withUnit = (amount, unit) => (unit ? `${amount} ${unit}` : amount);
 
 // Server-side keys as words: an unknown key still reads as something.

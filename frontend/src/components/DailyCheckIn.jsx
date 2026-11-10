@@ -45,7 +45,7 @@ export default function DailyCheckIn({ onCheckedIn }) {
 
   return (
     <div className="rpg-window px-5 py-4">
-      <div className="rpg-header -mx-5 -mt-4 mb-3">Daily check-in</div>
+      <h2 className="rpg-header -mx-5 -mt-4 mb-3">Daily check-in</h2>
 
       <div className="flex items-center gap-3">
         <Flame
