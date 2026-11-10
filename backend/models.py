@@ -4,6 +4,8 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.utils import timezone
 
+from . import achievements
+
 PERSONALITY_CHOICES = [
     ('logical', 'Logical'),
     ('mentor', 'Mentor'),
@@ -351,6 +353,8 @@ class SystemLog(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='system_logs')
     message_type = models.CharField(max_length=20, choices=MESSAGE_TYPE_CHOICES)
     content = models.TextField()
+    # The System's read on how things are going, shown beside the message.
+    evaluation = models.TextField(blank=True, default='')
     missions_issued = models.JSONField(default=list)
     created_at = models.DateTimeField(auto_now_add=True)
     was_read = models.BooleanField(default=False)
@@ -365,14 +369,10 @@ class SystemLog(models.Model):
 
 
 class UserTitle(models.Model):
-    TITLE_CHOICES = [
-        ('iron_will', 'Iron Will'),
-        ('early_bird', 'Early Bird'),
-        ('comeback_king', 'Comeback King'),
-        ('consistent_scholar', 'Consistent Scholar'),
-        ('overachiever', 'Overachiever'),
-        ('first_system_contact', 'First Contact'),
-    ]
+    """One achievement a user has earned. What earns each one, and the names
+    below, live in achievements.py — this only records that it happened."""
+
+    TITLE_CHOICES = achievements.TITLE_CHOICES
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='titles')
     title_key = models.CharField(max_length=30, choices=TITLE_CHOICES)

@@ -15,6 +15,10 @@ export const DIRECTIONS = [
 
 const withUnit = (amount, unit) => (unit ? `${amount} ${unit}` : amount);
 
+// Server-side keys as words: an unknown key still reads as something.
+export const readable = (key) =>
+  key.split('_').map((word) => word[0].toUpperCase() + word.slice(1)).join(' ');
+
 export function describeTarget(milestone) {
   if (milestone.completion_type === 'cumulative') {
     const count = milestone.target_count;

@@ -65,8 +65,8 @@ export default function SystemPage({ onNavigateToHome, onNavigateToTaskManager, 
       // Clear the input only on success so a failed send keeps the draft
       if (contextType === 'user_input') setInputText('');
 
-      if (data.titles_awarded?.length > 0) {
-        setNewTitles(data.titles_awarded);
+      if (data.achievements_earned?.length > 0) {
+        setNewTitles(data.achievements_earned);
         setTimeout(() => setNewTitles([]), 6000);
       }
     } catch (err) {

@@ -28,7 +28,7 @@ from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
-from . import path_draft, path_proposal
+from . import achievements, path_draft, path_proposal
 from .models import (
     DailyCheckIn,
     Goal,
@@ -39,6 +39,7 @@ from .models import (
     User,
     UserAttribute,
     UserTaskLog,
+    UserTitle,
 )
 from .views import (
     _call_ai_provider,
@@ -1461,6 +1462,7 @@ class EndpointAuthTests(TestCase):
         ("milestone-report", "post", {"args": [1]}),
         ("goal-report", "post", {}),
         ("path-proposal", "post", {}),
+        ("achievements", "get", {}),
         ("check-in", "get", {}),
         ("check-in", "post", {}),
         ("user-stats", "get", {}),
@@ -3777,6 +3779,509 @@ class StreakFromWorkTests(TestCase):
         self._complete(False)
 
         self.assertEqual(self._streak(), 1)
+
+
+class AchievementTests(TestCase):
+    """What the System notices. Each one is a question about what the user
+    has already done, so none of them needs anything tracked towards it."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(username="collector", password="pw12345")
+        for name in ["intelligence", "discipline", "energy", "social", "wellness", "stress"]:
+            UserAttribute.objects.create(user=self.user, name=name, value=0)
+        self.client = APIClient()
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=self.user).key}"
+        )
+
+    def _task(self, title="Focus block", milestone=None):
+        return Task.objects.create(
+            user=self.user, title=title, description="", attribute="discipline",
+            reward_point=4, difficulty=1, deadline=timezone.now() + timedelta(days=1),
+            milestone=milestone,
+        )
+
+    def _completed(self, task, when=None, status="completed"):
+        log = UserTaskLog.objects.create(
+            user=self.user, task=task, status=status,
+            completed_at=when if status == "completed" else None,
+        )
+        if when:
+            UserTaskLog.objects.filter(pk=log.pk).update(assigned_at=when)
+        return log
+
+    def _path(self, **goal_fields):
+        goal = Goal.objects.create(
+            user=self.user, title="First software engineer job", description="",
+            path_confirmed_at=timezone.now(), **goal_fields,
+        )
+        return goal
+
+    def _earned(self):
+        return set(achievements.award(self.user))
+
+    def test_a_new_account_has_earned_nothing(self):
+        self.assertEqual(self._earned(), set())
+
+    def test_the_first_finished_quest(self):
+        self._completed(self._task(), when=timezone.now())
+
+        self.assertIn("first_steps", self._earned())
+
+    def test_five_in_one_day(self):
+        for i in range(5):
+            self._completed(self._task(f"Task {i}"), when=timezone.now())
+
+        self.assertIn("overachiever", self._earned())
+
+    def test_four_in_one_day_is_not_enough(self):
+        for i in range(4):
+            self._completed(self._task(f"Task {i}"), when=timezone.now())
+
+        self.assertNotIn("overachiever", self._earned())
+
+    def test_five_spread_over_days_is_not_a_busy_day(self):
+        for i in range(5):
+            self._completed(self._task(f"Task {i}"), when=timezone.now() - timedelta(days=i))
+
+        self.assertNotIn("overachiever", self._earned())
+
+    def test_finishing_before_eight_in_the_morning(self):
+        early = timezone.localtime().replace(hour=6, minute=30)
+        self._completed(self._task(), when=early)
+
+        self.assertIn("early_bird", self._earned())
+
+    def test_finishing_later_in_the_day_is_not_early(self):
+        # Half past eight, local time: within the hour either side of the
+        # rule, so a UTC reading of the clock or an off-by-one hour shows up.
+        later = timezone.localtime().replace(hour=8, minute=30)
+        self._completed(self._task(), when=later)
+
+        self.assertNotIn("early_bird", self._earned())
+
+    def test_the_small_hours_are_not_an_early_start(self):
+        night = timezone.localtime().replace(hour=2, minute=0)
+        self._completed(self._task(), when=night)
+
+        self.assertNotIn("early_bird", self._earned())
+
+    def test_a_seven_day_streak(self):
+        for days in range(7):
+            DailyCheckIn.objects.create(
+                user=self.user, date=timezone.localdate() - timedelta(days=days)
+            )
+        self.user.refresh_streak()
+
+        earned = self._earned()
+        self.assertIn("iron_will", earned)
+        self.assertNotIn("unbroken", earned)
+
+    def test_a_streak_that_has_since_lapsed_still_counts(self):
+        # The run is what was achieved, whatever happened after it ended.
+        for days in range(11, 41):
+            DailyCheckIn.objects.create(
+                user=self.user, date=timezone.localdate() - timedelta(days=days)
+            )
+        self.user.refresh_streak()
+        self.assertEqual(self.user.current_streak, 0)
+
+        self.assertIn("unbroken", self._earned())
+
+    def test_a_run_with_a_day_missing_is_not_a_streak(self):
+        # The home screen's streak forgives one missed day. "Seven days in a
+        # row" has to mean seven, so this one counts strictly.
+        for days in range(0, 9):
+            if days == 3:
+                continue
+            DailyCheckIn.objects.create(
+                user=self.user, date=timezone.localdate() - timedelta(days=days)
+            )
+        self.user.refresh_streak()
+        self.assertEqual(self.user.current_streak, 8)
+
+        self.assertNotIn("iron_will", self._earned())
+
+    def test_coming_back_the_day_after_a_missed_one(self):
+        task = self._task()
+        self._completed(task, when=timezone.now() - timedelta(days=2), status="missed")
+        DailyCheckIn.objects.create(user=self.user, date=timezone.localdate() - timedelta(days=1))
+
+        self.assertIn("comeback_king", self._earned())
+
+    def test_a_missed_quest_on_a_day_they_turned_up_is_not_a_comeback(self):
+        # One quest went undone, but they were there. There is nothing to
+        # come back from.
+        task = self._task()
+        yesterday = timezone.localdate() - timedelta(days=1)
+        self._completed(task, when=timezone.now() - timedelta(days=1), status="missed")
+        DailyCheckIn.objects.create(user=self.user, date=yesterday)
+        DailyCheckIn.objects.create(user=self.user, date=timezone.localdate())
+
+        self.assertNotIn("comeback_king", self._earned())
+
+    def test_a_missed_day_with_no_return_is_not_a_comeback(self):
+        task = self._task()
+        self._completed(task, when=timezone.now() - timedelta(days=2), status="missed")
+
+        self.assertNotIn("comeback_king", self._earned())
+
+    def test_setting_a_path_and_reaching_its_steps(self):
+        goal = self._path()
+        self.assertIn("path_set", self._earned())
+
+        Milestone.objects.create(
+            goal=goal, position=1, title="Programming fundamentals",
+            status=Milestone.COMPLETED, completed_at=timezone.now(),
+        )
+        self.assertIn("first_milestone", self._earned())
+
+        Goal.objects.filter(pk=goal.pk).update(is_completed=True)
+        self.assertIn("goal_reached", self._earned())
+
+    def test_a_week_of_quests_with_none_missed(self):
+        goal = self._path()
+        milestone = Milestone.objects.create(
+            goal=goal, position=1, title="Programming fundamentals", status=Milestone.ACTIVE,
+        )
+        quest = self._task("Solve one algorithm problem", milestone=milestone)
+        for days in range(5):
+            self._completed(quest, when=timezone.now() - timedelta(days=days))
+
+        self.assertIn("perfect_week", self._earned())
+
+    def test_one_missed_quest_spoils_the_week(self):
+        goal = self._path()
+        milestone = Milestone.objects.create(
+            goal=goal, position=1, title="Programming fundamentals", status=Milestone.ACTIVE,
+        )
+        quest = self._task("Solve one algorithm problem", milestone=milestone)
+        for days in range(5):
+            self._completed(quest, when=timezone.now() - timedelta(days=days))
+        self._completed(quest, when=timezone.now() - timedelta(days=6), status="missed")
+
+        self.assertNotIn("perfect_week", self._earned())
+
+    def test_a_miss_eight_days_back_is_outside_the_week(self):
+        goal = self._path()
+        milestone = Milestone.objects.create(
+            goal=goal, position=1, title="Programming fundamentals", status=Milestone.ACTIVE,
+        )
+        quest = self._task("Solve one algorithm problem", milestone=milestone)
+        for days in range(5):
+            self._completed(quest, when=timezone.now() - timedelta(days=days))
+        self._completed(quest, when=timezone.now() - timedelta(days=8), status="missed")
+
+        self.assertIn("perfect_week", self._earned())
+
+    def test_only_the_paths_quests_make_a_perfect_week(self):
+        # Five ad-hoc completions are not a week of the path's quests.
+        for i in range(5):
+            self._completed(self._task(f"Chore {i}"), when=timezone.now() - timedelta(days=i))
+
+        self.assertNotIn("perfect_week", self._earned())
+
+    def test_a_quiet_week_is_not_a_perfect_one(self):
+        goal = self._path()
+        milestone = Milestone.objects.create(
+            goal=goal, position=1, title="Programming fundamentals", status=Milestone.ACTIVE,
+        )
+        quest = self._task("Solve one algorithm problem", milestone=milestone)
+        self._completed(quest, when=timezone.now())
+
+        self.assertNotIn("perfect_week", self._earned())
+
+    def test_an_achievement_is_only_awarded_once(self):
+        self._completed(self._task(), when=timezone.now())
+        self.assertIn("first_steps", self._earned())
+
+        self.assertNotIn("first_steps", self._earned())
+        self.assertEqual(UserTitle.objects.filter(user=self.user, title_key="first_steps").count(), 1)
+
+    def test_the_newest_achievement_is_the_one_on_display(self):
+        self._completed(self._task(), when=timezone.now())
+        achievements.award(self.user)
+
+        active = UserTitle.objects.filter(user=self.user, is_active=True)
+        self.assertEqual(active.count(), 1)
+        self.assertEqual(active.first().title_key, "first_steps")
+
+    def test_several_at_once_leave_exactly_one_on_display(self):
+        # An established account meeting this list for the first time earns
+        # a handful together; the last of them in catalogue order is shown.
+        goal = self._path()
+        Milestone.objects.create(
+            goal=goal, position=1, title="Programming fundamentals",
+            status=Milestone.COMPLETED, completed_at=timezone.now(),
+        )
+        self._completed(self._task(), when=timezone.now())
+
+        newly = achievements.award(self.user)
+
+        self.assertIn("first_steps", newly)
+        self.assertIn("first_milestone", newly)
+        active = UserTitle.objects.filter(user=self.user, is_active=True)
+        self.assertEqual(active.count(), 1)
+        self.assertEqual(active.first().title_key, newly[-1])
+
+    def test_a_later_achievement_replaces_what_is_on_display(self):
+        self._completed(self._task(), when=timezone.now())
+        achievements.award(self.user)
+
+        self._path()
+        achievements.award(self.user)
+
+        active = UserTitle.objects.filter(user=self.user, is_active=True)
+        self.assertEqual(active.count(), 1)
+        self.assertEqual(active.first().title_key, "path_set")
+
+    def test_one_user_earning_it_does_not_use_it_up(self):
+        # Each collection stands alone: what one user holds must not be read
+        # as already held by the next.
+        other = User.objects.create_user(username="stranger", password="pw12345")
+        self._completed(self._task(), when=timezone.now())
+        self.assertIn("first_steps", achievements.award(self.user))
+
+        theirs = Task.objects.create(
+            user=other, title="Their task", description="", attribute="discipline",
+            reward_point=4, difficulty=1, deadline=timezone.now() + timedelta(days=1),
+        )
+        UserTaskLog.objects.create(
+            user=other, task=theirs, status="completed", completed_at=timezone.now(),
+        )
+
+        self.assertIn("first_steps", achievements.award(other))
+
+    def test_another_users_work_earns_nothing_on_its_own(self):
+        other = User.objects.create_user(username="bystander", password="pw12345")
+        self._completed(self._task(), when=timezone.now())
+        achievements.award(self.user)
+
+        self.assertEqual(achievements.award(other), [])
+
+
+class AchievementsAreAwardedWhereEarnedTests(TestCase):
+    """Every action that can earn an achievement has to say so at the time.
+    The list endpoint catches up eventually, but the moment is the point."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(username="earner", password="pw12345")
+        for name in ["intelligence", "discipline", "energy", "social", "wellness", "stress"]:
+            UserAttribute.objects.create(user=self.user, name=name, value=0)
+        self.client = APIClient()
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=self.user).key}"
+        )
+
+    def _confirm_path(self):
+        return self.client.put(reverse("goal-path"), draft_body(daily_quests=[
+            {"title": "Solve one algorithm problem", "attribute": "intelligence", "milestone": 1},
+        ]), format="json")
+
+    def test_confirming_a_path_earns_its_achievement(self):
+        self._confirm_path()
+
+        self.assertTrue(
+            UserTitle.objects.filter(user=self.user, title_key="path_set").exists()
+        )
+
+    def test_completing_a_quest_reports_what_it_earned(self):
+        self._confirm_path()
+        quest = Task.objects.get(user=self.user, title="Solve one algorithm problem")
+
+        response = self.client.post(
+            reverse("task-complete"), {"task_id": quest.pk, "completed": True}, format="json"
+        )
+
+        self.assertIn("first_steps", response.data["achievements_earned"])
+
+    def test_the_completion_that_reaches_a_milestone_earns_it_then(self):
+        # The milestone moves while the request is still running, so the
+        # achievement for reaching one belongs to that same response.
+        self._confirm_path()
+        first = Milestone.objects.get(goal__user=self.user, position=1)
+        Milestone.objects.filter(pk=first.pk).update(target_count=1)
+        quest = Task.objects.get(user=self.user, title="Solve one algorithm problem")
+
+        response = self.client.post(
+            reverse("task-complete"), {"task_id": quest.pk, "completed": True}, format="json"
+        )
+
+        self.assertIn("first_milestone", response.data["achievements_earned"])
+
+    def test_the_home_screens_own_completion_reports_them_too(self):
+        response = self.client.post(reverse("dynamic-task-complete"), {
+            "task_title": "Read one chapter", "task_type": "daily",
+            "reward_points": 1, "attribute": "intelligence",
+        }, format="json")
+
+        self.assertIn("first_steps", response.data["achievements_earned"])
+
+    def test_checking_in_reports_what_it_earned(self):
+        for days in range(1, 7):
+            DailyCheckIn.objects.create(
+                user=self.user, date=timezone.localdate() - timedelta(days=days)
+            )
+
+        response = self.client.post(reverse("check-in"), {}, format="json")
+
+        self.assertIn("iron_will", response.data["achievements_earned"])
+
+    def test_the_path_endpoints_say_what_they_earned(self):
+        confirmed = self.client.put(reverse("goal-path"), draft_body(milestones=[
+            {"title": "Portfolio live", "completion_type": "outcome"},
+            {"title": "Applications sent", "completion_type": "outcome"},
+            {"title": "First interview", "completion_type": "outcome"},
+        ]), format="json")
+        self.assertIn("path_set", confirmed.data["achievements_earned"])
+
+        first = Milestone.objects.get(goal__user=self.user, position=1)
+        reported = self.client.post(
+            reverse("milestone-report", args=[first.pk]), {"note": "Deployed"}, format="json"
+        )
+        self.assertIn("first_milestone", reported.data["achievements_earned"])
+
+        for position in (2, 3):
+            milestone = Milestone.objects.get(goal__user=self.user, position=position)
+            self.client.post(
+                reverse("milestone-report", args=[milestone.pk]),
+                {"note": f"Step {position}"}, format="json",
+            )
+        arrived = self.client.post(
+            reverse("goal-report"), {"note": "Signed the contract"}, format="json"
+        )
+        self.assertIn("goal_reached", arrived.data["achievements_earned"])
+
+    def test_reporting_a_milestone_earns_its_achievement(self):
+        self.client.put(reverse("goal-path"), draft_body(milestones=[
+            {"title": "Portfolio live", "completion_type": "outcome"},
+            {"title": "Applications sent", "completion_type": "outcome"},
+            {"title": "First interview", "completion_type": "outcome"},
+        ]), format="json")
+        first = Milestone.objects.get(goal__user=self.user, position=1)
+
+        self.client.post(
+            reverse("milestone-report", args=[first.pk]), {"note": "Deployed"}, format="json"
+        )
+
+        self.assertTrue(
+            UserTitle.objects.filter(user=self.user, title_key="first_milestone").exists()
+        )
+
+    def test_reporting_the_goal_earns_its_achievement(self):
+        self.client.put(reverse("goal-path"), draft_body(milestones=[
+            {"title": "Portfolio live", "completion_type": "outcome"},
+            {"title": "Applications sent", "completion_type": "outcome"},
+            {"title": "First interview", "completion_type": "outcome"},
+        ]), format="json")
+        for position in (1, 2, 3):
+            milestone = Milestone.objects.get(goal__user=self.user, position=position)
+            self.client.post(
+                reverse("milestone-report", args=[milestone.pk]),
+                {"note": f"Step {position}"}, format="json",
+            )
+
+        self.client.post(reverse("goal-report"), {"note": "Signed the contract"}, format="json")
+
+        self.assertTrue(
+            UserTitle.objects.filter(user=self.user, title_key="goal_reached").exists()
+        )
+
+    def test_speaking_to_the_system_is_recorded_and_earns_its_achievement(self):
+        # The reply is kept, which is both what the conversation history
+        # reads back and what makes "spoke to the System" true.
+        with mock.patch(
+            "backend.views._call_ai_provider",
+            return_value='{"system_message": "Understood, host.", "missions": []}',
+        ):
+            response = self.client.post(
+                reverse("system-chat"), {"message": "Hello", "context_type": "user_input"},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("first_system_contact", response.data["achievements_earned"])
+        kept = SystemLog.objects.get(user=self.user, message_type="chat_response")
+        self.assertEqual(kept.content, "Understood, host.")
+
+    def test_a_reply_with_nothing_in_it_is_not_kept(self):
+        # An empty log reads back as a blank bubble in the conversation.
+        with mock.patch(
+            "backend.views._call_ai_provider",
+            return_value='{"system_message": "", "missions": []}',
+        ):
+            self.client.post(
+                reverse("system-chat"), {"message": "Hello", "context_type": "user_input"},
+                format="json",
+            )
+
+        self.assertFalse(SystemLog.objects.filter(user=self.user).exists())
+
+    def test_an_evening_evaluation_is_kept_with_its_reading(self):
+        with mock.patch(
+            "backend.views._call_ai_provider",
+            return_value='{"system_message": "Three done.", "evaluation": "A steady day.", "missions": []}',
+        ):
+            self.client.post(
+                reverse("system-chat"), {"message": "", "context_type": "evening_eval"},
+                format="json",
+            )
+
+        kept = SystemLog.objects.get(user=self.user, message_type="evening_eval")
+        self.assertEqual(kept.evaluation, "A steady day.")
+        history = self.client.get(reverse("system-messages")).data
+        self.assertEqual(history[0]["evaluation"], "A steady day.")
+
+    def test_a_penalty_alone_is_not_speaking_to_the_system(self):
+        SystemLog.objects.create(
+            user=self.user, message_type="punishment", content="Penalty applied",
+        )
+
+        self.assertNotIn("first_system_contact", achievements.award(self.user))
+
+
+class AchievementsEndpointTests(TestCase):
+    """GET /api/achievements/ lists the whole collection, earned or not."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(username="viewer", password="pw12345")
+        self.client = APIClient()
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=self.user).key}"
+        )
+        self.url = reverse("achievements")
+
+    def test_the_unearned_ones_are_listed_too(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        listed = response.data["achievements"]
+        self.assertEqual(len(listed), len(achievements.ACHIEVEMENTS))
+        self.assertTrue(all(not item["earned"] for item in listed))
+        self.assertTrue(all(item["name"] and item["description"] for item in listed))
+
+    def test_reading_the_list_awards_anything_newly_earned(self):
+        Goal.objects.create(
+            user=self.user, title="First software engineer job", description="",
+            path_confirmed_at=timezone.now(),
+        )
+
+        listed = self.client.get(self.url).data["achievements"]
+
+        path_set = next(item for item in listed if item["key"] == "path_set")
+        self.assertTrue(path_set["earned"])
+        self.assertIsNotNone(path_set["earned_at"])
+
+    def test_one_users_collection_is_not_another_s(self):
+        other = User.objects.create_user(username="someone", password="pw12345")
+        UserTitle.objects.create(user=other, title_key="iron_will")
+
+        listed = self.client.get(self.url).data["achievements"]
+
+        self.assertTrue(all(not item["earned"] for item in listed))
 
 
 class TimezoneBoundaryTests(TestCase):

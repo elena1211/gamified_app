@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Map, Trophy } from 'lucide-react';
+import { readable } from '../utils/pathFormat.js';
 import { API_ENDPOINTS, apiRequest } from '../config/api.js';
 import BottomNav from '../components/BottomNav.jsx';
 import PathDraftEditor from '../components/PathDraftEditor.jsx';
@@ -21,7 +22,7 @@ function GoalReportForm({ onReported }) {
         method: 'POST',
         body: JSON.stringify({ note: note.trim() }),
       });
-      onReported(data.path);
+      onReported(data);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -60,6 +61,7 @@ export default function PathPage({ onNavigateToHome, onNavigateToTaskManager, on
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(false);
+  const [earned, setEarned] = useState([]);
 
   const loadPath = useCallback(async () => {
     setLoading(true);
@@ -158,12 +160,28 @@ export default function PathPage({ onNavigateToHome, onNavigateToTaskManager, on
                   key={milestone.id}
                   milestone={milestone}
                   isLast={index === path.milestones.length - 1}
-                  onReported={path.reached ? undefined : (reported) => setPath(reported.path)}
+                  onReported={path.reached ? undefined : (reported) => {
+                    setPath(reported.path);
+                    setEarned(reported.achievements_earned ?? []);
+                  }}
                 />
               ))}
             </ol>
 
-            {everyMilestoneReached && <GoalReportForm onReported={setPath} />}
+            {earned.length > 0 && (
+              <p className="rpg-window-light px-4 py-3 text-sm text-ink-soft" role="status">
+                Achievement earned: {earned.map(readable).join(', ')}. See the rest in Settings.
+              </p>
+            )}
+
+            {everyMilestoneReached && (
+              <GoalReportForm
+                onReported={(reported) => {
+                  setPath(reported.path);
+                  setEarned(reported.achievements_earned ?? []);
+                }}
+              />
+            )}
 
             <button onClick={() => setEditing(true)} className="rpg-btn-secondary w-full">
               {path.reached ? 'Set your next goal' : 'Draft a new path'}
