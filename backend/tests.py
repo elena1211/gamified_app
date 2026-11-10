@@ -3697,11 +3697,24 @@ class DailyCheckInTests(TestCase):
         self.assertEqual(self.user.max_streak, 3)
 
     def test_the_state_says_when_the_streak_is_about_to_go(self):
+        # Here the day before yesterday, not here yesterday: the one forgiven
+        # day is being spent right now.
         self._showed_up(2)
 
         response = self.client.get(self.url)
 
         self.assertTrue(response.data["streak_at_risk"])
+
+    def test_a_first_day_account_has_missed_nothing(self):
+        # Nothing to have missed, so nothing to warn about. Saying "you
+        # missed yesterday" to someone on their first day reads as a telling
+        # off for a day they were never here for.
+        self.client.post(self.url, {}, format="json")
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.data["streak"], 1)
+        self.assertFalse(response.data["streak_at_risk"])
 
     def test_a_streak_kept_up_is_not_at_risk(self):
         self._showed_up(1)

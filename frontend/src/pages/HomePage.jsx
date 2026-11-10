@@ -6,6 +6,7 @@ import StatsPanel from "../components/StatsPanel";
 import UserProfileCard from "../components/UserProfileCard";
 import TaskList from "../components/TaskList";
 import MainGoal from "../components/MainGoal";
+import TodaysFocus from "../components/TodaysFocus";
 import TimeLimitedTaskPopup from "../components/TimeLimitedTaskPopup";
 import Modal from "../components/Modal";
 import WeeklyTaskStats from "../components/WeeklyTaskStats";
@@ -15,7 +16,7 @@ import AnimatedNumber from "../components/AnimatedNumber";
 import SystemAlert from "../components/SystemAlert";
 import { useAppContext } from "../context/appContextValue";
 import { getAvatarStage, getExpForLevel } from "../utils/avatar";
-import { readable } from "../utils/pathFormat.js";
+import { isPathQuest, readable } from "../utils/pathFormat.js";
 import { debugError, debugLog, debugWarn } from '../utils/logger';
 import { useQuestScheduler } from "../hooks/useQuestScheduler";
 
@@ -102,8 +103,8 @@ const selectDailyTasks = (allTasks) => {
   // The quests of the milestone being worked on are the path's plan for
   // today — the server sends them whatever else it draws, so they are kept
   // here rather than put back into the draw with everything else.
-  const quests = allTasks.filter((task) => task.milestone);
-  const rest = allTasks.filter((task) => !task.milestone);
+  const quests = allTasks.filter(isPathQuest);
+  const rest = allTasks.filter((task) => !isPathQuest(task));
   if (quests.length > 0) {
     return [...quests, ...selectDailyTasks(rest)].slice(0, Math.max(3, quests.length));
   }
@@ -179,9 +180,7 @@ export default function HomePage({
 
   // Level up modal states
   const [showLevelUpModal, setShowLevelUpModal] = useState(false);
-  // The path, only to know whether to invite the user to create one, and the
-  // milestone a quest just completed, to say so.
-  const [hasPath, setHasPath] = useState(true);
+  // The milestone a quest just completed, to say so.
   const [reachedMilestone, setReachedMilestone] = useState(null);
   const [earnedAchievement, setEarnedAchievement] = useState(null);
   const [levelUpData, setLevelUpData] = useState({
@@ -347,20 +346,6 @@ export default function HomePage({
     setShowWarning(false);
     setLastDismissedTask(null); // Clear saved task data
   };
-
-  useEffect(() => {
-    const loadPath = async () => {
-      try {
-        const { data } = await apiRequest(API_ENDPOINTS.goalPath);
-        setHasPath(Boolean(data.path));
-      } catch {
-        // Unknown, so no invitation: better to say nothing than to invite a
-        // user who already has a path to create one.
-        setHasPath(true);
-      }
-    };
-    loadPath();
-  }, []);
 
   const handleSettingsClick = () => {
     if (onNavigateToSettings) {
@@ -667,8 +652,8 @@ export default function HomePage({
   debugLog("Homepage about to render, loading:", loading, "error:", error);
 
   if (loading) {
-    // Skeleton mirrors the real layout so the page doesn't "jump" when data
-    // arrives — and gives the ~30 s Render cold start something to show.
+    // A stand-in while the first request is in flight, so the page has
+    // something to show rather than jumping from blank to full.
     return (
       <div
         className="min-h-screen paper-bg pb-24"
@@ -680,8 +665,8 @@ export default function HomePage({
           <p className="text-center font-display text-lg text-ink-soft tracking-wide animate-pulse">
             Opening your diary…
           </p>
-          <p className="text-center text-xs text-ink-mute">
-            First visit after a while? The server can take up to 30 seconds to wake.
+          <p className="text-center text-xs text-ink-soft">
+            First visit after a while? The server can take a moment to wake.
           </p>
           <div className="grid gap-6 sm:grid-cols-2">
             <div className="rpg-window p-5 space-y-3">
@@ -802,6 +787,51 @@ export default function HomePage({
           </div>
         </header>
 
+        {/* What today is for */}
+        <TodaysFocus tasks={tasks} onOpenPath={() => navigate("/path")} />
+
+        {/* Today's Tasks */}
+        <div className="rpg-window">
+          <h2 className="rpg-header">Today's Quests</h2>
+          {actionError && (
+            <p
+              role="alert"
+              className="mx-4 mt-3 px-3 py-2 text-xs rounded-sm"
+              style={{ background: "var(--paper-shadow)", color: "var(--accent-rust)" }}
+            >
+              {actionError}
+            </p>
+          )}
+          <TaskList tasks={tasks} onTaskComplete={handleTaskComplete} />
+          <div className="px-5 pb-5">
+            <div className="paper-divider mb-3">
+              <span>draw new quests</span>
+            </div>
+            <div className="text-center">
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  fetchTasks(true);
+                }}
+                className="inline-flex items-center gap-2 px-5 py-2.5 font-display tracking-wider uppercase text-sm text-paper bg-gradient-to-b from-[var(--accent-rose)] to-[var(--accent-rose-deep)] border-2 border-[var(--accent-rose-deep)] rounded-sm shadow-[0_2px_0_rgba(107,79,44,0.25)] hover:translate-y-[1px] hover:shadow-[0_1px_0_rgba(107,79,44,0.25)] active:translate-y-[2px] active:shadow-none transition-all"
+              >
+                <span aria-hidden>◈</span>
+                <span>Roll New Quests</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <DailyCheckIn
+          onCheckedIn={(state) => {
+            updateUserStats({ currentStreak: state.streak });
+            setUser((prev) => ({ ...prev, streak: state.streak }));
+            if (state.achievements_earned?.length) {
+              setEarnedAchievement(state.achievements_earned.at(-1));
+            }
+          }}
+        />
+
         {/* Row 1: Portrait + STATUS window */}
         <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6 items-start">
           {/* Portrait column */}
@@ -811,7 +841,7 @@ export default function HomePage({
 
           {/* STATUS window */}
           <div className="rpg-window">
-            <div className="rpg-header">Status</div>
+            <h2 className="rpg-header">Status</h2>
             <div className="px-5 pt-4 pb-2 border-b border-[var(--frame)]/30">
               <div className="flex items-baseline justify-between mb-1">
                 <span className="font-display text-lg text-ink tracking-wide">
@@ -845,63 +875,9 @@ export default function HomePage({
         {/* Main Goal */}
         <MainGoal currentUser={currentUser} />
 
-        <DailyCheckIn
-          onCheckedIn={(state) => {
-            updateUserStats({ currentStreak: state.streak });
-            setUser((prev) => ({ ...prev, streak: state.streak }));
-            if (state.achievements_earned?.length) {
-              setEarnedAchievement(state.achievements_earned.at(-1));
-            }
-          }}
-        />
-
-        {!hasPath && (
-          <div className="rpg-window px-5 py-4 text-center">
-            <div className="rpg-header -mx-5 -mt-4 mb-3">No path set</div>
-            <p className="text-sm text-ink-soft mb-3">
-              Set a goal and the System will break it into milestones and daily quests.
-            </p>
-            <button onClick={() => navigate("/path")} className="rpg-btn-primary">
-              Create your path
-            </button>
-          </div>
-        )}
-
-        {/* Today's Tasks */}
-        <div className="rpg-window">
-          <div className="rpg-header">Today's Quests</div>
-          {actionError && (
-            <p
-              role="alert"
-              className="mx-4 mt-3 px-3 py-2 text-xs rounded-sm"
-              style={{ background: "var(--paper-shadow)", color: "var(--accent-rust)" }}
-            >
-              {actionError}
-            </p>
-          )}
-          <TaskList tasks={tasks} onTaskComplete={handleTaskComplete} />
-          <div className="px-5 pb-5">
-            <div className="paper-divider mb-3">
-              <span>draw new quests</span>
-            </div>
-            <div className="text-center">
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  fetchTasks(true);
-                }}
-                className="inline-flex items-center gap-2 px-5 py-2.5 font-display tracking-wider uppercase text-sm text-paper bg-gradient-to-b from-[var(--accent-rose)] to-[var(--accent-rose-deep)] border-2 border-[var(--accent-rose-deep)] rounded-sm shadow-[0_2px_0_rgba(107,79,44,0.25)] hover:translate-y-[1px] hover:shadow-[0_1px_0_rgba(107,79,44,0.25)] active:translate-y-[2px] active:shadow-none transition-all"
-              >
-                <span aria-hidden>◈</span>
-                <span>Roll New Quests</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
         {/* Weekly Diary */}
         <div className="rpg-window">
-          <div className="rpg-header">This Week's Diary</div>
+          <h2 className="rpg-header">This Week's Diary</h2>
           <WeeklyTaskStats
             currentUser={currentUser}
             refreshTrigger={refreshTrigger}

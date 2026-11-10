@@ -1421,6 +1421,21 @@ class AchievementsView(APIView):
         return Response({"achievements": achievements.catalogue(request.user)})
 
 
+def _streak_at_risk(user, today):
+    """Whether the streak's one forgiven day is being spent right now: here
+    the day before yesterday, not here yesterday.
+
+    A first-day account has no yesterday to have missed, so it is never at
+    risk — saying otherwise reads as a telling off for a day they were never
+    here for."""
+    day_before_yesterday = today - timedelta(days=2)
+    shown_up = user.days_shown_up(day_before_yesterday)
+    return (
+        day_before_yesterday in shown_up
+        and today - timedelta(days=1) not in shown_up
+    )
+
+
 class CheckInView(APIView):
     """POST records that the user turned up today; GET says whether they have.
 
@@ -1453,12 +1468,10 @@ class CheckInView(APIView):
             "checked_in_now": checked_in_now,
             "streak": user.current_streak,
             "max_streak": user.max_streak,
-            # Whether yesterday is already spent, so the client can warn that
-            # the streak goes if today is missed too.
-            "streak_at_risk": (
-                user.current_streak > 0
-                and today - timedelta(days=1) not in user.days_shown_up(today - timedelta(days=1))
-            ),
+            # True only while the one forgiven day is being spent: the user
+            # was here the day before yesterday, and wasn't here yesterday.
+            # A first-day account has no yesterday to have missed.
+            "streak_at_risk": _streak_at_risk(user, today),
         }
 
 

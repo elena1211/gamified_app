@@ -121,6 +121,23 @@ DATABASES = {
     )
 }
 
+# The home screen asks several endpoints at once that each record something
+# — the day's quests, the streak, an achievement. SQLite locks the whole file
+# for a write, and a read transaction that then tries to write fails straight
+# away with "database is locked" rather than waiting, so a developer running
+# the project locally sees 500s on the home screen.
+#
+# WAL lets a reader carry on while a writer works, IMMEDIATE takes the write
+# lock when the transaction opens instead of upgrading to it half way, and the
+# timeout makes the loser wait rather than fail. PostgreSQL, used in
+# production, locks the row rather than the database and needs none of this.
+if DATABASES["default"]["ENGINE"] == "django.db.backends.sqlite3":
+    DATABASES["default"].setdefault("OPTIONS", {}).update({
+        "timeout": 20,
+        "transaction_mode": "IMMEDIATE",
+        "init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;",
+    })
+
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
