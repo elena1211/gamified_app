@@ -15,6 +15,7 @@ import AnimatedNumber from "../components/AnimatedNumber";
 import SystemAlert from "../components/SystemAlert";
 import { useAppContext } from "../context/appContextValue";
 import { getAvatarStage, getExpForLevel } from "../utils/avatar";
+import { readable } from "../utils/pathFormat.js";
 import { debugError, debugLog, debugWarn } from '../utils/logger';
 import { useQuestScheduler } from "../hooks/useQuestScheduler";
 
@@ -182,6 +183,7 @@ export default function HomePage({
   // milestone a quest just completed, to say so.
   const [hasPath, setHasPath] = useState(true);
   const [reachedMilestone, setReachedMilestone] = useState(null);
+  const [earnedAchievement, setEarnedAchievement] = useState(null);
   const [levelUpData, setLevelUpData] = useState({
     oldLevel: 0,
     newLevel: 0,
@@ -453,6 +455,14 @@ export default function HomePage({
       // A quest can be the one that finishes its milestone; the server says
       // whether this completion is what reached it, so the celebration shows
       // once rather than on every later quest under the same milestone.
+      // The server says what the completion earned; without this the
+      // achievement is only discovered later, on the Settings list.
+      if (data?.achievements_earned?.length) {
+        // The last of them is the one the System puts on display, so that is
+        // the one named here.
+        setEarnedAchievement(data.achievements_earned.at(-1));
+      }
+
       if (willComplete && data?.milestone?.just_reached) {
         setReachedMilestone(data.milestone);
       }
@@ -839,6 +849,9 @@ export default function HomePage({
           onCheckedIn={(state) => {
             updateUserStats({ currentStreak: state.streak });
             setUser((prev) => ({ ...prev, streak: state.streak }));
+            if (state.achievements_earned?.length) {
+              setEarnedAchievement(state.achievements_earned.at(-1));
+            }
           }}
         />
 
@@ -963,6 +976,20 @@ export default function HomePage({
         )}
 
         {/* Level Up Modal */}
+        <Modal
+          isOpen={Boolean(earnedAchievement)}
+          onClose={() => setEarnedAchievement(null)}
+          variant="notification"
+          type="success"
+          title="Achievement earned"
+          message={
+            earnedAchievement
+              ? `${readable(earnedAchievement)} — see the rest in Settings.`
+              : ""
+          }
+          confirmText="Good"
+        />
+
         <Modal
           isOpen={Boolean(reachedMilestone)}
           onClose={() => setReachedMilestone(null)}

@@ -21,7 +21,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from . import path_draft, path_proposal
+from . import achievements, path_draft, path_proposal
 from .models import (
     DailyCheckIn,
     Goal,
@@ -1022,7 +1022,10 @@ class GoalPathView(APIView):
                         milestone=milestones[quest["milestone"] - 1],
                     )
 
-                return Response({"path": _serialize_path(goal, user)})
+                return Response({
+                    "path": _serialize_path(goal, user),
+                    "achievements_earned": achievements.award(user),
+                })
         except PathRejected as exc:
             return Response({"error": str(exc)}, status=exc.status_code)
         except IntegrityError:
@@ -1154,6 +1157,7 @@ class MilestoneReportView(APIView):
             return Response({
                 "reached": milestone.status == Milestone.COMPLETED,
                 "path": _serialize_path(milestone.goal, user),
+                "achievements_earned": achievements.award(user),
             })
 
 
@@ -1193,7 +1197,10 @@ class GoalReportView(APIView):
             goal.is_completed = True
             goal.save(update_fields=['outcome_note', 'completed_at', 'is_completed'])
 
-            return Response({"path": _serialize_path(goal, user)})
+            return Response({
+                "path": _serialize_path(goal, user),
+                "achievements_earned": achievements.award(user),
+            })
 
 
 class PathProposalView(APIView):
@@ -1359,6 +1366,10 @@ class TaskCompleteView(APIView):
                 user.refresh_streak()
 
                 user.save()
+                # After the path has moved, so a completion that reaches a
+                # milestone earns the achievement for it in the same request.
+                milestone_progress = _quest_progress(task, user)
+                awarded = achievements.award(user)
 
                 completed_today_count = UserTaskLog.objects.filter(
                     user=user,
@@ -1375,7 +1386,8 @@ class TaskCompleteView(APIView):
                     "completed_tasks": completed_today_count,
                     "total_tasks": total_tasks,
                     "task_completed": complete,
-                    "milestone": _quest_progress(task, user),
+                    "milestone": milestone_progress,
+                    "achievements_earned": awarded,
                     "user_stats": {
                         "level": user.level,
                         "exp": user.exp,
@@ -1393,6 +1405,20 @@ class TaskCompleteView(APIView):
         except Exception:
             logger.exception(f"Task completion failed for '{user.username}'")
             return Response({"error": "Could not complete task"}, status=500)
+
+
+class AchievementsView(APIView):
+    """Everything the System notices, earned or not.
+
+    The unearned ones are listed too: a collection you can see the shape of
+    is one you can aim at."""
+
+    # Reading the list awards anything newly earned, so it writes.
+    throttle_scope = 'task_write'
+
+    def get(self, request):
+        achievements.award(request.user)
+        return Response({"achievements": achievements.catalogue(request.user)})
 
 
 class CheckInView(APIView):
@@ -1416,7 +1442,9 @@ class CheckInView(APIView):
         with transaction.atomic():
             user = User.objects.select_for_update().get(pk=request.user.pk)
             first_today = user.check_in()
-            return Response(self._state(user, checked_in_now=first_today))
+            state = self._state(user, checked_in_now=first_today)
+            state["achievements_earned"] = achievements.award(user)
+            return Response(state)
 
     def _state(self, user, checked_in_now):
         today = timezone.localdate()
@@ -2017,6 +2045,7 @@ class DynamicTaskCompleteView(APIView):
                         'message': 'Time-limited task completed successfully',
                         'task_completed': True,
                         'streak': user.current_streak,
+                        'achievements_earned': achievements.award(user),
                         'user_stats': {
                             'level': user.level,
                             'exp': user.exp,
@@ -2095,6 +2124,7 @@ class DynamicTaskCompleteView(APIView):
                             'task_completed': True,
                             'streak': user.current_streak,
                             'milestone': _quest_progress(task, user),
+                            'achievements_earned': achievements.award(user),
                             'user_stats': {
                                 'level': user.level,
                                 'exp': user.exp,
@@ -2654,38 +2684,6 @@ Context: {context_type}
 {context_instructions}"""
 
 
-def _award_title(user, title_key: str) -> bool:
-    """Award a title if not already earned. Returns True if newly awarded."""
-    _, created = UserTitle.objects.get_or_create(user=user, title_key=title_key)
-    if created:
-        UserTitle.objects.filter(user=user, is_active=True).update(is_active=False)
-        UserTitle.objects.filter(user=user, title_key=title_key).update(is_active=True)
-    return created
-
-
-def _check_and_award_titles(user) -> list:
-    """Check all title conditions and award any newly earned titles."""
-    awarded = []
-    attrs = {a.name: a.value for a in UserAttribute.objects.filter(user=user)}
-
-    if user.current_streak >= 7:
-        if _award_title(user, 'iron_will'):
-            awarded.append('iron_will')
-
-    if attrs.get('intelligence', 0) >= 200:
-        if _award_title(user, 'consistent_scholar'):
-            awarded.append('consistent_scholar')
-
-    today_completed = UserTaskLog.objects.filter(
-        user=user, status='completed', completed_at__date=timezone.localdate()
-    ).count()
-    if today_completed >= 5:
-        if _award_title(user, 'overachiever'):
-            awarded.append('overachiever')
-
-    return awarded
-
-
 def _call_ai_provider(system_prompt, user_prompt):
     """Call the configured AI provider and return its raw text response.
 
@@ -2853,32 +2851,30 @@ class SystemChatView(APIView):
                 'prefix': MISSION_PREFIXES.get(task.mission_type, '◈'),
             })
 
-        # Award first-contact title on first system use
-        titles_awarded = []
-        if not SystemLog.objects.filter(user=user).exists():
-            if _award_title(user, 'first_system_contact'):
-                titles_awarded.append('first_system_contact')
-        titles_awarded += _check_and_award_titles(user)
+        # Kept, so the conversation survives a reload and the System has a
+        # record of having spoken at all. The frontend reads these back.
+        # Nothing is written for a reply with neither a message nor an
+        # evaluation: it would read back as an empty bubble.
+        log_type = {
+            'morning_brief': 'daily_brief',
+            'evening_eval': 'evening_eval',
+        }.get(context_type, 'chat_response')
+        if system_message or evaluation:
+            SystemLog.objects.create(
+                user=user,
+                message_type=log_type,
+                content=system_message,
+                evaluation=evaluation,
+                missions_issued=created_missions,
+                was_read=True,
+            )
 
-        # Persist system log
-        log_content = system_message
-        if evaluation:
-            log_content += f'\n\n[Evaluation] {evaluation}'
-        # message_type drives the label in the chat history — 'daily_brief'
-        # renders as "Morning Brief" in SystemMessageBox.
-        log_type_map = {'morning_brief': 'daily_brief', 'evening_eval': 'evening_eval'}
-        SystemLog.objects.create(
-            user=user,
-            message_type=log_type_map.get(context_type, 'chat_response'),
-            content=log_content,
-            missions_issued=created_missions,
-        )
-
+        earned = achievements.award(user)
         return Response({
             'system_message': system_message,
             'evaluation': evaluation,
             'missions': created_missions,
-            'titles_awarded': titles_awarded,
+            'achievements_earned': earned,
             'personality': user.system_personality,
         })
 
@@ -2893,6 +2889,7 @@ class SystemMessagesView(APIView):
             'id': log.id,
             'message_type': log.message_type,
             'content': log.content,
+            'evaluation': log.evaluation,
             'missions_issued': log.missions_issued,
             'created_at': log.created_at.isoformat(),
             'was_read': log.was_read,
@@ -2907,7 +2904,7 @@ class SystemDailyStatusView(APIView):
 
         has_brief_today = SystemLog.objects.filter(
             user=user,
-            message_type__in=['daily_brief', 'chat_response'],
+            message_type='daily_brief',
             created_at__date=today,
         ).exists()
 

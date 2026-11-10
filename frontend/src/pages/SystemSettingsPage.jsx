@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { User, Bell } from 'lucide-react';
+import { User, Bell, Trophy } from 'lucide-react';
 import Modal from '../components/Modal.jsx';
 import BottomNav from '../components/BottomNav.jsx';
+import AchievementList from '../components/AchievementList.jsx';
 import { API_ENDPOINTS, apiRequest } from '../config/api.js';
 import { resetOnboarding } from '../utils/onboarding.js';
 
@@ -22,6 +23,7 @@ export default function SystemSettingsPage({ currentUser, onLogout, onUpgradeSuc
 
   const sections = [
     { id: 'account', title: 'Account', Icon: User },
+    { id: 'achievements', title: 'Achievements', Icon: Trophy },
     { id: 'preferences', title: 'Preferences', Icon: Bell },
   ];
 
@@ -339,10 +341,12 @@ export default function SystemSettingsPage({ currentUser, onLogout, onUpgradeSuc
           <div className="lg:col-span-3">
             <div className="rpg-window">
               <div className="rpg-header">
-                {activeSection === 'account' ? 'Account' : 'Preferences'}
+                {sections.find((section) => section.id === activeSection)?.title}
               </div>
               <div className="px-5 py-4">
-                {activeSection === 'account' ? renderAccountSection() : renderPreferencesSection()}
+                {activeSection === 'account' && renderAccountSection()}
+                {activeSection === 'achievements' && <AchievementList />}
+                {activeSection === 'preferences' && renderPreferencesSection()}
               </div>
             </div>
           </div>

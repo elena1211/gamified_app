@@ -149,6 +149,45 @@ describe('HomePage and the Goal Path', () => {
     expect(screen.queryByText(/is done/)).not.toBeInTheDocument();
   });
 
+  it('says what a completed quest earned', async () => {
+    mockLoads({ goal: { title: 'g' }, milestones: [] });
+    globalThis.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        streak: 1,
+        achievements_earned: ['first_steps'],
+        milestone: null,
+        user_stats: { level: 1, exp: 10, level_up: false, old_level: 1 },
+      }),
+    });
+    render(<HomePage currentUser="walker" />);
+
+    fireEvent.click(await screen.findByText('Solve one algorithm problem'));
+
+    expect(await screen.findByText(/First Steps/)).toBeInTheDocument();
+  });
+
+  it('says nothing about achievements when none were earned', async () => {
+    mockLoads({ goal: { title: 'g' }, milestones: [] });
+    globalThis.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        streak: 1,
+        achievements_earned: [],
+        milestone: null,
+        user_stats: { level: 1, exp: 10, level_up: false, old_level: 1 },
+      }),
+    });
+    render(<HomePage currentUser="walker" />);
+
+    fireEvent.click(await screen.findByText('Solve one algorithm problem'));
+
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+    expect(screen.queryByText('Achievement earned')).not.toBeInTheDocument();
+  });
+
   it('says nothing when the quest leaves its milestone unfinished', async () => {
     mockLoads({ goal: { title: 'g' }, milestones: [] });
     globalThis.fetch.mockResolvedValue({

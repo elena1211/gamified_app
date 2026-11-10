@@ -21,6 +21,7 @@ urlpatterns = [
     path('milestones/<int:pk>/', views.MilestoneDetailView.as_view(), name='milestone-detail'),
     path('milestones/<int:pk>/report/', views.MilestoneReportView.as_view(), name='milestone-report'),
     path('check-in/', views.CheckInView.as_view(), name='check-in'),
+    path('achievements/', views.AchievementsView.as_view(), name='achievements'),
     path('user/stats/', views.UserStatsView.as_view(), name='user-stats'),
     path('user/progress/', views.ProgressStatsView.as_view(), name='user-progress'),
     # System / AI endpoints
