@@ -1,6 +1,7 @@
 import { Check, Lock } from 'lucide-react';
+import MilestoneProgress from './MilestoneProgress.jsx';
 import MilestoneReportForm from './MilestoneReportForm.jsx';
-import { describeProgress, describeTarget, progressFraction } from '../utils/pathFormat.js';
+import { describeProgress } from '../utils/pathFormat.js';
 
 const STATUS_LABEL = {
   completed: 'Reached',
@@ -60,19 +61,7 @@ export default function PathMilestone({ milestone, isLast, onReported }) {
           <p className="text-sm text-ink-soft mt-1">{milestone.description}</p>
         )}
 
-        <p className="text-xs text-ink-mute mt-2">{describeTarget(milestone)}</p>
-
-        {milestone.completion_type !== 'outcome' && (
-          <div className="mt-2">
-            <div className="stat-gauge-track">
-              <div
-                className="stat-gauge-fill"
-                style={{ '--fill': progressFraction(milestone), background: colour }}
-              />
-            </div>
-            <p className="text-xs text-ink-soft mt-1">{progress}</p>
-          </div>
-        )}
+        <MilestoneProgress milestone={milestone} colour={colour} />
 
         {milestone.completion_type === 'outcome' && progress && (
           <p className="text-sm text-ink-soft mt-2 italic">“{progress}”</p>

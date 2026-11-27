@@ -39,10 +39,20 @@
   text-rendering: optimizeLegibility;
 }
 
+/* The parchment is painted on the canvas itself, not only on the page
+   container: a transparent body lets the browser's own background through,
+   which is dark for anyone whose system is in dark mode, and shows up
+   behind the fixed nav and when the page is overscrolled. color-scheme
+   keeps form controls and scrollbars light to match. */
+html {
+  background-color: var(--paper);
+  color-scheme: light;
+}
+
 body {
   margin: 0;
   padding: 0;
-  background: transparent;
+  background-color: var(--paper);
   color: var(--ink);
 }
 
